@@ -14,7 +14,7 @@ internal sealed class SettingsView : UserControl
     private readonly StackPanel _content = new() { Margin = new Thickness(22, 8, 22, 24) };
     private readonly TextBlock _notice = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
     private readonly Button _save = new() { Content = "Save changes", Padding = new Thickness(17, 10, 17, 10) };
-    private readonly Button[] _tabs = new Button[4];
+    private readonly Button[] _tabs = new Button[5];
     private int _page;
     public event Func<AppSettings, Task<string?>>? SaveRequested;
     public event Action<AppSettings>? AppearancePreview;
@@ -31,7 +31,7 @@ internal sealed class SettingsView : UserControl
         var close = RopeWindow.IconButton("close", "Close settings"); close.Click += (_, _) => Dismissed?.Invoke(); DockPanel.SetDock(close, Dock.Right); header.Children.Add(close);
         header.Children.Add(new TextBlock { Text = "Make it yours.", FontSize = 25, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center }); root.Children.Add(header);
         var body = new Grid(); body.ColumnDefinitions.Add(new() { Width = new GridLength(125) }); body.ColumnDefinitions.Add(new());
-        var rail = new StackPanel(); string[] names = ["Themes", "Behaviour", "Storage", "Capture"];
+        var rail = new StackPanel(); string[] names = ["Themes", "Behaviour", "Storage", "Capture", "Help"];
         for (var i = 0; i < names.Length; i++)
         {
             var page = i; var tab = new Button { Content = names[i], Margin = new Thickness(0, 0, 0, 6), HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(13, 11, 13, 11) };
@@ -99,7 +99,7 @@ internal sealed class SettingsView : UserControl
             };
             _content.Children.Add(clear);
         }
-        else
+        else if (page == 3)
         {
             Heading("Choose what to collect", "Capture runs only while Clippboard is running. You can pause at any time.");
             Toggle("Capture text", _draft.CaptureText, v => _draft = _draft with { CaptureText = v });
@@ -107,6 +107,23 @@ internal sealed class SettingsView : UserControl
             Toggle("Capture file locations", _draft.CaptureFiles, v => _draft = _draft with { CaptureFiles = v });
             Toggle("Pause all capture", _draft.CapturePaused, v => _draft = _draft with { CapturePaused = v });
             Hint("Items marked private by the source app are ignored. Moved or deleted files must be copied again. Unsupported formats and oversized items are skipped.");
+        }
+        else
+        {
+            Heading("Build this with us", "Clippboard " + Clippboard.App.Services.Feedback.Version + " · Open-source Windows clipboard history");
+            Hint("Report a problem, suggest a feature or discuss an idea. Links open in your browser; you review and submit the report. No clipboard history is sent automatically.");
+            foreach (var (label, action) in new[] { ("Report a bug", "bug"), ("Suggest a feature", "feature"), ("Discuss an idea", "discuss") })
+            {
+                var button = new Button { Content = label, Margin = new Thickness(0, 5, 0, 5), HorizontalContentAlignment = HorizontalAlignment.Left };
+                button.Click += (_, _) => { if (!Clippboard.App.Services.Feedback.Open(action)) _notice.Text = "Could not open your browser. Visit github.com/shardapps/clippboard/issues."; };
+                _content.Children.Add(button);
+            }
+            Hint("Please use sample clipboard data and remove personal details from screenshots. Security findings belong in the repository's private security reporting.");
+            var info = new TextBox { Text = Clippboard.App.Services.Feedback.SupportInfo(), IsReadOnly = true, TextWrapping = TextWrapping.Wrap, FontSize = 13, Margin = new Thickness(0, 10, 0, 8) };
+            _content.Children.Add(info);
+            var copy = new Button { Content = "Copy support information" };
+            copy.Click += (_, _) => { try { Clipboard.SetText(info.Text); _notice.Text = "Copied. Paste it into your report if useful."; } catch (System.Runtime.InteropServices.ExternalException) { _notice.Text = "Clipboard is busy. Select the text above and copy it manually."; } };
+            _content.Children.Add(copy);
         }
         _content.BeginAnimation(OpacityProperty, null); _content.Opacity = 0;
         Clippboard.App.Design.Interaction.Move(_content, OpacityProperty, 1, _draft.Animate && Clippboard.App.Design.Interaction.GetEnabled(this), 180);

@@ -190,6 +190,20 @@ internal static class Program
                     Check(Contrast(((SolidColorBrush)window.Resources["Muted"]).Color, ((SolidColorBrush)window.Resources["NoteSurface"]).Color) >= 4.5, "date and metadata contrast in " + theme);
                 }
                 window.ApplyAppearance(new AppSettings { Animate = false });
+                var search = (System.Windows.Controls.TextBox)window.FindName("SearchBox");
+                search.Text = "no-such-synthetic-preview"; Pump(Task.Delay(200)); window.UpdateLayout();
+                Check(window.VisibleNoteCount == 0 && window.RenderedNoteCount == 0, "search has a safe empty state");
+                search.Text = "a LITTLE space"; Pump(Task.Delay(200)); window.UpdateLayout();
+                Check(window.VisibleNoteCount == 1, "search matches previews without case sensitivity");
+                search.Text = ""; Pump(Task.Delay(200)); window.UpdateLayout();
+                var typeFilter = (System.Windows.Controls.Button)window.FindName("TypeFilterButton");
+                typeFilter.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent)); Check(window.VisibleNoteCount == 998, "text filter applies to metadata");
+                typeFilter.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent)); Check(window.VisibleNoteCount == 1, "image filter");
+                typeFilter.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent)); Check(window.VisibleNoteCount == 1, "file filter");
+                typeFilter.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent)); Check(window.VisibleNoteCount == 1000 && window.RenderedNoteCount < 10, "clear filters returns bounded full history");
+                Check(Feedback.Link("bug").Host == "github.com" && Feedback.Link("bug").Query.Contains("template=bug_report.yml"), "feedback opens correct public form");
+                var support = Feedback.SupportInfo();
+                Check(!support.Contains(Environment.UserName, StringComparison.OrdinalIgnoreCase) && !support.Contains(root, StringComparison.OrdinalIgnoreCase), "support information excludes account and paths");
                 window.OpenSettings(); window.UpdateLayout();
                 var host = (System.Windows.Controls.Border)window.FindName("SidebarHost");
                 Check(host.Child is SettingsView && host.Visibility == Visibility.Visible, "custom settings sidebar opens");
@@ -206,9 +220,10 @@ internal static class Program
                 Check(window.SavedSettings.NoteWidth == 340, "save commits preview size");
                 var transform = new TranslateTransform(); Interaction.Move(transform, TranslateTransform.YProperty, -5, false);
                 Check(transform.Y == -5 && !transform.HasAnimatedProperties, "reduced motion applies exact state without clocks");
-                Interaction.Move(transform, TranslateTransform.YProperty, 0, true, 80); Pump(Task.Delay(120));
+                Interaction.Move(transform, TranslateTransform.YProperty, 0, true, 80);
+                Pump(WaitForRest(transform));
                 Check(Math.Abs(transform.Y) < .001, "hover settles at exact rest without drift");
-                for (var page = 0; page < 4; page++) { settings.ShowPage(page); window.UpdateLayout(); Check(settings.ActualHeight > 0, "settings page lays out " + page); }
+                for (var page = 0; page < 5; page++) { settings.ShowPage(page); window.UpdateLayout(); Check(settings.ActualHeight > 0, "settings page lays out " + page); }
                 settings.ShowPage(2);
                 var retention = Descendants<System.Windows.Controls.Slider>(settings).First(x => System.Windows.Automation.AutomationProperties.GetName(x) == "Keep history");
                 retention.Value = 7;
@@ -275,6 +290,13 @@ internal static class Program
             return .2126 * Linear(c.R) + .7152 * Linear(c.G) + .0722 * Linear(c.B);
         }
         return (Math.Max(L(a), L(b)) + .05) / (Math.Min(L(a), L(b)) + .05);
+    }
+    private static async Task WaitForRest(TranslateTransform transform)
+    {
+        // Animation clocks start on a rendering tick, not at the call's wall time.
+        // Hosted runners can delay that first tick; observe state with a bounded watchdog.
+        var deadline = System.Diagnostics.Stopwatch.StartNew();
+        while (Math.Abs(transform.Y) > .001 && deadline.ElapsedMilliseconds < 3000) await Task.Delay(20);
     }
     private static System.Collections.Generic.IEnumerable<T> Descendants<T>(DependencyObject parent) where T : DependencyObject
     {

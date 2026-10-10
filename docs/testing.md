@@ -48,3 +48,7 @@ These numbers show bounded content retention but do **not** establish a low-RAM 
 96 local assertions pass. Added checks cover all six palettes, actual tooltip templates and foreground/background contrast (at least 4.5:1), date metadata contrast, live size previews without committing settings, cancellation, Save, reduced-motion final state, and hover settling. The visual harness loads the production control dictionary into a plain WPF Application, preventing queued production startup from running capture/tray integration. Test windows stay off-screen and do not activate.
 
 These are synthetic regression checks, not a guarantee against every crash or a substitute for destination-app and installer lifecycle testing.
+
+## Finding clips and feedback — October 10, 2026
+
+105 local assertions pass after adding search/filter coverage: case-insensitive preview search, no-match state, each clipboard type, restored full history with bounded cards, all five settings pages, correct feedback form URLs, and absence of account/path details in support information. Feedback submissions, browser launch and copying diagnostics are user actions and are not invoked by the synthetic suite.

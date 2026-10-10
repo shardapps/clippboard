@@ -223,7 +223,7 @@ public partial class App : Application
             };
             menu.Items.Add(startup);
         }
-        menu.Items.Add("Project & feedback", null, (_, _) => Process.Start(new ProcessStartInfo("https://github.com/shardapps/clippboard") { UseShellExecute = true }));
+        menu.Items.Add("Help & feedback", null, (_, _) => { if (!Services.Feedback.Open("discuss")) Notify("Could not open your browser. Visit github.com/shardapps/clippboard/discussions."); });
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quit Clippboard", null, (_, _) => Shutdown());
         _trayIcon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? (Icon)SystemIcons.Application.Clone();

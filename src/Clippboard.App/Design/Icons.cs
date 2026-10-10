@@ -27,6 +27,7 @@ public sealed class IconView : FrameworkElement
             "play" => "M7,4 L20,12 L7,20 Z",
             "settings" => "M12,3 A9,9 0 1 1 11.99,3 M12,8 A4,4 0 1 1 11.99,8 M12,0 L12,4 M12,20 L12,24 M0,12 L4,12 M20,12 L24,12",
             "search" => "M10,3 A7,7 0 1 1 9.99,3 M15,15 L21,21",
+            "feedback" => "M5,4 L19,4 Q22,4 22,7 L22,15 Q22,18 19,18 L11,18 L5,22 L5,18 Q2,18 2,15 L2,7 Q2,4 5,4 M7,9 L17,9 M7,13 L14,13",
             _ => "M6,5 L18,5 Q20,5 20,7 L20,20 Q20,22 18,22 L6,22 Q4,22 4,20 L4,7 Q4,5 6,5 M9,9 L15,9 M8,14 L16,14 M8,18 L14,18 M10,1 L14,1 L14,8 L10,8 Z"
         };
         dc.DrawGeometry(Symbol == "star" ? Ink : null, pen, Geometry.Parse(path));

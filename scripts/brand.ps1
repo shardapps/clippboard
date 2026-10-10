@@ -1,4 +1,5 @@
 # Rebuild the original paper-and-peg icon at Windows icon sizes.
+param([string]$StoreAssetDirectory)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $assetRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'assets\brand'
@@ -12,7 +13,9 @@ function New-RoundedPath([float]$x,[float]$y,[float]$width,[float]$height,[float
   $path.CloseFigure()
   return $path
 }
-$frames = foreach ($size in @(16,32,48,256)) {
+$sizes = @(16,32,48,256)
+if ($StoreAssetDirectory) { New-Item -ItemType Directory -Force -Path $StoreAssetDirectory | Out-Null; $sizes += @(44,50,150) }
+$frames = foreach ($size in $sizes) {
   $bitmap = [Drawing.Bitmap]::new($size,$size)
   $graphics = [Drawing.Graphics]::FromImage($bitmap)
   $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
@@ -30,7 +33,8 @@ $frames = foreach ($size in @(16,32,48,256)) {
   $memory = [IO.MemoryStream]::new()
   $bitmap.Save($memory,[Drawing.Imaging.ImageFormat]::Png)
   if ($size -eq 256) { [IO.File]::WriteAllBytes((Join-Path $assetRoot 'clippboard.png'),$memory.ToArray()) }
-  [PSCustomObject]@{ Size=$size; Bytes=$memory.ToArray() }
+  if ($StoreAssetDirectory -and $size -in @(44,50,150)) { [IO.File]::WriteAllBytes((Join-Path $StoreAssetDirectory "Logo$size.png"),$memory.ToArray()) }
+  if ($size -in @(16,32,48,256)) { [PSCustomObject]@{ Size=$size; Bytes=$memory.ToArray() } }
   $memory.Dispose(); $graphics.Dispose(); $bitmap.Dispose(); $background.Dispose(); $paper.Dispose(); $blue.Dispose(); $white.Dispose()
 }
 $stream = [IO.File]::Create((Join-Path $assetRoot 'clippboard.ico'))

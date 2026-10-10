@@ -86,7 +86,7 @@ public partial class App
     {
         switch (request.Command)
         {
-            case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, StartupAvailable: !_development, ListenerProcess: Environment.ProcessId);
+            case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId);
             case "list": return new(Entries: await Task.Run(() => _store!.ListAsync()));
             case "get": return new(Clip: await Task.Run(() => _store!.GetAsync(request.Id ?? "")));
             case "pin": await Task.Run(() => _store!.SetPinnedAsync(request.Id ?? "", request.Flag)); ++_historyVersion; return new();

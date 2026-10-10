@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+ xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+ xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+ xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+ xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+ IgnorableNamespaces="uap uap10 desktop rescap">
+  <Identity Name="ShardCoders.Clippboard" Publisher="CN=D11F3529-FC83-43F5-B8D5-F94F40D30E7D" Version="0.4.0.0" ProcessorArchitecture="x64"/>
+  <Properties><DisplayName>Clippboard</DisplayName><PublisherDisplayName>ShardCoders</PublisherDisplayName><Description>Local clipboard history, hung on a rope.</Description><Logo>Assets\Logo50.png</Logo></Properties>
+  <Resources><Resource Language="en-us"/></Resources>
+  <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0"/></Dependencies>
+  <Applications>
+    <Application Id="Clippboard" Executable="app\Clippboard.exe" uap10:RuntimeBehavior="packagedClassicApp" uap10:TrustLevel="mediumIL">
+      <uap:VisualElements DisplayName="Clippboard" Description="Local clipboard history, hung on a rope." BackgroundColor="transparent" Square150x150Logo="Assets\Logo150.png" Square44x44Logo="Assets\Logo44.png"/>
+      <Extensions>
+        <desktop:Extension Category="windows.startupTask" Executable="app\Clippboard.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="ClippboardStartup" Enabled="false" DisplayName="Clippboard"/>
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities><rescap:Capability Name="runFullTrust"/></Capabilities>
+</Package>

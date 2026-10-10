@@ -6,6 +6,8 @@ Microsoft evaluates publisher and file reputation. Signing displays the certific
 
 ## What the owner needs
 
+For this Pakistan individual account, the prepared route is [Microsoft Store MSIX distribution](store.md) under **ShardCoders**. Azure Artifact Signing Public Trust currently accepts individual developers only in the US and Canada; it is not an eligible shortcut for this account. Store certification provides signing for the Store package. A separately downloadable setup EXE still requires an eligible CA-issued signing certificate.
+
 Obtain an eligible public Windows code-signing identity from a trusted provider, with identity validation and secure key custody. Options include a CA-issued certificate or Microsoft's [Artifact Signing](https://learn.microsoft.com/en-us/azure/artifact-signing/overview), subject to region and identity eligibility. The verified publisher comes from the certificate; a GitHub organization name alone does not establish that identity. No certificate, subscription or signing credentials are currently configured.
 
 The included adapter supports a CA-issued certificate accessible through **CurrentUser → Personal** on a dedicated Windows runner, including a hardware-backed certificate whose provider is installed. It does not export private keys, accept PFX passwords on a command line or install self-signed roots. An Artifact Signing cloud adapter would require the owner's service configuration and is not implemented by this certificate-store adapter.

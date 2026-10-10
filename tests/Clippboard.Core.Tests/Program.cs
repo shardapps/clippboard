@@ -220,7 +220,8 @@ internal static class Program
                 Check(window.SavedSettings.NoteWidth == 340, "save commits preview size");
                 var transform = new TranslateTransform(); Interaction.Move(transform, TranslateTransform.YProperty, -5, false);
                 Check(transform.Y == -5 && !transform.HasAnimatedProperties, "reduced motion applies exact state without clocks");
-                Interaction.Move(transform, TranslateTransform.YProperty, 0, true, 80); Pump(Task.Delay(120));
+                Interaction.Move(transform, TranslateTransform.YProperty, 0, true, 80);
+                Pump(WaitForRest(transform));
                 Check(Math.Abs(transform.Y) < .001, "hover settles at exact rest without drift");
                 for (var page = 0; page < 5; page++) { settings.ShowPage(page); window.UpdateLayout(); Check(settings.ActualHeight > 0, "settings page lays out " + page); }
                 settings.ShowPage(2);
@@ -289,6 +290,13 @@ internal static class Program
             return .2126 * Linear(c.R) + .7152 * Linear(c.G) + .0722 * Linear(c.B);
         }
         return (Math.Max(L(a), L(b)) + .05) / (Math.Min(L(a), L(b)) + .05);
+    }
+    private static async Task WaitForRest(TranslateTransform transform)
+    {
+        // Animation clocks start on a rendering tick, not at the call's wall time.
+        // Hosted runners can delay that first tick; observe state with a bounded watchdog.
+        var deadline = System.Diagnostics.Stopwatch.StartNew();
+        while (Math.Abs(transform.Y) > .001 && deadline.ElapsedMilliseconds < 3000) await Task.Delay(20);
     }
     private static System.Collections.Generic.IEnumerable<T> Descendants<T>(DependencyObject parent) where T : DependencyObject
     {

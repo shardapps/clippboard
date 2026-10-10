@@ -15,7 +15,7 @@ internal sealed class OverlayProcess : IDisposable
     {
         _server = new(handler); ServerTask = _server.RunAsync();
         var launch = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
-        if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) launch.ArgumentList.Add(typeof(OverlayProcess).Assembly.Location);
+        if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) launch.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Clippboard.dll"));
         launch.ArgumentList.Add("--overlay"); launch.ArgumentList.Add(_server.Name);
         if (software) launch.ArgumentList.Add("--software");
         try { Process = Process.Start(launch) ?? throw new IOException("Could not start the rope."); }

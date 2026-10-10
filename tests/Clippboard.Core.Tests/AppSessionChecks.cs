@@ -38,19 +38,25 @@ internal static class AppSessionChecks
                     fixture.Show(); fixture.Activate(); textbox.Focus();
                     Process StartListener()
                     {
-                        var launch = new ProcessStartInfo(Path.GetFullPath(executable)) { UseShellExecute = false, CreateNoWindow = true };
+                        var launch = new ProcessStartInfo(Path.GetFullPath(executable)) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
                         launch.ArgumentList.Add("--dev"); launch.ArgumentList.Add("--background");
                         launch.Environment["CLIPPBOARD_DEV_DATA"] = dataRoot;
-                        return Process.Start(launch) ?? throw new IOException("Native listener did not start.");
+                        launch.Environment["CLIPPBOARD_SESSION_DIAGNOSTICS"] = "1";
+                        var process = Process.Start(launch) ?? throw new IOException("Native listener did not start.");
+                        process.ErrorDataReceived += (_, line) => { if (line.Data is not null) Console.Error.WriteLine("Listener: " + line.Data); };
+                        process.BeginErrorReadLine();
+                        return process;
                     }
                     listener = StartListener();
                     await Until(() => FindWindow(listener.Id, "Clippboard listener", visible: false) != 0, "listener startup");
+                    await Task.Run(() => listener.WaitForInputIdle(5000));
                     var fixtureHandle = new WindowInteropHelper(fixture).Handle;
                     var watch = Stopwatch.StartNew();
                     for (var cycle = 0; cycle < 3; cycle++)
                     {
                         var expected = $"Clippboard session {cycle + 1} — Unicode 🧵\nPakistan • synthetic fixture";
                         Clipboard.SetText(expected);
+                        Console.WriteLine($"Fixture sequence {NativeMethods.GetClipboardSequenceNumber()}, Unicode format {Clipboard.ContainsText(TextDataFormat.UnicodeText)}");
                         await Until(() => Directory.GetFiles(Path.Combine(dataRoot, "history"), "*.meta").Length == cycle + 1, "real clipboard capture");
                         textbox.Clear(); fixture.Activate(); textbox.Focus(); NativeMethods.SetForegroundWindow(fixtureHandle);
                         if (NativeMethods.GetForegroundWindow() != fixtureHandle) throw new IOException("Fixture cannot acquire foreground; paste acceptance is untested.");

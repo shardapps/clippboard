@@ -32,6 +32,10 @@ internal sealed class ClipboardService : IDisposable
     private ShortcutChoice _shortcut;
     public event Action? ToggleRequested;
     public event Action<string>? Notice;
+    private static void SessionTrace(string message)
+    {
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true" && Environment.GetEnvironmentVariable("CLIPPBOARD_SESSION_DIAGNOSTICS") == "1") Console.Error.WriteLine(message);
+    }
 
     public ClipboardService(Func<Clip, Task> save, ShortcutChoice shortcut = ShortcutChoice.CtrlShiftV)
     {
@@ -43,6 +47,7 @@ internal sealed class ClipboardService : IDisposable
         HotkeyAvailable = NativeMethods.RegisterHotKey(_source.Handle, _hotkeyId, ShortcutModifiers(shortcut), 0x56);
         _retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
         _retry.Tick += Retry;
+        SessionTrace("Clipboard listener ready");
     }
 
     private nint WndProc(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
@@ -51,6 +56,7 @@ internal sealed class ClipboardService : IDisposable
         if (message == 0x0312 && wParam == _hotkeyId) { ToggleRequested?.Invoke(); handled = true; }
         if (message == 0x031D && !Paused)
         {
+            SessionTrace("Clipboard update received");
             _sequence = NativeMethods.GetClipboardSequenceNumber();
             if (_sequence != _ownSequence) { _attempts = 0; _retry.Start(); }
         }
@@ -67,6 +73,7 @@ internal sealed class ClipboardService : IDisposable
         try
         {
             var clip = await _reader.ReadAsync(Settings);
+            SessionTrace(clip is null ? "Read returned no supported clip" : "Read returned " + clip.Kind);
             _retry.Stop();
             if (_disposed || Paused || sequence != NativeMethods.GetClipboardSequenceNumber() || clip is null)
             {
@@ -78,10 +85,12 @@ internal sealed class ClipboardService : IDisposable
         }
         catch (COMException)
         {
+            SessionTrace("Clipboard COM retry");
             if (++_attempts >= 8) { _retry.Stop(); if (!_disposed) Notice?.Invoke("Clipboard was busy. Copy that item again to save it."); }
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException or NotSupportedException)
         {
+            SessionTrace("Clipboard read failed: " + ex.GetType().Name + ": " + ex.Message);
             _retry.Stop();
             if (!_disposed) Notice?.Invoke("This clipboard item could not be saved. Try copying it again.");
         }

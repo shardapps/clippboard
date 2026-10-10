@@ -2,7 +2,7 @@
 
 Clippboard uses an original paper-and-peg logo, a braided vector rope across the full monitor work area, and neutral paper surfaces. Cloud is white with a quiet blue accent; Paper uses warm cream; Midnight uses charcoal with a lavender accent. Desktop content remains visible around the notes and compact toolbar.
 
-The opening movement combines a critically damped drop with a small rope-tension bounce and staggered note rotation. Scrolling settles over 340 ms, note hover lifts the paper gently, deletions fade before removal, and reordering moves notes from their previous positions. Settings tabs fade; panels reveal and dismiss, and expanded notes ease into a larger size. Windows reduced-motion preferences and the app's animation switch suppress animated movement. Notes follow the rope curve while scrolling.
+The opening movement combines a critically damped drop with a small rope-tension bounce and staggered note rotation driven by a continuous damped oscillator. The drop eases over 880 ms and rope/note settling over 1,100 ms; frozen rope pens avoid per-frame brush allocations. Scrolling settles over 340 ms, note hover lifts the paper gently, deletions fade before removal, and reordering moves notes from their previous positions. Settings tabs fade; panels reveal and dismiss, and expanded notes ease into a larger size. Windows reduced-motion preferences and the app's animation switch suppress animated movement. Notes follow the rope curve while scrolling.
 
 Lavender, Ocean and Rose join Cloud, Paper and Midnight. Theme selection uses compact two-column swatches. Slider tracks show the selected range and expose precise minus/plus adjustments. Pop-up tooltips explicitly receive the owner's palette to maintain readable contrast in dark themes.
 

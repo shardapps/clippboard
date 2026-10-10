@@ -69,4 +69,4 @@ CI now exercises actual Windows notifications, Unicode text/image/file capture, 
 
 ## Control feedback polish
 
-126 local assertions pass. Added checks exercise actual button hover/leave feedback, non-sticky highlights with reduced motion, and initial/toggled switch positions after WPF Loaded events. Keyboard focus outlines render above the hover layer. Real users and device testing are still needed to evaluate subjective motion, touch and screen-reader accessibility.
+129 local assertions pass. Added checks exercise actual button hover/leave feedback, non-sticky highlights with reduced motion, and initial/toggled switch positions after WPF Loaded events, bounded continuous-sway endpoints and an old dismiss animation that cannot remove reopened settings. Keyboard focus outlines render above the hover layer. Real users and device testing are still needed to evaluate subjective motion, touch and screen-reader accessibility.

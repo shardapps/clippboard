@@ -100,10 +100,10 @@ public partial class RopeWindow : Window
         SetWindowPos(new WindowInteropHelper(this).Handle, 0, bounds.Left, bounds.Top, bounds.Width, bounds.Height, 0x0014);
         Activate(); UpdateLayout(); await RefreshAsync();
         if (!IsVisible || _closing) return;
-        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(Animated ? 680 : 1))
+        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-600, 0, TimeSpan.FromMilliseconds(Animated ? 880 : 1))
         { EasingFunction = new SpringEase { Bounce = false }, FillBehavior = FillBehavior.Stop });
         Slide.Y = 0;
-        Rope.BeginAnimation(RopeVisual.SagProperty, new DoubleAnimation(52, 24, TimeSpan.FromMilliseconds(Animated ? 880 : 1))
+        Rope.BeginAnimation(RopeVisual.SagProperty, new DoubleAnimation(52, 24, TimeSpan.FromMilliseconds(Animated ? 1100 : 1))
         { EasingFunction = new SpringEase { Bounce = _settings.PlayfulMotion } });
         if (Animated && _appearance.PlayfulMotion) AnimateNotes();
     }
@@ -258,11 +258,9 @@ public partial class RopeWindow : Window
         {
             var rotation = new RotateTransform(); var vertical = new TranslateTransform();
             var group = new TransformGroup(); group.Children.Add(rotation); group.Children.Add(vertical); card.RenderTransform = group;
-            var angles = new DoubleAnimationUsingKeyFrames { BeginTime = TimeSpan.FromMilliseconds(index % 8 * 25), FillBehavior = FillBehavior.Stop };
             var direction = index % 2 == 0 ? 1 : -1;
-            foreach (var (ms, angle) in new[] { (0, -2.8), (180, 2.2), (400, -1.1), (620, .5), (870, 0.0) })
-                angles.KeyFrames.Add(new SplineDoubleKeyFrame(angle * direction, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(ms)), new KeySpline(.3, 0, .3, 1)));
-            rotation.BeginAnimation(RotateTransform.AngleProperty, angles);
+            rotation.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(-2.8 * direction, 0, TimeSpan.FromMilliseconds(1100))
+            { BeginTime = TimeSpan.FromMilliseconds(index % 8 * 25), FillBehavior = FillBehavior.Stop, EasingFunction = new SwayEase() });
             vertical.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-12, 0, TimeSpan.FromMilliseconds(1000)) { FillBehavior = FillBehavior.Stop, EasingFunction = new SpringEase { Bounce = true } });
         }
     }

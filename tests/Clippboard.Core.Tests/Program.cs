@@ -217,10 +217,15 @@ internal static class Program
                 window.Show(); window.UpdateLayout(); window.RenderDemo(1000); window.UpdateLayout();
                 Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Check(window.RenderedNoteCount is > 0 and < 10, "1000 clips render only viewport notes");
+                var navigation = (System.Windows.Controls.Primitives.ScrollBar)window.FindName("HistoryScroll");
+                navigation.ApplyTemplate();
+                var navigationTrack = (System.Windows.Controls.Primitives.Track)navigation.Template.FindName("PART_Track", navigation);
+                Check(navigationTrack.Thumb.ActualWidth >= 32, "1000-note navigation retains a usable thumb width");
                 var scroll = (System.Windows.Controls.ScrollViewer)window.FindName("NoteScroll");
                 scroll.ScrollToRightEnd(); window.UpdateLayout();
                 Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Check(window.RenderedNoteCount is > 0 and < 10 && scroll.HorizontalOffset > 300000, $"all history reachable with bounded visuals (offset {scroll.HorizontalOffset}, width {scroll.ScrollableWidth}, cards {window.RenderedNoteCount})");
+                Check(Math.Abs(navigation.Value - navigation.Maximum) < 1 && navigationTrack.Thumb.ActualWidth >= 32, "minimum thumb preserves navigation to the final note");
                 scroll.ScrollToLeftEnd(); window.UpdateLayout();
                 foreach (var theme in Enum.GetValues<AppTheme>())
                 {

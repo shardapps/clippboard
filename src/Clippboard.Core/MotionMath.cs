@@ -4,6 +4,24 @@ namespace Clippboard.Core;
 
 public static class MotionMath
 {
+    // Exact damped-spring solution: independent of frame rate and stable after a delayed frame.
+    public static (double Position, double Velocity) Spring(double position, double velocity, double target, double seconds, double frequency, double damping = 1)
+    {
+        if (!double.IsFinite(position) || !double.IsFinite(velocity) || !double.IsFinite(target) || !double.IsFinite(seconds) || !double.IsFinite(frequency) || !double.IsFinite(damping)) throw new ArgumentException("Spring values must be finite.");
+        if (seconds <= 0) return (position, velocity);
+        frequency = Math.Max(.1, frequency); damping = Math.Clamp(damping, .05, 1);
+        var displacement = position - target;
+        if (damping >= .9999)
+        {
+            var coefficient = velocity + frequency * displacement; var decay = Math.Exp(-frequency * seconds);
+            return (target + (displacement + coefficient * seconds) * decay, (velocity - frequency * coefficient * seconds) * decay);
+        }
+        var attenuation = damping * frequency; var oscillation = frequency * Math.Sqrt(1 - damping * damping);
+        var sineCoefficient = (velocity + attenuation * displacement) / oscillation;
+        var cosine = Math.Cos(oscillation * seconds); var sine = Math.Sin(oscillation * seconds); var envelope = Math.Exp(-attenuation * seconds);
+        return (target + envelope * (displacement * cosine + sineCoefficient * sine), envelope * ((sineCoefficient * oscillation - attenuation * displacement) * cosine - (displacement * oscillation + attenuation * sineCoefficient) * sine));
+    }
+
     public static double Settle(double progress, bool bounce)
     {
         var t = Math.Clamp(progress, 0, 1);

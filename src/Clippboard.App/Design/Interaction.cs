@@ -60,13 +60,7 @@ public static class Interaction
         Move(scale, ScaleTransform.ScaleXProperty, target, GetEnabled(element)); Move(scale, ScaleTransform.ScaleYProperty, target, GetEnabled(element));
     }
     internal static void Move(Animatable value, DependencyProperty property, double target, bool animate, int milliseconds = 240)
-    {
-        var current = (double)value.GetValue(property); value.BeginAnimation(property, null); value.SetValue(property, target);
-        if (animate && Math.Abs(current - target) > .001) value.BeginAnimation(property, new DoubleAnimation(current, target, TimeSpan.FromMilliseconds(milliseconds)) { FillBehavior = FillBehavior.Stop, EasingFunction = new SpringEase { Bounce = false } });
-    }
+        => SmoothMotion.Move(value, property, target, animate, milliseconds);
     internal static void Move(FrameworkElement value, DependencyProperty property, double target, bool animate, int milliseconds = 240)
-    {
-        var current = (double)value.GetValue(property); value.BeginAnimation(property, null); value.SetValue(property, target);
-        if (animate && double.IsFinite(current) && Math.Abs(current - target) > .001) value.BeginAnimation(property, new DoubleAnimation(current, target, TimeSpan.FromMilliseconds(milliseconds)) { FillBehavior = FillBehavior.Stop, EasingFunction = new SpringEase { Bounce = false } });
-    }
+        => SmoothMotion.Move(value, property, target, animate, milliseconds);
 }

@@ -121,13 +121,13 @@ public partial class RopeWindow
     }
     private void Reveal(UIElement element, double from)
     {
+        var continuing = element.HasAnimatedProperties || element.RenderTransform is TranslateTransform moving && moving.HasAnimatedProperties;
         NewPanelMotion(element);
         element.IsHitTestVisible = true;
-        element.BeginAnimation(OpacityProperty, null); element.Opacity = 1;
-        element.RenderTransform = new TranslateTransform();
-        if (!Animated) return;
-        element.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(280)) { FillBehavior = FillBehavior.Stop });
-        ((TranslateTransform)element.RenderTransform).BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(from, 0, TimeSpan.FromMilliseconds(380)) { FillBehavior = FillBehavior.Stop, EasingFunction = new SpringEase { Bounce = false } });
+        var transform = element.RenderTransform as TranslateTransform ?? new TranslateTransform(); element.RenderTransform = transform;
+        if (!continuing) { element.Opacity = Animated ? 0 : 1; transform.X = Animated ? from : 0; }
+        SmoothMotion.Move(element, OpacityProperty, 1, Animated, 180);
+        SmoothMotion.Move(transform, TranslateTransform.XProperty, 0, Animated, 260);
     }
     private async void HidePanel(Border panel)
     {
@@ -137,10 +137,10 @@ public partial class RopeWindow
         if (Animated && !_closing && !Retired)
         {
             Interaction.Move(panel, OpacityProperty, 0, true, 180);
-            await Task.Delay(180);
+            await Task.Delay(360);
             if (version != PanelMotion(panel)) return; // A newer open or close owns this panel.
         }
-        panel.BeginAnimation(OpacityProperty, null); panel.Opacity = 1;
+        SmoothMotion.Move(panel, OpacityProperty, 1, false, 1);
         panel.Visibility = Visibility.Collapsed; panel.Child = null;
     }
 }

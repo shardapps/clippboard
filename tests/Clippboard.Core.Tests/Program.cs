@@ -37,6 +37,15 @@ internal static class Program
             var range = MotionMath.VisibleRange(1000, 100000, 1600, 340);
             Check(range.Last - range.First < 9 && range.First > 200, "large history virtual range bounded");
             Check(MotionMath.VisibleRange(0, 0, 1600, 340).Last == -1, "empty virtualization range");
+            var springStep = MotionMath.Spring(-100, 0, 0, .15, 20);
+            var springRetarget = MotionMath.Spring(springStep.Position, springStep.Velocity, -200, 0, 20);
+            Check(springRetarget == springStep, "retarget keeps spring position and velocity continuous");
+            var springSmallSteps = (-100.0, 0.0);
+            for (var step = 0; step < 120; step++) springSmallSteps = MotionMath.Spring(springSmallSteps.Item1, springSmallSteps.Item2, 0, 1.0 / 120, 20, .72);
+            var springSingleStep = MotionMath.Spring(-100, 0, 0, 1, 20, .72);
+            Check(Math.Abs(springSmallSteps.Item1 - springSingleStep.Position) < .00001 && Math.Abs(springSmallSteps.Item2 - springSingleStep.Velocity) < .00001, "spring solution independent of frame rate");
+            var springStall = MotionMath.Spring(-100, 600, 0, 10, 20);
+            Check(Math.Abs(springStall.Position) < .001 && Math.Abs(springStall.Velocity) < .001, "delayed spring frames remain finite and settle");
             Check(ClipboardService.ShortcutModifiers(ShortcutChoice.AltV) == 0x4001 && ClipboardService.ShortcutModifiers(ShortcutChoice.CtrlShiftV) == 0x4006, "shortcut modifiers include no-repeat");
             Console.WriteLine("Checking visual lifetime..."); CheckVisuals(root); Console.WriteLine("Checking storage...");
             var settingsFile = Path.Combine(root, "settings.json");
@@ -273,7 +282,7 @@ internal static class Program
                 var priorView = (SettingsView)host.Child;
                 Descendants<System.Windows.Controls.Button>(priorView).First(x => System.Windows.Automation.AutomationProperties.GetName(x) == "Close settings").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 window.OpenSettings(); window.UpdateLayout(); var latestView = host.Child;
-                Pump(Task.Delay(300));
+                Pump(Task.Delay(600));
                 Check(ReferenceEquals(host.Child, latestView) && host.Visibility == Visibility.Visible, "old dismiss animation cannot remove reopened settings");
                 window.ApplyAppearance(window.SavedSettings with { Animate = false });
                 settings = (SettingsView)host.Child;
@@ -282,6 +291,12 @@ internal static class Program
                 Interaction.Move(transform, TranslateTransform.YProperty, 0, true, 80);
                 Pump(WaitForRest(transform));
                 Check(Math.Abs(transform.Y) < .001, "hover settles at exact rest without drift");
+                Interaction.Move(transform, TranslateTransform.YProperty, 100, true, 250); Pump(Task.Delay(90));
+                var priorPosition = transform.Y; var priorVelocity = SmoothMotion.Velocity(transform, TranslateTransform.YProperty);
+                Interaction.Move(transform, TranslateTransform.YProperty, -20, true, 250);
+                Check(Math.Abs(transform.Y - priorPosition) < .001 && Math.Abs(SmoothMotion.Velocity(transform, TranslateTransform.YProperty) - priorVelocity) < .001, "actual WPF motion preserves position and velocity when interrupted");
+                Interaction.Move(transform, TranslateTransform.YProperty, 0, false);
+                Check(transform.Y == 0 && !transform.HasAnimatedProperties && SmoothMotion.Velocity(transform, TranslateTransform.YProperty) == 0, "reduced motion cancels an active spring immediately");
                 for (var page = 0; page < 5; page++) { settings.ShowPage(page); window.UpdateLayout(); Check(settings.ActualHeight > 0, "settings page lays out " + page); }
                 settings.ShowPage(2);
                 var retention = Descendants<System.Windows.Controls.Slider>(settings).First(x => System.Windows.Automation.AutomationProperties.GetName(x) == "Keep history");

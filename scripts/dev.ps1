@@ -1,4 +1,4 @@
-param([ValidateSet('build','test','run','publish','preview','diagnostics','format')][string]$Task = 'build',
+param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','format')][string]$Task = 'build',
   [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
   [switch]$Settings, [switch]$Detail, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software)
 $ErrorActionPreference = 'Stop'
@@ -15,6 +15,11 @@ New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
 $dotnetPath = Join-Path $projectRoot '.tools\dotnet\dotnet.exe'
 if (!(Test-Path -LiteralPath $dotnetPath)) { $dotnetPath = (Get-Command dotnet -ErrorAction Stop).Source }
 switch ($Task) {
+  'lifecycle' {
+    $diagnosticArgs = @('--lifecycle-diagnostics', (Join-Path $projectRoot 'artifacts/overlay-lifecycle.json'))
+    if ($Software) { $diagnosticArgs += '--software' }
+    & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- @diagnosticArgs
+  }
   'diagnostics' {
     $diagnosticArgs = @('--diagnostics', (Join-Path $projectRoot 'artifacts/motion-diagnostics.json'))
     if ($Software) { $diagnosticArgs += '--software' }

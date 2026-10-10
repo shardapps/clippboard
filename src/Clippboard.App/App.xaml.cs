@@ -43,6 +43,10 @@ public partial class App : Application
         base.OnStartup(e);
         try
         {
+            var lifecycleIndex = Array.IndexOf(e.Args, "--lifecycle-diagnostics");
+            if (lifecycleIndex >= 0) { if (lifecycleIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await OverlayDiagnostics.RunAsync(e.Args[lifecycleIndex + 1], e.Args.Contains("--software")); Shutdown(); return; }
+            var overlayIndex = Array.IndexOf(e.Args, "--overlay");
+            if (overlayIndex >= 0) { if (overlayIndex + 1 >= e.Args.Length) throw new ArgumentException("Overlay session required."); await RunOverlayAsync(e.Args[overlayIndex + 1], e.Args.Contains("--software")); return; }
             _development = e.Args.Contains("--dev");
             var preview = Array.IndexOf(e.Args, "--preview");
             var diagnostic = Array.IndexOf(e.Args, "--diagnostics");
@@ -68,9 +72,9 @@ public partial class App : Application
             if (!_development) _settings = _settings with { StartAtLogin = StartupEnabled() };
             _store = new HistoryStore(Path.Combine(root, "history"), new WindowsProtector(), _settings.HistoryLimits());
             await Task.Run(() => _store.InitializeAsync());
-            _rope = CreateRope();
+
             _clipboard = new ClipboardService(SaveAsync, _settings.Shortcut) { Settings = _settings, Paused = _settings.CapturePaused };
-            _rope.SetPaused(_settings.CapturePaused);
+
             _clipboard.ToggleRequested += ToggleRope;
             _clipboard.Notice += Notify;
             _foreground = new ForegroundTracker();
@@ -78,7 +82,7 @@ public partial class App : Application
             _maintenance = new DispatcherTimer { Interval = TimeSpan.FromMinutes(15) };
             _maintenance.Tick += async (_, _) =>
             {
-                try { await Task.Run(() => _store.PruneAsync()); }
+                try { await Task.Run(() => _store.PruneAsync()); ++_historyVersion; }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Notify("History cleanup failed. Check available disk space and permissions."); }
             };
             _maintenance.Start();
@@ -88,7 +92,9 @@ public partial class App : Application
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.Security.Cryptography.CryptographicException or ArgumentException)
         {
-            MessageBox.Show("Clippboard could not start. Check storage permissions and whether another copy is running.", "Clippboard", MessageBoxButton.OK, MessageBoxImage.Error);
+            if (!e.Args.Contains("--overlay") && !e.Args.Contains("--lifecycle-diagnostics"))
+                MessageBox.Show("Clippboard could not start. Check storage permissions and whether another copy is running.", "Clippboard", MessageBoxButton.OK, MessageBoxImage.Error);
+            else Console.Error.WriteLine("Clippboard process could not start: " + ex.GetType().Name);
             Shutdown(1);
         }
     }
@@ -99,69 +105,35 @@ public partial class App : Application
         {
             if (!_settings.Captures(clip.Kind)) return;
             if (!await Task.Run(() => _store!.AddAsync(clip))) Notify("History is full of pinned notes, or this item exceeds the storage limit. Unpin or delete some notes.");
-            else if (_rope!.IsVisible) await _rope.RefreshAsync();
+            else ++_historyVersion;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         { Notify("Could not save this clip. Check disk space and storage permissions."); }
     }
 
-    private async void ToggleRope()
+    private void ToggleRope()
     {
-        if (_rope is null || _toggling || _selecting) return;
+        if (_toggling || _selecting || _store is null) return;
+        if (_overlay is not null && !_overlay.Process.HasExited) { _closeOverlay = true; return; }
         _toggling = true;
         try
         {
-            if (_rope.IsVisible) await _rope.CloseRopeAsync();
-            else
+            _overlay?.Dispose(); _closeOverlay = false; _restoredSequence = 0;
+            _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
+            var session = new OverlayProcess(request => Dispatcher.InvokeAsync(() => HandleOverlayAsync(request)).Task.Unwrap());
+            _overlay = session; _foreground!.OverlayProcessId = (uint)session.Process.Id;
+            NativeMethods.AllowSetForegroundWindow((uint)session.Process.Id);
+            session.Process.Exited += (_, _) => Dispatcher.BeginInvoke(new Action(() =>
             {
-                if (_rope.Retired) _rope = CreateRope();
-                _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
-                await _rope.OpenAsync(_target);
-            }
+                if (!ReferenceEquals(_overlay, session)) return;
+                var failed = session.Process.ExitCode != 0; _overlay = null; _foreground.OverlayProcessId = 0; session.Dispose();
+                if (failed) Notify("The rope closed unexpectedly. Your saved history is safe; open it again.");
+            }));
+            session.Process.EnableRaisingEvents = true;
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException) { Notify("Could not open history. Try again."); }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception) { Notify("Could not open history. Try again."); }
         finally { _toggling = false; }
     }
-
-    private RopeWindow CreateRope()
-    {
-        var window = new RopeWindow(_store!, settings: _settings) { StartupAvailable = !_development };
-        window.SettingsSaveRequested += SaveSettingsAsync;
-        window.Selected += SelectAsync; window.PauseRequested += TogglePause;
-        return window;
-    }
-
-    private async Task SelectAsync(ClipSummary summary)
-    {
-        if (_selecting) return;
-        _selecting = true;
-        var copyOnly = !_settings.AutoPaste || (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
-        try
-        {
-            var clip = await Task.Run(() => _store!.GetAsync(summary.Id));
-            if (clip is null) return;
-            await _clipboard!.RestoreAsync(clip);
-            await _rope!.CloseRopeAsync();
-            if (copyOnly) { Notify("Restored to the clipboard. Use Ctrl + V wherever you need it."); return; }
-            if (_target == 0 || !NativeMethods.IsWindow(_target) || !NativeMethods.SetForegroundWindow(_target))
-            { Notify("Restored to the clipboard. Focus your destination and press Ctrl + V."); return; }
-            // Never synthesize paste while shortcut modifiers remain physically down.
-            var ready = false;
-            for (var i = 0; i < 25; i++)
-            {
-                await Task.Delay(20);
-                if (new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.All(k => (NativeMethods.GetAsyncKeyState(k) & 0x8000) == 0)) { ready = true; break; }
-            }
-            if (!ready || NativeMethods.GetForegroundWindow() != _target || !NativeMethods.Paste())
-                Notify("Restored to the clipboard. Press Ctrl + V in your destination app.");
-        }
-        catch (FileNotFoundException) { _rope!.SetStatus("An original file is unavailable. Copy the file again to update this note."); }
-        catch (FileAvailabilityException ex) { _rope!.SetStatus(ex.Message); }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException or System.Runtime.InteropServices.COMException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
-        { _rope!.SetStatus("Could not restore this item. Try again or copy the original again."); }
-        finally { _selecting = false; }
-    }
-
     private async void TogglePause()
     {
         if (_clipboard is null) return;
@@ -205,7 +177,7 @@ public partial class App : Application
                     try { SetStartup(previous.StartAtLogin); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { Notify("Check your Windows sign-in startup preference."); }
             }
             _clipboard.Settings = _settings; _clipboard.Paused = _settings.CapturePaused;
-            _rope!.ApplyAppearance(_settings);
+            ++_historyVersion;
             if (_tray is not null)
             {
                 _tray.Text = _settings.CapturePaused ? "Clippboard · Capture paused" : "Clippboard · " + SettingsView.ShortcutLabel(_settings.Shortcut);
@@ -307,7 +279,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _maintenance?.Stop(); _clipboard?.Dispose(); _foreground?.Dispose();
+        _overlay?.Dispose(); _maintenance?.Stop(); _clipboard?.Dispose(); _foreground?.Dispose();
         if (_tray is not null) { _tray.Visible = false; _tray.ContextMenuStrip?.Dispose(); _tray.Dispose(); }
         _trayIcon?.Dispose();
         if (_ownsMutex) _instance?.ReleaseMutex();

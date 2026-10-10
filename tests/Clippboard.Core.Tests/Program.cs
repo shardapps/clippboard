@@ -21,6 +21,36 @@ using Clippboard.App.Design;
 internal static class Program
 {
     private static int _assertions;
+    private static async Task CheckOverlayTransportAsync()
+    {
+        using var stream = new MemoryStream();
+        await OverlayTransport.WriteAsync(stream, new OverlayRequest("pin", new string('a',32), true), OverlayTransport.RequestLimit, CancellationToken.None);
+        stream.Position = 0;
+        Check((await OverlayTransport.ReadAsync<OverlayRequest>(stream, OverlayTransport.RequestLimit, CancellationToken.None)).Flag, "overlay framed request roundtrip");
+        using var oversized = new MemoryStream(BitConverter.GetBytes(int.MaxValue));
+        var rejected = false;
+        try { await OverlayTransport.ReadAsync<OverlayRequest>(oversized, OverlayTransport.RequestLimit, CancellationToken.None); } catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "overlay rejects forged frame length before allocation");
+        using var truncated = new MemoryStream([8,0,0,0,1]); rejected = false;
+        try { await OverlayTransport.ReadAsync<OverlayRequest>(truncated, OverlayTransport.RequestLimit, CancellationToken.None); } catch (EndOfStreamException) { rejected = true; }
+        Check(rejected, "overlay rejects truncated message");
+        using var server = new OverlayServer(request => Task.FromResult(request.Command == "state" ? new OverlayReply(Version: 42) : throw new InvalidOperationException()));
+        var running = server.RunAsync();
+        using var client = new OverlayClient(server.Name);
+        Check((await client.CallAsync(new("state"))).Version == 42, "private current-user named pipe connects");
+        rejected = false;
+        try { await client.CallAsync(new("bad")); } catch (IOException) { rejected = true; }
+        Check(rejected && (await client.CallAsync(new("state"))).Version == 42, "handler failure is recoverable and pipe remains usable");
+        var concurrent = await Task.WhenAll(Enumerable.Range(0,10).Select(_ => client.CallAsync(new("state"))));
+        Check(concurrent.All(x => x.Version == 42), "concurrent overlay calls remain serialized and complete");
+        using (var malicious = new System.IO.Pipes.NamedPipeClientStream(".",server.Name,System.IO.Pipes.PipeDirection.InOut,System.IO.Pipes.PipeOptions.Asynchronous | System.IO.Pipes.PipeOptions.CurrentUserOnly))
+        {
+            await malicious.ConnectAsync(3000); await malicious.WriteAsync(BitConverter.GetBytes(int.MaxValue)); await malicious.FlushAsync();
+        }
+        Check((await client.CallAsync(new("state"))).Version == 42, "malformed pipe client cannot stop subsequent requests");
+        server.Dispose(); await running.WaitAsync(TimeSpan.FromSeconds(3));
+        Check(running.IsCompletedSuccessfully, "pipe listener shuts down without orphaned workers");
+    }
     public static async Task<int> Main()
     {
         var root = Path.Combine(Environment.GetEnvironmentVariable("TEMP") ?? Path.GetTempPath(), "Clippboard-tests-" + Guid.NewGuid().ToString("N"));
@@ -28,6 +58,7 @@ internal static class Program
         try
         {
             CheckFormats();
+            await CheckOverlayTransportAsync();
             await CheckFileProbeAsync(root);
             Check(MotionMath.Settle(0, true) == 0 && MotionMath.Settle(1, true) == 1, "spring rests at exact endpoints");
             Check(MotionMath.Sway(0) == 0 && MotionMath.Sway(1) == 1, "continuous sway rests at exact endpoints");

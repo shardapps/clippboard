@@ -10,6 +10,7 @@ internal sealed class ForegroundTracker : IDisposable
     private readonly WinEventDelegate _callback;
     private readonly nint _hook;
     public nint LastWindow { get; private set; }
+    public uint OverlayProcessId { get; set; }
     public ForegroundTracker()
     {
         _callback = (_, _, window, _, _, _, _) => Remember(window);
@@ -19,6 +20,8 @@ internal sealed class ForegroundTracker : IDisposable
     private void Remember(nint window)
     {
         if (window == 0) return;
+        NativeMethods.GetWindowThreadProcessId(window, out var process);
+        if (process == Environment.ProcessId || process == OverlayProcessId) return;
         var name = new StringBuilder(256); GetClassName(window, name, name.Capacity);
         if (name.ToString() is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "NotifyIconOverflowWindow" or "#32768") return;
         LastWindow = window;

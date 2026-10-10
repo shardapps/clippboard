@@ -19,7 +19,7 @@ namespace Clippboard.App.Views;
 
 public partial class RopeWindow : Window
 {
-    private readonly HistoryStore _store;
+    private readonly IHistoryAccess _store;
     private readonly PreviewCache _cache;
     private readonly bool _preview;
     private AppSettings _settings;
@@ -51,7 +51,7 @@ public partial class RopeWindow : Window
     private double Pitch => _appearance.NoteWidth + _appearance.NoteSpacing;
     private bool Animated => _appearance.Animate && SystemParameters.ClientAreaAnimation;
 
-    public RopeWindow(HistoryStore store, bool preview = false, AppSettings? settings = null)
+    public RopeWindow(IHistoryAccess store, bool preview = false, AppSettings? settings = null)
     {
         _store = store; _preview = preview; _settings = (settings ?? new()).Normalize();
         _cache = new PreviewCache(store);

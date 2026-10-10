@@ -2,9 +2,9 @@
   <Grid x:Name="Scene">
     <Grid x:Name="Panel" VerticalAlignment="Top">
       <Grid.RenderTransform><TranslateTransform x:Name="Slide" Y="-600"/></Grid.RenderTransform>
-      <Grid.RowDefinitions><RowDefinition Height="72"/><RowDefinition Height="390"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <Border x:Name="Toolbar" HorizontalAlignment="Center" VerticalAlignment="Center" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Outline}" BorderThickness="1" CornerRadius="20" Padding="9,5" MouseDown="OnInsideClick">
-        <StackPanel Orientation="Horizontal">
+      <Grid.RowDefinitions><RowDefinition Height="Auto" MinHeight="72"/><RowDefinition Height="390"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <Border x:Name="Toolbar" Margin="12,4" MaxWidth="{Binding ActualWidth, ElementName=Scene}" HorizontalAlignment="Center" VerticalAlignment="Center" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Outline}" BorderThickness="1" CornerRadius="20" Padding="9,5" MouseDown="OnInsideClick">
+        <WrapPanel HorizontalAlignment="Center">
           <Button ToolTip="Clippboard · Open settings" Click="OnSettings" AutomationProperties.Name="Clippboard settings"><Button.Content><d:IconView Symbol="logo" Width="26" Height="26"/></Button.Content></Button>
           <Border Width="1" Background="{DynamicResource Outline}" Margin="7,7"/>
           <Button x:Name="AllButton" Content="All clips" Click="OnAll"/>
@@ -18,7 +18,7 @@
           <Button ToolTip="Settings" Click="OnSettings" AutomationProperties.Name="Settings"><d:IconView Symbol="settings"/></Button>
           <Button ToolTip="Help &amp; feedback" Click="OnFeedback" AutomationProperties.Name="Help and feedback"><d:IconView Symbol="feedback"/></Button>
           <Button ToolTip="Tuck away · Esc" Click="OnClose" AutomationProperties.Name="Retract rope"><d:IconView Symbol="up"/></Button>
-        </StackPanel>
+        </WrapPanel>
       </Border>
       <Grid Grid.Row="1" x:Name="Board" SizeChanged="OnBoardSizeChanged">
         <d:RopeVisual x:Name="Rope" Height="100" VerticalAlignment="Top" IsHitTestVisible="False"/>

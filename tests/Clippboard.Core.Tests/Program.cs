@@ -301,6 +301,16 @@ internal static class Program
                     Check(Contrast(((SolidColorBrush)window.Resources["Muted"]).Color, ((SolidColorBrush)window.Resources["NoteSurface"]).Color) >= 4.5, "date and metadata contrast in " + theme);
                 }
                 window.ApplyAppearance(new AppSettings { Animate = false });
+                var contrastResources = new ResourceDictionary();
+                ThemeManager.Apply(AppTheme.Rose, contrastResources, highContrast: true);
+                Check(Equals(contrastResources["Foreground"], SystemColors.WindowTextBrush) && Equals(contrastResources["Chrome"], SystemColors.WindowBrush), "high contrast uses Windows ink and surfaces");
+                window.Width = 640; window.UpdateLayout();
+                var toolbar = (System.Windows.Controls.Border)window.FindName("Toolbar");
+                Check(toolbar.Child is System.Windows.Controls.WrapPanel && toolbar.ActualWidth <= window.ActualWidth, "narrow viewport wraps toolbar without clipping controls");
+                window.OpenSettings(); window.UpdateLayout();
+                var compactSidebar = (System.Windows.Controls.Border)window.FindName("SidebarHost");
+                Check(compactSidebar.ActualWidth < window.ActualWidth, "settings stays within narrow screen");
+                window.Width = 1600; window.UpdateLayout();
                 var search = (System.Windows.Controls.TextBox)window.FindName("SearchBox");
                 search.Text = "no-such-synthetic-preview"; Pump(Task.Delay(200)); window.UpdateLayout();
                 Check(window.VisibleNoteCount == 0 && window.RenderedNoteCount == 0, "search has a safe empty state");

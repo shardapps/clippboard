@@ -35,8 +35,8 @@ public partial class RopeWindow
     {
         if (Retired) return;
         DismissDetail();
-        SidebarHost.Width = Math.Min(620, Math.Max(360, ActualWidth - 36));
-        SidebarHost.MaxHeight = Math.Max(250, ActualHeight - 100);
+        SidebarHost.Width = Math.Min(620, Math.Max(220, ActualWidth - 36));
+        SidebarHost.MaxHeight = Math.Max(180, ActualHeight - 100);
         var view = new SettingsView(_settings, StartupAvailable);
         view.AppearancePreview += PreviewAppearance;
         view.Dismissed += DismissSettings;
@@ -65,8 +65,8 @@ public partial class RopeWindow
         if (Retired) return;
         DismissSettings(); DismissDetail();
         var source = _detailLoads = new CancellationTokenSource(); var cancellation = source.Token;
-        DetailHost.Width = Math.Min(820, Math.Max(360, ActualWidth - 48));
-        DetailHost.Height = Math.Min(560, Math.Max(260, ActualHeight - 48));
+        DetailHost.Width = Math.Min(820, Math.Max(200, ActualWidth - 48));
+        DetailHost.Height = Math.Min(560, Math.Max(180, ActualHeight - 48));
         DetailHost.Child = new TextBlock { Text = "Opening note…", Margin = new Thickness(24), FontSize = 20 };
         DetailHost.Visibility = Visibility.Visible; Reveal(DetailHost, 12);
         try

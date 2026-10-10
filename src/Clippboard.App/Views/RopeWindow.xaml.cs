@@ -34,6 +34,11 @@ public partial class RopeWindow : Window
     private int _renderVersion;
     private bool _closing, _starredOnly, _scrollSync;
     private long _scrollVersion;
+    private readonly System.Windows.Threading.DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(160) };
+    private string _query = "";
+    private ClipKind? _kind;
+    private double _scrollTarget;
+    private bool _scrollAnimating;
     public event Func<ClipSummary, Task>? Selected;
     public event Action? PauseRequested;
     public event Action? SettingsRequested;
@@ -41,6 +46,7 @@ public partial class RopeWindow : Window
     internal int RenderedNoteCount => _cards.Count;
     internal long CachedImageBytes => _cache.RetainedBytes;
     internal bool Retired { get; private set; }
+    internal int VisibleNoteCount => _visible.Count;
     private double Pitch => _appearance.NoteWidth + _appearance.NoteSpacing;
     private bool Animated => _appearance.Animate && SystemParameters.ClientAreaAnimation;
 
@@ -53,7 +59,8 @@ public partial class RopeWindow : Window
         Rope.ShapeChanged += PositionNotes;
         SettingsRequested += () => OpenSettings();
         ExpandRequested += async entry => await OpenDetailAsync(entry);
-        Closed += (_, _) => { Retired = true; DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
+        _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); _query = SearchBox.Text.Trim(); RebuildNotes(); ScrollTo(0); };
+        Closed += (_, _) => { Retired = true; _searchTimer.Stop(); DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
     }
     public void ApplyAppearance(AppSettings settings)
     {
@@ -105,7 +112,7 @@ public partial class RopeWindow : Window
     public async Task CloseRopeAsync()
     {
         if (!IsVisible || _closing) return;
-        _closing = true; ++_renderVersion; CancelLoads();
+        _closing = true; _searchTimer.Stop(); ++_renderVersion; CancelLoads();
         DismissSettings(); DismissDetail();
         var duration = Animated ? 380 : 1;
         Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-600, TimeSpan.FromMilliseconds(duration))
@@ -127,16 +134,17 @@ public partial class RopeWindow : Window
     }
     private void RebuildNotes()
     {
-        if (Retired) return;
+        if (Retired || _closing) return;
         var reusable = _cards.ToDictionary(pair => _visible[pair.Key].Id, pair => pair.Value);
         CancelLoads(); Notes.Children.Clear(); _cards.Clear();
         _visible = _entries.Where(x => !_starredOnly || x.Pinned)
+            .Where(x => (_kind is null || x.Kind == _kind) && (_query.Length == 0 || x.Preview.Contains(_query, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(x => _settings.StarredFirst && x.Pinned).ThenByDescending(x => x.CopiedAt).ToList();
         AllButton.SetResourceReference(BackgroundProperty, !_starredOnly ? "SelectedSurface" : "Chrome");
         StarredButton.SetResourceReference(BackgroundProperty, _starredOnly ? "SelectedSurface" : "Chrome");
         EmptyState.Visibility = _visible.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        EmptyTitle.Text = _starredOnly ? "Your favourites live here." : "Room for your next idea.";
-        EmptyHint.Text = _starredOnly ? "Star a note to find it quickly." : "Copy something. We'll hang it here.";
+        EmptyTitle.Text = _query.Length > 0 || _kind is not null ? "No matching notes." : _starredOnly ? "Your favourites live here." : "Room for your next idea.";
+        EmptyHint.Text = _query.Length > 0 || _kind is not null ? "Try a different search or choose All types." : _starredOnly ? "Star a note to find it quickly." : "Copy something. We'll hang it here.";
         Notes.Width = Math.Max(NoteScroll.ViewportWidth, 48 + _visible.Count * Pitch - (_visible.Count > 0 ? _appearance.NoteSpacing : 0));
         var range = MotionMath.VisibleRange(_visible.Count, Math.Max(0, NoteScroll.HorizontalOffset - 24), NoteScroll.ViewportWidth, Pitch);
         for (var i = range.First; i <= range.Last; i++)
@@ -262,10 +270,12 @@ public partial class RopeWindow : Window
         new PropertyMetadata(0.0, (d, e) => ((RopeWindow)d).NoteScroll.ScrollToHorizontalOffset((double)e.NewValue)));
     private void ScrollTo(double value)
     {
+        _scrollTarget = Math.Clamp(value, 0, NoteScroll.ScrollableWidth);
+        _scrollAnimating = true;
         var version = ++_scrollVersion; var start = NoteScroll.HorizontalOffset;
         BeginAnimation(ScrollPositionProperty, null); SetValue(ScrollPositionProperty, start);
-        var animation = new DoubleAnimation(Math.Clamp(value, 0, NoteScroll.ScrollableWidth), TimeSpan.FromMilliseconds(Animated ? 340 : 1)) { EasingFunction = new SpringEase { Bounce = false } };
-        animation.Completed += (_, _) => { if (version != _scrollVersion) return; var end = (double)GetValue(ScrollPositionProperty); BeginAnimation(ScrollPositionProperty, null); SetValue(ScrollPositionProperty, end); };
+        var animation = new DoubleAnimation(_scrollTarget, TimeSpan.FromMilliseconds(Animated ? 340 : 1)) { EasingFunction = new SpringEase { Bounce = false } };
+        animation.Completed += (_, _) => { if (version != _scrollVersion) return; var end = (double)GetValue(ScrollPositionProperty); BeginAnimation(ScrollPositionProperty, null); SetValue(ScrollPositionProperty, end); _scrollAnimating = false; };
         BeginAnimation(ScrollPositionProperty, animation);
     }
     private void SyncScroll()
@@ -274,17 +284,24 @@ public partial class RopeWindow : Window
         HistoryScroll.LargeChange = NoteScroll.ViewportWidth; HistoryScroll.Value = NoteScroll.HorizontalOffset; _scrollSync = false;
         Navigation.Visibility = NoteScroll.ScrollableWidth > 1 ? Visibility.Visible : Visibility.Collapsed;
     }
-    private void OnScrollChanged(object sender, ScrollChangedEventArgs e) { RenderVisible(); SyncScroll(); }
+    private void OnScrollChanged(object sender, ScrollChangedEventArgs e) { if (!_scrollAnimating) _scrollTarget = NoteScroll.HorizontalOffset; RenderVisible(); SyncScroll(); }
     private void OnBoardSizeChanged(object sender, SizeChangedEventArgs e) { if (Notes is null) return; Notes.Width = Math.Max(e.NewSize.Width, 48 + _visible.Count * Pitch - (_visible.Count > 0 ? _appearance.NoteSpacing : 0)); RenderVisible(); }
     private void OnScrollbarChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    { if (_scrollSync || NoteScroll is null) return; ++_scrollVersion; BeginAnimation(ScrollPositionProperty, null); NoteScroll.ScrollToHorizontalOffset(e.NewValue); }
+    { if (_scrollSync || NoteScroll is null) return; ++_scrollVersion; _scrollAnimating = false; BeginAnimation(ScrollPositionProperty, null); _scrollTarget = e.NewValue; NoteScroll.ScrollToHorizontalOffset(e.NewValue); }
     private void OnMouseWheel(object sender, MouseWheelEventArgs e)
-    { if (SidebarHost.Visibility == Visibility.Visible || DetailHost.Visibility == Visibility.Visible) return; ScrollTo(NoteScroll.HorizontalOffset - e.Delta * 2.5); e.Handled = true; }
-    private void OnPrevious(object sender, RoutedEventArgs e) => ScrollTo(NoteScroll.HorizontalOffset - Pitch);
-    private void OnNext(object sender, RoutedEventArgs e) => ScrollTo(NoteScroll.HorizontalOffset + Pitch);
+    { if (SidebarHost.Visibility == Visibility.Visible || DetailHost.Visibility == Visibility.Visible) return; ScrollTo(_scrollTarget - e.Delta * 2.5); e.Handled = true; }
+    private void OnPrevious(object sender, RoutedEventArgs e) => ScrollTo(_scrollTarget - Pitch);
+    private void OnNext(object sender, RoutedEventArgs e) => ScrollTo(_scrollTarget + Pitch);
     private void OnAll(object sender, RoutedEventArgs e) { _starredOnly = false; RebuildNotes(); ScrollTo(0); }
     private void OnStarred(object sender, RoutedEventArgs e) { _starredOnly = true; RebuildNotes(); ScrollTo(0); }
     private void OnSettings(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();
+    private void OnFeedback(object sender, RoutedEventArgs e) => OpenSettings(4);
+    private void OnSearchChanged(object sender, TextChangedEventArgs e) { if (Notes is null || Retired) return; _searchTimer.Stop(); _searchTimer.Start(); }
+    private void OnTypeFilter(object sender, RoutedEventArgs e)
+    {
+        _kind = _kind switch { null => ClipKind.Text, ClipKind.Text => ClipKind.Image, ClipKind.Image => ClipKind.Files, _ => null };
+        TypeFilterButton.Content = _kind?.ToString() ?? "All types"; RebuildNotes(); ScrollTo(0);
+    }
     private async void OnOutsideClick(object sender, MouseButtonEventArgs e) => await CloseRopeAsync();
     private void OnInsideClick(object sender, MouseButtonEventArgs e) => e.Handled = true;
     private async void OnClose(object sender, RoutedEventArgs e) => await CloseRopeAsync();
@@ -292,9 +309,11 @@ public partial class RopeWindow : Window
     private void OnPause(object sender, RoutedEventArgs e) => PauseRequested?.Invoke();
     private async void OnKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) { SearchBox.Focus(); SearchBox.SelectAll(); e.Handled = true; return; }
         if (e.Key == Key.Escape) { e.Handled = true; if (DetailHost.Visibility == Visibility.Visible) DismissDetail(); else if (SidebarHost.Visibility == Visibility.Visible) DismissSettings(); else await CloseRopeAsync(); }
+        else if (e.OriginalSource is TextBox) return;
         else if (SidebarHost.Visibility != Visibility.Visible && DetailHost.Visibility != Visibility.Visible && e.Key is Key.Left or Key.Right)
-        { ScrollTo(NoteScroll.HorizontalOffset + (e.Key == Key.Left ? -Pitch : Pitch)); e.Handled = true; }
+        { ScrollTo(_scrollTarget + (e.Key == Key.Left ? -Pitch : Pitch)); e.Handled = true; }
     }
     internal void RenderDemo(int count = 8)
     {

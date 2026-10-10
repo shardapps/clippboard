@@ -7,6 +7,8 @@
   <img src="https://img.shields.io/badge/status-early%20alpha-e8dff0?style=flat-square" alt="Early alpha" />
 </p>
 
+# Clippboard — Windows clipboard manager for text, images and files
+
 **A Windows clipboard companion with a little personality.** Press **Ctrl + Shift + V** and a rope drops from the top of your screen, carrying rounded paper notes for the things you copied. Pick a note to restore it and request a paste into your previous app. Click outside or press Escape to tuck it away.
 
 Built by [Shard Apps](https://github.com/shardapps). Open source, local first, and designed to stay out of your way.
@@ -30,7 +32,9 @@ Built by [Shard Apps](https://github.com/shardapps). Open source, local first, a
 - **Star what matters:** starred notes survive capacity eviction; every clip follows the chosen 1–30-day retention period.
 - **Local storage:** Windows DPAPI protects saved contents for your Windows user. No accounts, sync, telemetry, or application network service.
 - **Bounded history:** Configurable 1–30 days for all entries, 50–1,000 clips, and 32–512 MiB of encrypted payloads (defaults: 30 days / 500 / 256 MiB). New items are rejected if pins fill the budget.
-- **Make it yours:** Cloud (white), Paper (cream), and Midnight themes; note size, spacing, text size, motion, shortcuts, capture types, starred ordering, retention, and storage/cache budgets.
+- **Find a clip:** search saved previews with **Ctrl + F** and filter text, images or files without loading every payload.
+- **Make it yours:** Cloud (white), Paper, Midnight, Lavender, Ocean and Rose themes; live appearance previews commit only on Save. Adjust sizes, motion, shortcuts, capture types, starred ordering, retention, and storage/cache budgets.
+- **Share feedback:** report bugs and suggest features from Help. You control what gets submitted; support information excludes clipboard contents and personal paths.
 - **Pause on demand:** use the rope or tray menu before copying something sensitive.
 
 ### Try the alpha
@@ -48,11 +52,13 @@ Development runs store history under this repository's ignored `.data/` folder. 
 
 **Controls:** click a note to restore and request paste; **Shift + click** restores without requesting paste; **☆ / ★** pins or unpins; **×** deletes. Tab navigates buttons and Enter activates them. Use the mouse wheel, arrow keys, or custom navigation strip to browse all saved notes. **Expand** opens full content in a resizable panel. **All clips / Starred** filters the list. The logo or gear opens settings.
 
+Search checks the saved short previews, including displayed file names, rather than decrypting all full notes. Click **All types** to cycle Text → Image → Files → All types. Use the speech-bubble button for Help and feedback. Appearance changes preview live; closing without Save restores your saved appearance.
+
 For a self-contained executable, run `./scripts/dev.ps1 publish`. Output: `artifacts/portable/win-x64/Clippboard.exe`; recipients do not need .NET installed. Build the setup executable with `./scripts/package.ps1` after installing Inno Setup 6. CI produces portable and setup artifacts. These are unsigned testing builds. [Packaging details →](docs/development.md)
 
 <details><summary>Settings and themes preview</summary>
 
-<img src="docs/assets/settings-preview.png" alt="Custom settings sidebar with three themes and spacing controls" width="100%" />
+<img src="docs/assets/settings-preview.png" alt="Clippboard live settings preview: six themes, filled sliders and precise note size controls" width="100%" />
 
 </details>
 
@@ -65,6 +71,18 @@ File notes reference originals: moved, deleted, disconnected, or inaccessible fi
 Automatic pasting depends on the destination. Windows can block input into elevated apps; if focus restoration or input injection fails, the item remains on the clipboard for manual **Ctrl + V**. Apps can ignore a successful paste keystroke; Clippboard cannot verify acceptance.
 
 Clipboard history can contain private data. The app respects supported exclusion markers but cannot recognize every secret. Pause capture when needed. DPAPI does not protect against software already running as you. [Privacy & storage →](docs/privacy.md)
+
+### Frequently asked questions
+
+**What is Clippboard?** An Apache-2.0 open-source clipboard history manager for Windows 11, built with C#, .NET 10, WPF and Win32. Text, standard bitmap images and original file locations appear as paper notes on a full-width rope.
+
+**Does it sync my clipboard or require an account?** No. Clipboard storage stays encrypted on your PC using Windows DPAPI. Feedback links open GitHub in your browser only when requested; GitHub may require an account to submit feedback.
+
+**Can I keep everything forever?** No. Choose 1–30 days, including starred notes, plus count and storage limits. Starred notes survive capacity eviction but still expire. File notes refer to originals, so deleted or moved originals must be copied again.
+
+**Can I use it instead of Windows clipboard history?** It is a separate experimental app with image/file notes, themes, search and a different interface. Compatibility, accessibility and memory testing remain in progress; it does not replace or configure Windows clipboard history.
+
+**Is there a stable, signed installer?** Not yet. CI produces unsigned evaluation executables and an installer. No trusted publisher identity has been configured. See the alpha limitations above and [validation record](docs/testing.md).
 
 ### Build with us
 

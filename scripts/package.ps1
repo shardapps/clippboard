@@ -9,9 +9,11 @@ if (!$CompilerPath) {
   else { $CompilerPath = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe' }
 }
 if (!(Test-Path -LiteralPath $CompilerPath)) { throw 'Install Inno Setup 6 or pass -CompilerPath to its ISCC.exe.' }
-& $CompilerPath '/DAppVersion=0.1.0' 'installer\Clippboard.iss'
+$buildProperties = [xml](Get-Content -Raw -LiteralPath 'Directory.Build.props')
+$appVersion = $buildProperties.Project.PropertyGroup.Version
+& $CompilerPath "/DAppVersion=$appVersion" 'installer\Clippboard.iss'
 if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
-$artifactPaths = @('artifacts\portable\win-x64\Clippboard.exe', 'artifacts\installer\Clippboard-Setup-0.1.0.exe')
+$artifactPaths = @('artifacts\portable\win-x64\Clippboard.exe', "artifacts\installer\Clippboard-Setup-$appVersion.exe")
 $checksums = foreach ($path in $artifactPaths) {
   $hash = Get-FileHash -LiteralPath $path -Algorithm SHA256
   "$(($hash.Hash).ToLowerInvariant())  $($path.Replace('\','/'))"

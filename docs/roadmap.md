@@ -13,8 +13,10 @@
 ## Before stable release
 
 - [ ] Iterate rope geometry, peg detail, paper appearance, hover, and motion with user feedback.
-- [ ] Search/paging beyond the first 40 notes.
-- [ ] Persistent settings: shortcut, limits, retention, exclusions, pause.
+- [x] Browse all saved notes with viewport rendering, all/starred filtering and resizable full-content views.
+- [ ] Search by content and date.
+- [x] Persistent themes, shortcut, limits, retention, capture types, pause, ordering, size and spacing.
+- [ ] Per-application capture exclusions.
 - [ ] HTML/RTF and broader image-format preservation.
 - [ ] Time-bounded clipboard reads and network-file validation.
 - [ ] Real capture/paste app matrix, rapid-copy stress, restart persistence.

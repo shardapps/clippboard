@@ -32,6 +32,7 @@ internal static class Program
             var range = MotionMath.VisibleRange(1000, 100000, 1600, 340);
             Check(range.Last - range.First < 9 && range.First > 200, "large history virtual range bounded");
             Check(MotionMath.VisibleRange(0, 0, 1600, 340).Last == -1, "empty virtualization range");
+            Check(ClipboardService.ShortcutModifiers(ShortcutChoice.AltV) == 0x4001 && ClipboardService.ShortcutModifiers(ShortcutChoice.CtrlShiftV) == 0x4006, "shortcut modifiers include no-repeat");
             Console.WriteLine("Checking visual lifetime..."); CheckVisuals(root); Console.WriteLine("Checking storage...");
             var settingsFile = Path.Combine(root, "settings.json");
             var settingsStore = new SettingsStore(settingsFile);
@@ -106,7 +107,7 @@ internal static class Program
             await Task.WhenAll(Enumerable.Range(0, 20).Select(i => budget.AddAsync(new Clip { Kind = ClipKind.Text, Text = "concurrent-" + i })));
             Check((await budget.ListAsync()).Sum(x => x.StoredBytes) <= 3000, "concurrent writes remain bounded");
             try { await budget.GetAsync("../bad"); Check(true, "unknown IDs never used as paths"); } catch (InvalidDataException) { Check(true, "reject unsafe ID"); }
-            Console.WriteLine($"PASS: {_assertions} storage and format assertions (including Windows DPAPI)");
+            Console.WriteLine($"PASS: {_assertions} storage, format, cache and WPF assertions (including Windows DPAPI)");
             return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
@@ -172,17 +173,76 @@ internal static class Program
                 scroll.ScrollToRightEnd(); window.UpdateLayout();
                 Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Check(window.RenderedNoteCount is > 0 and < 10 && scroll.HorizontalOffset > 300000, "all history reachable with bounded visuals");
+                window.OpenSettings(); window.UpdateLayout();
+                var host = (System.Windows.Controls.Border)window.FindName("SidebarHost");
+                Check(host.Child is SettingsView && host.Visibility == Visibility.Visible, "custom settings sidebar opens");
+                var settings = (SettingsView)host.Child;
+                for (var page = 0; page < 4; page++) { settings.ShowPage(page); window.UpdateLayout(); Check(settings.ActualHeight > 0, "settings page lays out " + page); }
+                settings.ShowPage(2);
+                var retention = Descendants<System.Windows.Controls.Slider>(settings).First(x => System.Windows.Automation.AutomationProperties.GetName(x) == "Keep history");
+                retention.Value = 7;
+                Check(settings.Draft.RetentionDays == 7 && retention.Maximum == 30, "retention control edits bounded draft");
+                settings.ShowPage(1);
+                var autoPaste = Descendants<System.Windows.Controls.CheckBox>(settings).First(x => Equals(x.Content, "Paste into the previous app"));
+                autoPaste.IsChecked = false;
+                Check(!settings.Draft.AutoPaste, "behaviour toggle edits draft");
+                var longText = new string('x', 4000) + "END-OF-NOTE";
+                Pump(window.PreviewDetailAsync(new Clip { Kind = ClipKind.Text, Text = longText }));
+                Check(window.DetailText?.Text == longText, "expanded note reads full text beyond preview");
+                var detail = (System.Windows.Controls.Border)window.FindName("DetailHost");
+                var oldWidth = detail.Width;
+                Descendants<System.Windows.Controls.Button>(detail).First(x => Equals(x.Content, "Larger")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Check(detail.Width > oldWidth && detail.Width < window.ActualWidth, "expanded note enlarges within screen");
+                Pump(window.OpenDetailAsync(new Clip { Kind = ClipKind.Text }.Summary(0)));
+                // Preview mode uses synthetic fallback for a missing payload; normal mode reports expiry.
+                Check(window.DetailText is not null, "synthetic detail fallback stays isolated");
+                var cacheStore = new HistoryStore(Path.Combine(root, "cache-images"), new TestWindowsProtector());
+                Pump(Task.Run(() => cacheStore.InitializeAsync()));
+                var cache = new PreviewCache(cacheStore) { BudgetBytes = 200000 };
+                for (var i = 0; i < 8; i++)
+                {
+                    var pixels = new byte[40000]; for (var p = 0; p < pixels.Length; p += 4) { pixels[p] = (byte)(i * 20); pixels[p + 3] = 255; }
+                    var bitmap = BitmapSource.Create(100, 100, 96, 96, PixelFormats.Bgra32, null, pixels, 400);
+                    var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                    using var buffer = new MemoryStream(); encoder.Save(buffer);
+                    var clip = new Clip { Kind = ClipKind.Image, ImagePng = buffer.ToArray() };
+                    Pump(Task.Run(() => cacheStore.AddAsync(clip))); Pump(cache.GetAsync(clip.Id, CancellationToken.None));
+                }
+                Check(cache.Count == 5 && cache.RetainedBytes == 200000, "LRU evicts images at exact byte budget");
+                cache.Clear(); Check(cache.Count == 0 && cache.RetainedBytes == 0, "preview cache clears all references");
                 var close = window.CloseRopeAsync();
                 var frame = new DispatcherFrame();
                 window.Dispatcher.BeginInvoke(async () => { try { await close; } catch (Exception ex) { failure = ex; } finally { frame.Continue = false; } });
                 Dispatcher.PushFrame(frame);
-                Check(!window.IsVisible && window.RenderedNoteCount == 0 && window.CachedImageBytes == 0, "closing releases cards and thumbnail cache");
+                Check(window.Retired && !window.IsVisible && window.RenderedNoteCount == 0 && window.CachedImageBytes == 0 && window.DetailText is null, "closing releases native surface, cards, detail and thumbnail cache");
+                for (var cycle = 0; cycle < 3; cycle++)
+                {
+                    window = new RopeWindow(cacheStore, preview: true, settings: new AppSettings { Animate = false }) { Width = 1200, Height = 700 };
+                    window.Show(); window.UpdateLayout(); window.RenderDemo(); window.UpdateLayout();
+                    Check(window.RenderedNoteCount > 0 && !window.Retired, "fresh overlay opens after retirement " + cycle);
+                    Pump(window.CloseRopeAsync()); Check(window.Retired && window.RenderedNoteCount == 0, "repeat close releases overlay " + cycle);
+                }
             }
             catch (Exception ex) { failure = ex; }
             finally { window?.Close(); }
         });
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
         if (failure is not null) throw new InvalidOperationException("Visual checks failed", failure);
+    }
+    private static void Pump(Task task)
+    {
+        var frame = new DispatcherFrame();
+        Dispatcher.CurrentDispatcher.BeginInvoke(async () => { try { await task; } catch { /* Rethrown below. */ } finally { frame.Continue = false; } });
+        Dispatcher.PushFrame(frame); task.GetAwaiter().GetResult();
+    }
+    private static System.Collections.Generic.IEnumerable<T> Descendants<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T item) yield return item;
+            foreach (var item2 in Descendants<T>(child)) yield return item2;
+        }
     }
     private sealed class TestWindowsProtector : IContentProtector
     {

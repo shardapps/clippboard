@@ -1,4 +1,6 @@
-param([ValidateSet('build','test','run','publish','preview','format')][string]$Task = 'build')
+param([ValidateSet('build','test','run','publish','preview','format')][string]$Task = 'build',
+  [ValidateSet('Cloud','Paper','Midnight')][string]$Theme = 'Cloud',
+  [switch]$Settings, [switch]$Detail, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
@@ -18,6 +20,12 @@ switch ($Task) {
   'run' { & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- --dev }
   'format' { & $dotnetPath format Clippboard.slnx --verify-no-changes }
   'publish' { & $dotnetPath publish src/Clippboard.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/portable/win-x64 }
-  'preview' { & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- --preview (Join-Path $projectRoot 'artifacts\preview.png') }
+  'preview' {
+    $previewArgs = @('--preview', (Join-Path $projectRoot $PreviewPath), '--theme', $Theme)
+    if ($Settings) { $previewArgs += '--settings' }
+    if ($Detail) { $previewArgs += '--detail' }
+    if ($Measure) { $previewArgs += @('--measure', (Join-Path $projectRoot 'artifacts/performance.json')) }
+    & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- @previewArgs
+  }
 }
 if ($LASTEXITCODE -ne 0) { throw "dotnet $Task failed with exit code $LASTEXITCODE" }

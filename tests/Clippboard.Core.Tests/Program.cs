@@ -256,6 +256,7 @@ internal static class Program
                 }
                 Check(cache.Count == 5 && cache.RetainedBytes == 200000, "LRU evicts images at exact byte budget");
                 cache.Clear(); Check(cache.Count == 0 && cache.RetainedBytes == 0, "preview cache clears all references");
+                if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true") CheckWindowsClipboard(root);
                 var close = window.CloseRopeAsync();
                 var frame = new DispatcherFrame();
                 window.Dispatcher.BeginInvoke(async () => { try { await close; } catch (Exception ex) { failure = ex; } finally { frame.Continue = false; } });
@@ -281,6 +282,48 @@ internal static class Program
         var frame = new DispatcherFrame();
         Dispatcher.CurrentDispatcher.BeginInvoke(async () => { try { await task; } catch { /* Rethrown below. */ } finally { frame.Continue = false; } });
         Dispatcher.PushFrame(frame); task.GetAwaiter().GetResult();
+    }
+    private static void CheckWindowsClipboard(string root)
+    {
+        // An isolated hosted runner only: never replace a developer's personal clipboard.
+        Console.WriteLine("Checking real Windows clipboard notifications on isolated CI...");
+        var captured = new System.Collections.Generic.List<Clip>();
+        using (var service = new ClipboardService(clip => { captured.Add(clip); return Task.CompletedTask; }))
+        {
+            try
+            {
+                Clipboard.SetText("Clippboard CI Unicode 🧵"); Pump(WaitForCapture(() => captured.Count >= 1));
+                Check(captured.LastOrDefault()?.Text == "Clippboard CI Unicode 🧵", "Windows text notification and capture");
+                service.Paused = true; Clipboard.SetText("paused fixture"); Pump(Task.Delay(350));
+                Check(captured.Count == 1, "Windows capture pause"); service.Paused = false;
+                var bitmap = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8); bitmap.Freeze();
+                Clipboard.SetImage(bitmap); Pump(WaitForCapture(() => captured.Count >= 2));
+                Check(captured.Last().Kind == ClipKind.Image && captured.Last().ImagePng is not null, "Windows image notification and PNG capture");
+                var file = Path.Combine(root, "clipboard-fixture.txt"); File.WriteAllText(file, "synthetic file");
+                var files = new System.Collections.Specialized.StringCollection { file };
+                Clipboard.SetFileDropList(files); Pump(WaitForCapture(() => captured.Count >= 3));
+                Check(captured.Last().Kind == ClipKind.Files && captured.Last().FilePaths!.SequenceEqual([file]), "Windows file-drop capture");
+                Pump(service.RestoreAsync(captured.Last()));
+                Check(Clipboard.GetFileDropList().Contains(file), "Windows file reference restore");
+                Pump(service.RestoreAsync(new Clip { Kind = ClipKind.Text, Text = "restored fixture" })); Pump(Task.Delay(350));
+                Check(Clipboard.GetText() == "restored fixture" && captured.Count == 3, "own restore does not duplicate history");
+                Pump(service.RestoreAsync(captured[1]));
+                Check(Clipboard.GetImage()?.PixelWidth == 2, "Windows image restore");
+                var privateData = new DataObject(); privateData.SetText("excluded fixture"); privateData.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream([1]));
+                Clipboard.SetDataObject(privateData, true); Pump(Task.Delay(350));
+                Check(captured.Count == 3, "Windows exclusion marker suppresses capture");
+                var missingRejected = false;
+                try { Pump(service.RestoreAsync(new Clip { Kind = ClipKind.Files, FilePaths = [Path.Combine(root, "does-not-exist.txt")] })); }
+                catch (FileNotFoundException) { missingRejected = true; }
+                Check(missingRejected, "missing original does not replace clipboard");
+            }
+            finally { service.Paused = true; Clipboard.Clear(); }
+        }
+    }
+    private static async Task WaitForCapture(Func<bool> ready)
+    {
+        var deadline = System.Diagnostics.Stopwatch.StartNew();
+        while (!ready() && deadline.ElapsedMilliseconds < 3000) await Task.Delay(20);
     }
     private static double Contrast(Color a, Color b)
     {

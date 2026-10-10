@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.3.0"
 #endif
 
 [Setup]
@@ -26,6 +26,11 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
+#ifdef SignedBuild
+SignTool=shardapps
+SignedUninstaller=yes
+SignToolRetryCount=2
+#endif
 
 [Files]
 Source: "..\artifacts\portable\win-x64\Clippboard.exe"; DestDir: "{app}"; Flags: ignoreversion

@@ -10,9 +10,9 @@ Run `scripts/dev.ps1` with `build`, `test`, `run`, `preview`, or `publish`. Loca
 
 Publish creates a self-contained x64 single-file executable in `artifacts/portable/win-x64`. Native libraries may be extracted by .NET at runtime. WPF trimming/NativeAOT are not enabled.
 
-Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then run `scripts/package.ps1`. Use `-CompilerPath` for a custom compiler location. Output is `artifacts/installer/Clippboard-Setup-0.2.0.exe`. Setup is per-user under LocalAppData Programs and does not require elevation. Startup stays opt-in. Uninstall removes the startup registry entry but preserves history; clear history first if desired.
+Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then run `scripts/package.ps1`. Use `-CompilerPath` for a custom compiler location. Output is `artifacts/installer/Clippboard-Setup-0.3.0.exe`. Setup is per-user under LocalAppData Programs and does not require elevation. Startup stays opt-in. Uninstall removes the startup registry entry but preserves history; clear history first if desired.
 
-CI runs Release build and executable storage checks, then creates portable/setup artifacts with SHA-256 checksums. It does not publish a GitHub Release. Stable release is separate after compatibility, packaging, and signing checks. Unsigned builds may show SmartScreen prompts.
+CI runs Release, regression and isolated Windows clipboard checks, then builds portable/setup artifacts, verifies hashes and signing metadata, and tests installation, same-version reinstall, native preview startup and uninstall. Local tests leave the system clipboard untouched. See [optional trusted signing](signing.md). It does not publish a GitHub Release. Stable release is separate after compatibility, packaging, and signing checks. Unsigned builds may show SmartScreen prompts.
 
 ## CI skill adaptation
 

@@ -43,6 +43,8 @@ Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setup
 
 **Unsigned alpha binaries:** open a successful [Windows build](https://github.com/shardapps/clippboard/actions/workflows/ci.yml), download the `clippboard-windows-x64-alpha` artifact, and unzip it. Run `installer/Clippboard-Setup-0.4.0.exe` for a per-user installation, or `portable/win-x64/Clippboard.exe` directly. GitHub may require sign-in for artifact downloads; artifacts expire after 14 days. These are evaluation builds, not stable releases.
 
+**Microsoft Store:** a Windows 11 x64 MSIX is being prepared under publisher **ShardCoders**. It is not publicly available yet. Microsoft certification and a Store-signed installation check must finish before publication; the separate GitHub EXE remains unsigned. [Store distribution](docs/store.md) · [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
+
 1. Clone this repository and open PowerShell in its folder.
 2. Run `./scripts/bootstrap.ps1` to install a private .NET 10 SDK under `.tools/` and build.
 3. Run `./scripts/dev.ps1 run` to start the development app.
@@ -64,7 +66,7 @@ For a self-contained executable, run `./scripts/dev.ps1 publish`. Output: `artif
 
 ### Know what is saved
 
-Capture begins when Clippboard is running. It cannot reconstruct things copied before it started or while paused. **Start at sign-in** is opt-in through settings or the tray in regular builds.
+Capture begins when Clippboard is running. It cannot reconstruct things copied before it started or while paused. **Start at sign-in** is opt-in through settings or the tray in regular EXE builds. Store installations expose the opt-in startup task in Windows Settings → Apps → Startup after first launch.
 
 File notes reference originals: moved, deleted, disconnected, or inaccessible files cannot be restored. Files are restored as copies rather than repeating an old cut. Virtual attachments and proprietary app formats are not supported yet. HTML/RTF styling is not preserved.
 

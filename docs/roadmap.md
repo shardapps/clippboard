@@ -18,11 +18,15 @@
 - [x] Persistent themes, shortcut, limits, retention, capture types, pause, ordering, size and spacing.
 - [ ] Per-application capture exclusions.
 - [ ] HTML/RTF and broader image-format preservation.
-- [ ] Time-bounded clipboard reads and network-file validation.
+- [x] Time-bounded clipboard reads and file-location validation, with at most one blocked OS worker per operation.
+- [x] Native synthetic capture, hotkey, accepted text paste and restart persistence on an isolated Windows runner.
 - [ ] Real capture/paste app matrix, rapid-copy stress, restart persistence.
+- [x] Narrow-screen layout, system high-contrast palette and live reduced-motion changes covered by regressions.
 - [ ] Mixed DPI, multiple monitors, accessibility, high contrast, reduced motion, and small screens.
 - [ ] Measure idle CPU, memory, cold start, and disk growth.
-- [ ] Clean-machine installer/upgrade/uninstall validation.
+- [x] Isolated EXE installation, same-version reinstall, native preview and uninstall in CI.
+- [ ] Clean-machine interactive installation, cross-version upgrade and Store-signed installation validation.
+- [x] Assigned Store package identity, checksums, provenance metadata and alpha release notes.
 - [ ] Signing, publisher identity, provenance/checksums, release notes.
 
 Later: validated ARM64 support, optional file snapshots, app exclusions/incognito capture, richer previews. No cloud/account/AI processing is planned for version one.

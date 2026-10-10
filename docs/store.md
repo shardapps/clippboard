@@ -23,4 +23,6 @@ Packaged installations do not write an executable path into the registry Run key
 
 ## Release gate
 
-Before public availability, validate a Store-signed private flight on a clean Windows 11 device: first install, updates, hotkey and tray, startup opt-in/disable, encrypted history persistence and uninstall. Complete the Store listing, truthful content rating, capability review, and certification. Keep public availability on hold until compatibility and performance gates in [the roadmap](roadmap.md) have passed. MakeAppx validation is not a packaged installation test.
+Before broad public availability, validate the Store-signed package on a clean Windows 11 device: first install, updates, hotkey and tray, startup opt-in/disable, encrypted history persistence and uninstall. Complete the Store listing, truthful content rating, capability review, and certification. Keep public availability on hold until compatibility and performance gates in [the roadmap](roadmap.md) have passed. MakeAppx validation is not a packaged installation test.
+
+[Package flights require an initially published submission](https://learn.microsoft.com/en-us/windows/apps/publish/package-flights); they are not an available first-submission test route while this draft is held. After approval, verify the signed-package acquisition/testing route in Partner Center before releasing the manual hold. Approval alone does not establish the installed behavior.

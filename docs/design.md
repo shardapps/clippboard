@@ -11,3 +11,5 @@ Appearance has a separate temporary draft: themes, note width, spacing and font 
 The layout draws inspiration from Apple's discussion of responsive, interruptible motion in [Designing Fluid Interfaces](https://developer.apple.com/videos/play/wwdc2018/803/) and Google's research on shape and visual hierarchy in [Expressive Material Design](https://design.google/library/expressive-material-design-google-research). Graphics and controls are original WPF vectors; no platform icon assets are redistributed.
 
 Visual previews use synthetic notes exclusively. They never read or modify the real clipboard.
+
+Button highlights fade over 140–200 ms alongside a small hover response. Switch knobs settle over 220 ms, with checked initial state positioned before the first rendered frame. Keyboard focus outlines sit above hover layers. Text fields receive themed tooltips without scaling the field or moving the caret. Reduced motion applies these states immediately.

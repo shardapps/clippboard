@@ -20,6 +20,11 @@ public static class Interaction
         if (value is not FrameworkElement element) return;
         if ((bool)e.NewValue) { element.ToolTipOpening += Tip; element.MouseEnter += Enter; element.MouseLeave += Leave; }
         else { element.ToolTipOpening -= Tip; element.MouseEnter -= Enter; element.MouseLeave -= Leave; }
+        if (element is CheckBox checkbox)
+        {
+            if ((bool)e.NewValue) { checkbox.Checked += SwitchChanged; checkbox.Unchecked += SwitchChanged; checkbox.Loaded += SwitchLoaded; }
+            else { checkbox.Checked -= SwitchChanged; checkbox.Unchecked -= SwitchChanged; checkbox.Loaded -= SwitchLoaded; }
+        }
     }
     private static void Tip(object sender, ToolTipEventArgs e)
     {
@@ -34,8 +39,21 @@ public static class Interaction
         tip.Foreground = (Brush)owner.FindResource("Foreground");
         tip.BorderBrush = (Brush)owner.FindResource("Outline");
     }
-    private static void Enter(object sender, System.Windows.Input.MouseEventArgs e) => Scale((FrameworkElement)sender, 1.035);
-    private static void Leave(object sender, System.Windows.Input.MouseEventArgs e) => Scale((FrameworkElement)sender, 1);
+    private static void Enter(object sender, System.Windows.Input.MouseEventArgs e) => Hover((FrameworkElement)sender, true);
+    private static void Leave(object sender, System.Windows.Input.MouseEventArgs e) => Hover((FrameworkElement)sender, false);
+    private static void Hover(FrameworkElement element, bool over)
+    {
+        if (element is Button or System.Windows.Controls.Primitives.Thumb) Scale(element, over ? 1.035 : 1);
+        if (element is Control control && control.Template?.FindName("HoverSurface", control) is FrameworkElement surface)
+            Move(surface, UIElement.OpacityProperty, over ? 1 : 0, GetEnabled(element), over ? 140 : 200);
+    }
+    private static void SwitchChanged(object sender, RoutedEventArgs e) => SetSwitch((CheckBox)sender, ((CheckBox)sender).IsLoaded);
+    private static void SwitchLoaded(object sender, RoutedEventArgs e) => SetSwitch((CheckBox)sender, false);
+    private static void SetSwitch(CheckBox checkbox, bool animate)
+    {
+        if (checkbox.Template?.FindName("KnobMotion", checkbox) is TranslateTransform knob)
+            Move(knob, TranslateTransform.XProperty, checkbox.IsChecked == true ? 14 : 0, animate && GetEnabled(checkbox), 220);
+    }
     private static void Scale(FrameworkElement element, double target)
     {
         if (element.RenderTransform is not ScaleTransform scale) { scale = new ScaleTransform(1, 1); element.RenderTransform = scale; element.RenderTransformOrigin = new Point(.5, .5); }

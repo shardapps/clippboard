@@ -19,6 +19,14 @@ public static class MotionMath
         var t = Math.Clamp(x / Math.Max(1, width), 0, 1);
         return 20 + 4 * sag * t * (1 - t);
     }
+    public static double Sway(double progress)
+    {
+        var t = Math.Clamp(progress, 0, 1);
+        if (t is 0 or 1) return t;
+        // Continuous damped oscillator: no velocity resets at hand-authored keyframes.
+        static double Curve(double x) => 1 - Math.Exp(-4.8 * x) * (Math.Cos(13 * x) + 4.8 / 13 * Math.Sin(13 * x));
+        return Curve(t) / Curve(1);
+    }
 
     public static (int First, int Last) VisibleRange(int count, double offset, double viewport, double pitch)
     {

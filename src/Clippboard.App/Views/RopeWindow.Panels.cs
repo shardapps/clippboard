@@ -16,6 +16,9 @@ namespace Clippboard.App.Views;
 public partial class RopeWindow
 {
     private CancellationTokenSource? _detailLoads;
+    private int _sidebarMotion, _detailMotion;
+    private int NewPanelMotion(UIElement panel) => ReferenceEquals(panel, SidebarHost) ? ++_sidebarMotion : ++_detailMotion;
+    private int PanelMotion(UIElement panel) => ReferenceEquals(panel, SidebarHost) ? _sidebarMotion : _detailMotion;
     public event Func<AppSettings, Task<string?>>? SettingsSaveRequested;
     public bool StartupAvailable { get; set; }
     internal TextBox? DetailText { get; private set; }
@@ -118,6 +121,7 @@ public partial class RopeWindow
     }
     private void Reveal(UIElement element, double from)
     {
+        NewPanelMotion(element);
         element.IsHitTestVisible = true;
         element.BeginAnimation(OpacityProperty, null); element.Opacity = 1;
         element.RenderTransform = new TranslateTransform();
@@ -128,12 +132,13 @@ public partial class RopeWindow
     private async void HidePanel(Border panel)
     {
         if (panel.Visibility != Visibility.Visible) return;
+        var version = NewPanelMotion(panel);
         panel.IsHitTestVisible = false;
         if (Animated && !_closing && !Retired)
         {
             Interaction.Move(panel, OpacityProperty, 0, true, 180);
             await Task.Delay(180);
-            if (panel.IsHitTestVisible) return; // A newer open owns the panel now.
+            if (version != PanelMotion(panel)) return; // A newer open or close owns this panel.
         }
         panel.BeginAnimation(OpacityProperty, null); panel.Opacity = 1;
         panel.Visibility = Visibility.Collapsed; panel.Child = null;

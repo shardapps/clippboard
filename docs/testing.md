@@ -64,3 +64,9 @@ CI now exercises actual Windows notifications, Unicode text/image/file capture, 
 ## Bounded file restoration
 
 122 local assertions pass, including malformed null/blank clipboard paths and a controlled stalled file probe. A file-location check returns a recoverable error after three seconds, and subsequent attempts cannot start additional workers while the original Windows I/O remains outstanding. Windows file existence checks are not cancellable; at most one worker can remain blocked until the OS resolves the request. Text/image restore remains available. Tests verify existing/missing/empty references, timeout, ten rejected retries, and a maximum of one outstanding worker. Clipboard service disposal is idempotent and pending capture completion cannot restart its timer after disposal.
+
+[Windows run 38051885965](https://github.com/shardapps/clippboard/actions/runs/38051885965) passed 133 assertions including real clipboard disposal/restore-after-disposal checks, the five packaging guards, native packaging and the installer lifecycle checks in 2m7s.
+
+## Control feedback polish
+
+129 local assertions pass. Added checks exercise actual button hover/leave feedback, non-sticky highlights with reduced motion, and initial/toggled switch positions after WPF Loaded events, bounded continuous-sway endpoints and an old dismiss animation that cannot remove reopened settings. Keyboard focus outlines render above the hover layer. Real users and device testing are still needed to evaluate subjective motion, touch and screen-reader accessibility.

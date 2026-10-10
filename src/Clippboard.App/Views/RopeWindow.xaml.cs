@@ -39,6 +39,7 @@ public partial class RopeWindow : Window
     private ClipKind? _kind;
     private double _scrollTarget;
     private bool _scrollAnimating;
+    private bool _appearanceRefreshPending;
     public event Func<ClipSummary, Task>? Selected;
     public event Action? PauseRequested;
     public event Action? SettingsRequested;
@@ -60,7 +61,7 @@ public partial class RopeWindow : Window
         SettingsRequested += () => OpenSettings();
         ExpandRequested += async entry => await OpenDetailAsync(entry);
         _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); _query = SearchBox.Text.Trim(); RebuildNotes(); ScrollTo(0); };
-        Closed += (_, _) => { Retired = true; _searchTimer.Stop(); DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
+        Closed += (_, _) => { Retired = true; SmoothMotion.CancelTree(this); _searchTimer.Stop(); DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
     }
     public void ApplyAppearance(AppSettings settings)
     {
@@ -75,6 +76,13 @@ public partial class RopeWindow : Window
         if (_appearance.Theme != next.Theme || !Resources.Contains("Foreground")) ThemeManager.Apply(next.Theme, Resources);
         _appearance = next; Interaction.SetEnabled(this, _appearance.Animate);
         if (Notes is null || Retired) return;
+        if (!Animated && IsVisible && !_closing)
+        {
+            SmoothMotion.Move(Slide, TranslateTransform.YProperty, 0, false, 1);
+            SmoothMotion.Move(Rope, RopeVisual.SagProperty, 24, false, 1);
+            foreach (var card in _cards.Values)
+                if (card.RenderTransform is TransformGroup group) { SmoothMotion.Move(group.Children[0], RotateTransform.AngleProperty, 0, false, 1); SmoothMotion.Move(group.Children[1], TranslateTransform.YProperty, 0, false, 1); }
+        }
         Notes.Width = Math.Max(NoteScroll.ViewportWidth, 48 + _visible.Count * Pitch - (_visible.Count > 0 ? _appearance.NoteSpacing : 0));
         foreach (var (index, card) in _cards)
         {
@@ -82,7 +90,11 @@ public partial class RopeWindow : Window
             Interaction.Move(card, Canvas.LeftProperty, 24 + index * Pitch, Animated, 180);
             if (card.Tag is Button select && select.Content is TextBlock text) Interaction.Move(text, TextBlock.FontSizeProperty, _appearance.TextSize, Animated, 180);
         }
-        UpdateLayout(); RenderVisible(); SyncScroll();
+        if (!_appearanceRefreshPending)
+        {
+            _appearanceRefreshPending = true;
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => { _appearanceRefreshPending = false; if (!Retired && !_closing) { RenderVisible(); SyncScroll(); } }));
+        }
     }
     public void SetStatus(string message) => Status.Text = message;
     public void SetPaused(bool paused)
@@ -101,11 +113,15 @@ public partial class RopeWindow : Window
         SetWindowPos(new WindowInteropHelper(this).Handle, 0, bounds.Left, bounds.Top, bounds.Width, bounds.Height, 0x0014);
         Activate(); UpdateLayout(); await RefreshAsync();
         if (!IsVisible || _closing) return;
-        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-600, 0, TimeSpan.FromMilliseconds(Animated ? 880 : 1))
-        { EasingFunction = new SpringEase { Bounce = false }, FillBehavior = FillBehavior.Stop });
-        Slide.Y = 0;
-        Rope.BeginAnimation(RopeVisual.SagProperty, new DoubleAnimation(52, 24, TimeSpan.FromMilliseconds(Animated ? 1100 : 1))
-        { EasingFunction = new SpringEase { Bounce = _settings.PlayfulMotion } });
+        AnimateEntrance();
+    }
+    internal void DiagnosticScroll(double offset) => ScrollTo(offset);
+    internal void AnimateEntrance()
+    {
+        Slide.BeginAnimation(TranslateTransform.YProperty, null); Slide.Y = -600;
+        SmoothMotion.Move(Slide, TranslateTransform.YProperty, 0, Animated, 650);
+        Rope.Sag = 48;
+        SmoothMotion.Move(Rope, RopeVisual.SagProperty, 24, Animated, 600, _appearance.PlayfulMotion ? .72 : 1);
         if (Animated && _appearance.PlayfulMotion) AnimateNotes();
     }
     [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -115,11 +131,10 @@ public partial class RopeWindow : Window
         if (!IsVisible || _closing) return;
         _closing = true; _searchTimer.Stop(); ++_renderVersion; CancelLoads();
         DismissSettings(); DismissDetail();
-        var duration = Animated ? 380 : 1;
-        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-600, TimeSpan.FromMilliseconds(duration))
-        { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } });
+        var duration = Animated ? 560 : 1;
+        SmoothMotion.Move(Slide, TranslateTransform.YProperty, -Math.Max(600, Panel.ActualHeight + 24), Animated, 260);
         await Task.Delay(duration);
-        Hide(); Notes.Children.Clear(); _cards.Clear(); _cache.Clear();
+        Hide(); SmoothMotion.CancelTree(this); Notes.Children.Clear(); _cards.Clear(); _cache.Clear();
         Slide.BeginAnimation(TranslateTransform.YProperty, null); Slide.Y = -600;
         Rope.BeginAnimation(RopeVisual.SagProperty, null); _closing = false;
         Close(); // Destroy the transparent native surface; the tray creates a fresh overlay on next open.
@@ -180,7 +195,7 @@ public partial class RopeWindow : Window
         foreach (var (index, card) in _cards)
         {
             var center = 24 + index * Pitch + _appearance.NoteWidth / 2 - NoteScroll.HorizontalOffset;
-            Canvas.SetTop(card, Rope.HeightAt(center) - 8);
+            if (card.RenderTransform is TransformGroup transforms && transforms.Children[2] is TranslateTransform anchor) anchor.Y = Rope.HeightAt(center) - 8;
         }
     }
     private async Task LoadThumbnailAsync(ClipSummary entry, Grid card, CancellationToken cancellation)
@@ -199,10 +214,12 @@ public partial class RopeWindow : Window
     private Grid BuildNote(ClipSummary entry)
     {
         var wrapper = new Grid { Width = _appearance.NoteWidth, Height = 330, RenderTransformOrigin = new Point(.5, 0) };
+        var attachment = new TransformGroup(); attachment.Children.Add(new RotateTransform()); attachment.Children.Add(new TranslateTransform()); attachment.Children.Add(new TranslateTransform()); wrapper.RenderTransform = attachment;
         var hover = new TranslateTransform();
         wrapper.MouseDown += OnInsideClick;
-        var paper = new Border { CornerRadius = new CornerRadius(22), Margin = new Thickness(0, 23, 0, 0), Padding = new Thickness(21, 25, 21, 16), BorderThickness = new Thickness(1),
-            Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 5, Opacity = .12 } };
+        // A small ambient border avoids a per-card pixel-shader blur surface on every moving frame.
+        wrapper.Children.Add(new Border { CornerRadius = new CornerRadius(23), Margin = new Thickness(0, 26, 0, -3), Background = new SolidColorBrush(Color.FromArgb(20, 0, 0, 0)), IsHitTestVisible = false });
+        var paper = new Border { CornerRadius = new CornerRadius(22), Margin = new Thickness(0, 23, 0, 0), Padding = new Thickness(21, 25, 21, 16), BorderThickness = new Thickness(1) };
         paper.RenderTransform = hover;
         wrapper.MouseEnter += (_, _) => Interaction.Move(hover, TranslateTransform.YProperty, -5, Animated, 300);
         wrapper.MouseLeave += (_, _) => Interaction.Move(hover, TranslateTransform.YProperty, 0, Animated, 350);
@@ -257,12 +274,12 @@ public partial class RopeWindow : Window
     {
         foreach (var (index, card) in _cards)
         {
-            var rotation = new RotateTransform(); var vertical = new TranslateTransform();
-            var group = new TransformGroup(); group.Children.Add(rotation); group.Children.Add(vertical); card.RenderTransform = group;
+            var group = (TransformGroup)card.RenderTransform;
+            var rotation = (RotateTransform)group.Children[0]; var vertical = (TranslateTransform)group.Children[1];
             var direction = index % 2 == 0 ? 1 : -1;
-            rotation.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(-2.8 * direction, 0, TimeSpan.FromMilliseconds(1100))
-            { BeginTime = TimeSpan.FromMilliseconds(index % 8 * 25), FillBehavior = FillBehavior.Stop, EasingFunction = new SwayEase() });
-            vertical.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-12, 0, TimeSpan.FromMilliseconds(1000)) { FillBehavior = FillBehavior.Stop, EasingFunction = new SpringEase { Bounce = true } });
+            rotation.Angle = -1.8 * direction; vertical.Y = -6;
+            SmoothMotion.Move(rotation, RotateTransform.AngleProperty, 0, Animated, 500 + index % 5 * 25, .55);
+            SmoothMotion.Move(vertical, TranslateTransform.YProperty, 0, Animated, 450, .8);
         }
     }
     public static readonly DependencyProperty ScrollPositionProperty = DependencyProperty.Register("ScrollPosition", typeof(double), typeof(RopeWindow),
@@ -271,11 +288,16 @@ public partial class RopeWindow : Window
     {
         _scrollTarget = Math.Clamp(value, 0, NoteScroll.ScrollableWidth);
         _scrollAnimating = true;
-        var version = ++_scrollVersion; var start = NoteScroll.HorizontalOffset;
-        BeginAnimation(ScrollPositionProperty, null); SetValue(ScrollPositionProperty, start);
-        var animation = new DoubleAnimation(_scrollTarget, TimeSpan.FromMilliseconds(Animated ? 340 : 1)) { EasingFunction = new SpringEase { Bounce = false } };
-        animation.Completed += (_, _) => { if (version != _scrollVersion) return; var end = (double)GetValue(ScrollPositionProperty); BeginAnimation(ScrollPositionProperty, null); SetValue(ScrollPositionProperty, end); _scrollAnimating = false; };
-        BeginAnimation(ScrollPositionProperty, animation);
+        var version = ++_scrollVersion;
+        if (!HasAnimatedProperties) SetValue(ScrollPositionProperty, NoteScroll.HorizontalOffset);
+        SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, Animated, 240);
+        FinishScrollAsync(version);
+    }
+    private async void FinishScrollAsync(long version)
+    {
+        await Task.Delay(Animated ? 520 : 1);
+        if (version != _scrollVersion || Retired || _closing) return;
+        _scrollAnimating = false; _scrollTarget = NoteScroll.HorizontalOffset;
     }
     private void SyncScroll()
     {
@@ -286,7 +308,7 @@ public partial class RopeWindow : Window
     private void OnScrollChanged(object sender, ScrollChangedEventArgs e) { if (!_scrollAnimating) _scrollTarget = NoteScroll.HorizontalOffset; RenderVisible(); SyncScroll(); }
     private void OnBoardSizeChanged(object sender, SizeChangedEventArgs e) { if (Notes is null) return; Notes.Width = Math.Max(e.NewSize.Width, 48 + _visible.Count * Pitch - (_visible.Count > 0 ? _appearance.NoteSpacing : 0)); RenderVisible(); }
     private void OnScrollbarChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    { if (_scrollSync || NoteScroll is null) return; ++_scrollVersion; _scrollAnimating = false; BeginAnimation(ScrollPositionProperty, null); _scrollTarget = e.NewValue; NoteScroll.ScrollToHorizontalOffset(e.NewValue); }
+    { if (_scrollSync || NoteScroll is null) return; ++_scrollVersion; _scrollAnimating = false; _scrollTarget = e.NewValue; SmoothMotion.Move(this, ScrollPositionProperty, e.NewValue, false, 1); }
     private void OnMouseWheel(object sender, MouseWheelEventArgs e)
     { if (SidebarHost.Visibility == Visibility.Visible || DetailHost.Visibility == Visibility.Visible) return; ScrollTo(_scrollTarget - e.Delta * 2.5); e.Handled = true; }
     private void OnPrevious(object sender, RoutedEventArgs e) => ScrollTo(_scrollTarget - Pitch);

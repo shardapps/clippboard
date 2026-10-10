@@ -45,10 +45,17 @@ public partial class App : Application
         {
             _development = e.Args.Contains("--dev");
             var preview = Array.IndexOf(e.Args, "--preview");
-            var root = _development || preview >= 0
+            var diagnostic = Array.IndexOf(e.Args, "--diagnostics");
+            var root = _development || preview >= 0 || diagnostic >= 0
                 ? Environment.GetEnvironmentVariable("CLIPPBOARD_DEV_DATA") ?? Path.Combine(AppContext.BaseDirectory, ".data")
                 : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ShardApps", "Clippboard");
             _store = new HistoryStore(Path.Combine(root, "history"), new WindowsProtector());
+            if (diagnostic >= 0)
+            {
+                if (diagnostic + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic report path required.");
+                await PerformanceDiagnostics.RunAsync(_store, e.Args[diagnostic + 1], e.Args.Contains("--software"));
+                Shutdown(); return;
+            }
             if (preview >= 0)
             {
                 await PreviewAsync(preview + 1 < e.Args.Length ? e.Args[preview + 1] : throw new ArgumentException("Preview output path required."), e.Args);

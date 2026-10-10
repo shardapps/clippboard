@@ -1,6 +1,6 @@
-param([ValidateSet('build','test','run','publish','preview','format')][string]$Task = 'build',
+param([ValidateSet('build','test','run','publish','preview','diagnostics','format')][string]$Task = 'build',
   [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
-  [switch]$Settings, [switch]$Detail, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure)
+  [switch]$Settings, [switch]$Detail, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
@@ -15,6 +15,11 @@ New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
 $dotnetPath = Join-Path $projectRoot '.tools\dotnet\dotnet.exe'
 if (!(Test-Path -LiteralPath $dotnetPath)) { $dotnetPath = (Get-Command dotnet -ErrorAction Stop).Source }
 switch ($Task) {
+  'diagnostics' {
+    $diagnosticArgs = @('--diagnostics', (Join-Path $projectRoot 'artifacts/motion-diagnostics.json'))
+    if ($Software) { $diagnosticArgs += '--software' }
+    & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- @diagnosticArgs
+  }
   'build' { & $dotnetPath build Clippboard.slnx -c Release -m:1 -p:UseAppHost=false }
   'test' { & $dotnetPath run --project tests/Clippboard.Core.Tests -c Release -p:UseAppHost=false }
   'run' { & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- --dev }

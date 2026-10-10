@@ -18,7 +18,7 @@ flowchart LR
 
 ## Resources
 
-Capture is event-driven, with an 80 ms retry timer only during clipboard contention (eight attempts maximum). Rapid clipboard changes may supersede intermediate copies; capture is not lossless. Store operations are serialized and run off the UI thread where practical. Only summaries are retained. At most 40 images are decoded at 300 pixels wide; hiding releases them.
+Capture is event-driven, with an 80 ms retry timer only during clipboard contention (eight attempts maximum). Rapid clipboard changes may supersede intermediate copies; capture is not lossless. Store operations are serialized and run off the UI thread where practical. Only encrypted metadata summaries are loaded at startup; payloads are opened on demand. The rope renders the viewport plus one note of overscan per side, so every saved entry is reachable without rendering the whole history. Image previews fit within 360 × 230 pixels and use a byte-bounded LRU cache. Hiding cancels loads and releases cards and cached images. No decrypted temporary image files are written.
 
 Capture limits bound retained resources but cannot control Windows clipboard conversion allocations or another app's delayed rendering. Network-path existence checks can be slow. Stricter timeouts/isolation are planned before stable release.
 

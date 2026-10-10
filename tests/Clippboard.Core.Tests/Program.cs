@@ -10,6 +10,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Clippboard.App.Services;
 using Clippboard.App.Platform;
+using Clippboard.App.Views;
+using System.Windows.Threading;
 using System.Runtime.InteropServices;
 using Clippboard.Core;
 
@@ -24,6 +26,13 @@ internal static class Program
         try
         {
             CheckFormats();
+            Check(MotionMath.Settle(0, true) == 0 && MotionMath.Settle(1, true) == 1, "spring rests at exact endpoints");
+            Check(Enumerable.Range(0, 101).Select(i => MotionMath.Settle(i / 100.0, true)).Max() is > 1 and < 1.2, "spring bounce bounded");
+            Check(MotionMath.RopeHeight(0, 1600, 24) == 20 && MotionMath.RopeHeight(800, 1600, 24) == 44, "rope attachment curve");
+            var range = MotionMath.VisibleRange(1000, 100000, 1600, 340);
+            Check(range.Last - range.First < 9 && range.First > 200, "large history virtual range bounded");
+            Check(MotionMath.VisibleRange(0, 0, 1600, 340).Last == -1, "empty virtualization range");
+            Console.WriteLine("Checking visual lifetime..."); CheckVisuals(root); Console.WriteLine("Checking storage...");
             var settingsFile = Path.Combine(root, "settings.json");
             var settingsStore = new SettingsStore(settingsFile);
             Check((await settingsStore.LoadAsync()).Theme == AppTheme.Cloud, "white theme default");
@@ -133,12 +142,47 @@ internal static class Program
                 Check(converted?.Kind == ClipKind.Image && converted.ImagePng![0] == 137 && converted.ImagePng[1] == 80, "bitmap to PNG conversion");
                 Check(ClipboardService.ReadData(image, () => throw new InvalidOperationException("Disabled image must not be read"), new AppSettings { CaptureImages = false }) is null, "disabled images never decode");
                 Check(ClipboardService.ReadData(new DataObject(), () => null) is null, "unsupported format ignored");
+                var tall = BitmapSource.Create(10, 2000, 96, 96, PixelFormats.Bgra32, null, new byte[80000], 40);
+                var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(tall));
+                using var stream = new MemoryStream(); encoder.Save(stream);
+                var thumbnail = PreviewCache.Decode(stream.ToArray(), 360, 230);
+                Check(thumbnail.PixelHeight <= 230 && thumbnail.PixelWidth <= 360 && thumbnail.IsFrozen, "tall image thumbnail stays bounded");
                 Check(Marshal.SizeOf<NativeMethods.Input>() == (Environment.Is64BitProcess ? 40 : 28), "native input ABI size");
             }
             catch (Exception ex) { failure = ex; }
         });
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
         if (failure is not null) throw new InvalidOperationException("Format checks failed", failure);
+    }
+    private static void CheckVisuals(string root)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            RopeWindow? window = null;
+            try
+            {
+                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext()); var app = new Clippboard.App.App(); app.InitializeComponent();
+                window = new RopeWindow(new HistoryStore(Path.Combine(root, "visuals"), new TestWindowsProtector()), preview: true, settings: new AppSettings { Animate = false })
+                { Width = 1600, Height = 800 };
+                window.Show(); window.UpdateLayout(); window.RenderDemo(1000); window.UpdateLayout();
+                Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Check(window.RenderedNoteCount is > 0 and < 10, "1000 clips render only viewport notes");
+                var scroll = (System.Windows.Controls.ScrollViewer)window.FindName("NoteScroll");
+                scroll.ScrollToRightEnd(); window.UpdateLayout();
+                Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Check(window.RenderedNoteCount is > 0 and < 10 && scroll.HorizontalOffset > 300000, "all history reachable with bounded visuals");
+                var close = window.CloseRopeAsync();
+                var frame = new DispatcherFrame();
+                window.Dispatcher.BeginInvoke(async () => { try { await close; } catch (Exception ex) { failure = ex; } finally { frame.Continue = false; } });
+                Dispatcher.PushFrame(frame);
+                Check(!window.IsVisible && window.RenderedNoteCount == 0 && window.CachedImageBytes == 0, "closing releases cards and thumbnail cache");
+            }
+            catch (Exception ex) { failure = ex; }
+            finally { window?.Close(); }
+        });
+        thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
+        if (failure is not null) throw new InvalidOperationException("Visual checks failed", failure);
     }
     private sealed class TestWindowsProtector : IContentProtector
     {

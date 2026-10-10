@@ -21,3 +21,9 @@ The tray/listener now owns history and settings without constructing a rope wind
 Eight local synthetic child-process cycles (1,000 notes, scroll, settings, close) returned the parent to **57.0 MiB working set / 17.2 MiB private bytes**, with zero sampled CPU over ten idle seconds. No forced collection or working-set trimming was used. Combined active peak remained **325–330 MiB**; this improves idle RAM, not peak RAM. The diagnostic excludes clipboard capture and must be repeated with a native installed build and real capture. Cold child launch adds startup work on each open; it must be measured separately on SSD installations. Run `scripts/dev.ps1 lifecycle`; add `-Software` for the software rendering path.
 
 The corresponding software-rendered run completed all eight child lifetimes and returned to 56.1 MiB working set, with combined active peaks of 198–204 MiB. Hardware and software results describe this machine and synthetic workload; they are not universal RAM ceilings.
+
+## Native CI session — October 10, 2026
+
+[Run 38070084969](https://github.com/shardapps/clippboard/actions/runs/38070084969) exercised the self-contained executable with three real Unicode capture/hotkey/overlay/accepted-paste cycles into a controlled WPF destination. After terminating and restarting its listener, persisted history contained all three entries. A 30-second idle sample then reported **78.0 MiB working set / 21.5 MiB private bytes** and **0.42% of one CPU core**. No forced GC or working-set trimming was used.
+
+This measures the restarted listener after loading three persisted text entries, not five minutes of steady-state capture, large images, the overlay's active peak or a Store-installed package. The earlier 57 MiB synthetic parent value excludes clipboard integration. Keep these workloads separate; neither number is a universal memory ceiling. The artifact contains `session-checks/report.json` and hardware/software overlay lifecycle reports.

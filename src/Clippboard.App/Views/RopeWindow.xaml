@@ -33,7 +33,7 @@
         <Border x:Name="Navigation" Background="{DynamicResource Chrome}" CornerRadius="17" BorderBrush="{DynamicResource Outline}" BorderThickness="1" Padding="4">
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
             <Button ToolTip="Previous notes" Click="OnPrevious" AutomationProperties.Name="Scroll left"><d:IconView Symbol="left" Width="18" Height="18"/></Button>
-            <ScrollBar x:Name="HistoryScroll" Width="190" Height="16" Orientation="Horizontal" VerticalAlignment="Center" ValueChanged="OnScrollbarChanged" SmallChange="100"/>
+            <ScrollBar x:Name="HistoryScroll" Width="190" Height="16" Orientation="Horizontal" VerticalAlignment="Center" ValueChanged="OnScrollbarChanged" SmallChange="100" ToolTip="Drag to browse clipboard history" AutomationProperties.Name="Browse clipboard history"/>
             <Button ToolTip="Next notes" Click="OnNext" AutomationProperties.Name="Scroll right"><d:IconView Symbol="right" Width="18" Height="18"/></Button>
           </StackPanel>
         </Border>

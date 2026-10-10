@@ -74,6 +74,13 @@ jobs:
             artifacts/installer-tests/installed-preview.png
             artifacts/overlay-lifecycle*.json
             artifacts/session-checks/report.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Store submission package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: clippboard-store-x64-alpha
+          path: |
             artifacts/store/**/*.msix
             artifacts/store/**/package-info.json
           if-no-files-found: error

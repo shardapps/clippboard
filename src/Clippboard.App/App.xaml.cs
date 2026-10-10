@@ -150,7 +150,7 @@ public partial class App : Application
         }
         catch (FileNotFoundException) { _rope!.SetStatus("An original file is unavailable. Copy the file again to update this note."); }
         catch (FileAvailabilityException ex) { _rope!.SetStatus(ex.Message); }
-        catch (Exception ex) when (ex is IOException or System.Runtime.InteropServices.COMException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException or System.Runtime.InteropServices.COMException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
         { _rope!.SetStatus("Could not restore this item. Try again or copy the original again."); }
         finally { _selecting = false; }
     }

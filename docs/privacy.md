@@ -8,7 +8,7 @@ Each entry is encrypted with DPAPI `CurrentUser` before atomic file replacement.
 
 | Limit | Default |
 | --- | --- |
-| Unpinned lifetime | 30 days |
+| Lifetime, including stars | Configurable 1–30 days |
 | Entries, including pins | 500 |
 | Encrypted history payloads | 256 MiB |
 | One encrypted entry | 24 MiB |
@@ -17,14 +17,16 @@ Each entry is encrypted with DPAPI `CurrentUser` before atomic file replacement.
 | File references per entry | 100 |
 | Rendered notes | 40 |
 
-Expiry runs at startup, before additions, and every 15 minutes. Old unpinned entries are evicted at capacity. Pins survive expiry/normal eviction but consume the total budget; new clips are rejected when pins leave no room. Duplicate content refreshes the note and preserves its pin.
+Expiry runs at startup, before additions/reads, and every 15 minutes. Stars survive normal capacity eviction but still expire after the configured period (maximum 30 days). New clips are rejected when stars leave no room. Duplicate content refreshes the note and preserves its star. Lower budgets are rejected if unexpired stars alone exceed them; delete or unstar items before retrying.
 
 Pins are not backups. Clear/delete, disk failure, account loss, and damaged records can remove them. Startup removes unreadable/oversized records and reports the count without logging contents. File contents are not stored, only original paths. Unsupported/oversized clipboard items are skipped.
 
 ## Sensitive data and deletion
 
-The app checks `ExcludeClipboardContentFromMonitorProcessing` and supported zero-valued `CanIncludeInClipboardHistory` markers. Apps without markers can expose secrets to history. Pause before copying private data; pause is a session control and does not yet survive restart.
+The app checks `ExcludeClipboardContentFromMonitorProcessing` and supported zero-valued `CanIncludeInClipboardHistory` markers. Apps without markers can expose secrets to history. Pause before copying private data; capture preferences, including pause, persist across restarts.
 
 × deletes an entry; Clear history includes pins. Deletion removes history files but does not clear the system clipboard or guarantee forensic erasure on SSDs/backups. Uninstall preserves history for upgrades; clear it first if desired. Google Drive or other backup software may independently sync development `.data/`; use synthetic data in this synced workspace.
 
 No app network service, updater, telemetry, or crash upload is included. The project menu link opens GitHub in your browser. Development and CI use package/build services.
+
+Encrypted `.meta` files hold short summaries and payload size/timestamp references, so normal startup does not decrypt image payloads. Missing/stale metadata is rebuilt from the authoritative encrypted payload. Both payloads and metadata are removed on deletion/expiry. Temporary atomic-write files are removed after use and at startup. Settings contain only configuration and are stored separately as JSON; no clipboard payload is written to the settings file.

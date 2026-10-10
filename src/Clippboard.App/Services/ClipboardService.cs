@@ -23,6 +23,7 @@ internal sealed class ClipboardService : IDisposable
     private int _attempts;
     private bool _saving;
     public bool Paused { get; set; }
+    public AppSettings Settings { get; set; } = new();
     public bool HotkeyAvailable { get; }
     public event Action? ToggleRequested;
     public event Action<string>? Notice;
@@ -56,7 +57,7 @@ internal sealed class ClipboardService : IDisposable
         var sequence = _sequence;
         try
         {
-            var clip = ReadCurrent();
+            var clip = ReadCurrent(Settings);
             _retry.Stop();
             if (sequence != NativeMethods.GetClipboardSequenceNumber() || clip is null) return;
             _saving = true;
@@ -74,16 +75,17 @@ internal sealed class ClipboardService : IDisposable
         }
     }
 
-    internal static Clip? ReadCurrent()
+    internal static Clip? ReadCurrent(AppSettings? settings = null)
     {
         var data = Clipboard.GetDataObject();
-        return data is null ? null : ReadData(data, Clipboard.GetImage);
+        return data is null ? null : ReadData(data, Clipboard.GetImage, settings);
     }
 
     // Separate conversion from OS access so format/limit checks can use synthetic data.
-    internal static Clip? ReadData(IDataObject data, Func<System.Windows.Media.Imaging.BitmapSource?> imageProvider)
+    internal static Clip? ReadData(IDataObject data, Func<System.Windows.Media.Imaging.BitmapSource?> imageProvider, AppSettings? settings = null)
     {
         if (data.GetDataPresent("ExcludeClipboardContentFromMonitorProcessing", false)) return null;
+        if (settings?.CapturePaused == true) return null;
         if (data.GetDataPresent("CanIncludeInClipboardHistory", false))
         {
             var flag = data.GetData("CanIncludeInClipboardHistory", false);
@@ -93,13 +95,13 @@ internal sealed class ClipboardService : IDisposable
                 if (new BinaryReader(stream, System.Text.Encoding.UTF8, true).ReadUInt32() == 0) return null;
             }
         }
-        if (data.GetDataPresent(DataFormats.FileDrop))
+        if (settings?.CaptureFiles != false && data.GetDataPresent(DataFormats.FileDrop))
         {
             var paths = data.GetData(DataFormats.FileDrop) as string[];
             if (paths is null || paths.Length == 0 || paths.Length > 100 || paths.Any(x => x.Length > 32767)) return null;
             return new Clip { Kind = ClipKind.Files, FilePaths = paths };
         }
-        if (data.GetDataPresent(DataFormats.Bitmap))
+        if (settings?.CaptureImages != false && data.GetDataPresent(DataFormats.Bitmap))
         {
             var image = imageProvider();
             if (image is null || (long)image.PixelWidth * image.PixelHeight > 16_000_000) return null;
@@ -110,7 +112,7 @@ internal sealed class ClipboardService : IDisposable
             if (buffer.Length > 16 * 1024 * 1024) return null;
             return new Clip { Kind = ClipKind.Image, ImagePng = buffer.ToArray() };
         }
-        if (data.GetDataPresent(DataFormats.UnicodeText))
+        if (settings?.CaptureText != false && data.GetDataPresent(DataFormats.UnicodeText))
         {
             var text = data.GetData(DataFormats.UnicodeText) as string;
             if (string.IsNullOrWhiteSpace(text) || text.Length > 512 * 1024) return null;

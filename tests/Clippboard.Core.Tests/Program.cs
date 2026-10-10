@@ -24,6 +24,16 @@ internal static class Program
         try
         {
             CheckFormats();
+            var settingsFile = Path.Combine(root, "settings.json");
+            var settingsStore = new SettingsStore(settingsFile);
+            Check((await settingsStore.LoadAsync()).Theme == AppTheme.Cloud, "white theme default");
+            var normalized = (new AppSettings { RetentionDays = 90, PreviewCacheMiB = 1000, NoteSpacing = -10, Theme = (AppTheme)999 }).Normalize();
+            Check(normalized.RetentionDays == 30 && normalized.PreviewCacheMiB == 64 && normalized.NoteSpacing == 24 && normalized.Theme == AppTheme.Cloud, "settings bounds");
+            await settingsStore.SaveAsync(new AppSettings { Theme = AppTheme.Midnight, RetentionDays = 7, AutoPaste = false });
+            Check((await settingsStore.LoadAsync()).RetentionDays == 7 && !(await settingsStore.LoadAsync()).AutoPaste, "settings persistence");
+            await File.WriteAllTextAsync(settingsFile, "broken json");
+            Check((await settingsStore.LoadAsync()).RetentionDays == 30, "settings corruption fallback");
+            Check(!new AppSettings { CaptureImages = false }.Captures(ClipKind.Image), "format opt out");
             var protector = new TestWindowsProtector();
             var store = new HistoryStore(root, protector, new HistoryLimits(3, 100000, 30, 20000));
             await store.InitializeAsync();
@@ -63,6 +73,22 @@ internal static class Program
             Check(reopened.UnreadableEntries == 1, "corruption recovery");
             await reopened.ClearAsync();
             Check((await reopened.ListAsync()).Count == 0 && Directory.GetFiles(root, "*.clip").Length == 0, "clear includes pins");
+            Check(Directory.GetFiles(root, "*.meta").Length == 0, "clear removes metadata pointers");
+            var oldPin = new Clip { Kind = ClipKind.Text, Text = "old starred note", Pinned = true, CopiedAt = DateTimeOffset.UtcNow.AddDays(-10) };
+            await reopened.AddAsync(oldPin);
+            Check(await reopened.UpdateLimitsAsync(new HistoryLimits(3, 100000, 7, 20000)), "change retention");
+            Check(await reopened.GetAsync(oldPin.Id) is null, "starred notes respect retention maximum");
+            var largeClip = new Clip { Kind = ClipKind.Text, Text = new string('p', 15000) };
+            await reopened.AddAsync(largeClip);
+            protector.LargestUnprotected = 0;
+            var pointers = new HistoryStore(root, protector, new HistoryLimits(3, 100000, 7, 20000));
+            await pointers.InitializeAsync();
+            Check(protector.LargestUnprotected < 4096, "restart loads small encrypted pointers, not payloads");
+            Check((await pointers.GetAsync(largeClip.Id))?.Text?.Length == 15000, "payload loaded on demand");
+            await pointers.SetPinnedAsync(largeClip.Id, true);
+            Check(!await pointers.UpdateLimitsAsync(new HistoryLimits(3, 100, 7, 20000)), "too-small pinned budget rejected");
+            Check(await pointers.GetAsync(largeClip.Id) is not null, "rejected settings preserve history");
+            await pointers.ClearAsync();
             var budget = new HistoryStore(root, protector, new HistoryLimits(50, 3000, 30, 20000));
             await budget.InitializeAsync();
             for (var i = 0; i < 10; i++) await budget.AddAsync(new Clip { Kind = ClipKind.Text, Text = i + new string('x', 500) });
@@ -105,6 +131,7 @@ internal static class Program
                 var image = new DataObject(); image.SetImage(bitmap);
                 var converted = ClipboardService.ReadData(image, () => bitmap);
                 Check(converted?.Kind == ClipKind.Image && converted.ImagePng![0] == 137 && converted.ImagePng[1] == 80, "bitmap to PNG conversion");
+                Check(ClipboardService.ReadData(image, () => throw new InvalidOperationException("Disabled image must not be read"), new AppSettings { CaptureImages = false }) is null, "disabled images never decode");
                 Check(ClipboardService.ReadData(new DataObject(), () => null) is null, "unsupported format ignored");
                 Check(Marshal.SizeOf<NativeMethods.Input>() == (Environment.Is64BitProcess ? 40 : 28), "native input ABI size");
             }
@@ -115,7 +142,8 @@ internal static class Program
     }
     private sealed class TestWindowsProtector : IContentProtector
     {
+        public int LargestUnprotected { get; set; }
         public byte[] Protect(byte[] data) => ProtectedData.Protect(data, null, DataProtectionScope.CurrentUser);
-        public byte[] Unprotect(byte[] data) => ProtectedData.Unprotect(data, null, DataProtectionScope.CurrentUser);
+        public byte[] Unprotect(byte[] data) { LargestUnprotected = Math.Max(LargestUnprotected, data.Length); return ProtectedData.Unprotect(data, null, DataProtectionScope.CurrentUser); }
     }
 }

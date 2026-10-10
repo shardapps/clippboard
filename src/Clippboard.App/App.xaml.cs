@@ -34,6 +34,8 @@ public partial class App : Application
     private bool _selecting;
     private bool _toggling;
     private bool _development;
+    private AppSettings _settings = new();
+    private SettingsStore? _settingsStore;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -53,11 +55,15 @@ public partial class App : Application
             }
             _instance = new Mutex(true, @"Local\ShardApps.Clippboard." + Environment.UserName + (_development ? ".dev" : ""), out _ownsMutex);
             if (!_ownsMutex) { MessageBox.Show("Clippboard is already running. Use Ctrl + Shift + V or its tray icon.", "Clippboard"); Shutdown(); return; }
+            _settingsStore = new SettingsStore(Path.Combine(root, "settings.json"));
+            _settings = await _settingsStore.LoadAsync();
+            _store = new HistoryStore(Path.Combine(root, "history"), new WindowsProtector(), _settings.HistoryLimits());
             await Task.Run(() => _store.InitializeAsync());
             _rope = new RopeWindow(_store);
             _rope.Selected += SelectAsync;
             _rope.PauseRequested += TogglePause;
-            _clipboard = new ClipboardService(SaveAsync);
+            _clipboard = new ClipboardService(SaveAsync) { Settings = _settings, Paused = _settings.CapturePaused };
+            _rope.SetPaused(_settings.CapturePaused);
             _clipboard.ToggleRequested += ToggleRope;
             _clipboard.Notice += Notify;
             _foreground = new ForegroundTracker();
@@ -84,6 +90,7 @@ public partial class App : Application
     {
         try
         {
+            if (!_settings.Captures(clip.Kind)) return;
             if (!await Task.Run(() => _store!.AddAsync(clip))) Notify("History is full of pinned notes, or this item exceeds the storage limit. Unpin or delete some notes.");
             else if (_rope!.IsVisible) await _rope.RefreshAsync();
         }
@@ -112,7 +119,7 @@ public partial class App : Application
     {
         if (_selecting) return;
         _selecting = true;
-        var copyOnly = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+        var copyOnly = !_settings.AutoPaste || (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
         try
         {
             var clip = await Task.Run(() => _store!.GetAsync(summary.Id));
@@ -138,10 +145,15 @@ public partial class App : Application
         finally { _selecting = false; }
     }
 
-    private void TogglePause()
+    private async void TogglePause()
     {
         if (_clipboard is null) return;
-        _clipboard.Paused = !_clipboard.Paused;
+        var next = _settings with { CapturePaused = !_clipboard.Paused };
+        try { await _settingsStore!.SaveAsync(next); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Notify("Could not save capture preference."); return; }
+        _settings = next;
+        _clipboard.Settings = next;
+        _clipboard.Paused = next.CapturePaused;
         _rope!.SetPaused(_clipboard.Paused);
         _tray!.Text = _clipboard.Paused ? "Clippboard · Capture paused" : "Clippboard · Ctrl + Shift + V";
         Notify(_clipboard.Paused ? "Capture paused. New copies won't be saved." : "Capture resumed.");

@@ -2,7 +2,17 @@
 
 The Store account reserved **Clippboard**, Store ID `9PP8015JDJ45`, under publisher display name **ShardCoders**. This is a separate distribution path from the unsigned GitHub EXE. Uploading is not certification, public availability or a trusted signature on the standalone installer.
 
-As of October 11, 2026 (Pakistan), version **0.4.0.0** is **in certification**. Partner Center validated the x64 package, and the free listing, four synthetic desktop screenshots, privacy link, content ratings, runFullTrust justification and tester instructions were saved. The submission is held on **Don't publish this submission until I select Publish now**. Microsoft approval and Store-signed installation validation are pending; there is no public Store release yet.
+The initial certification report for version **0.4.0.0** rejected two listing items: **10.1.3**, the search term “Windows utility”, and **10.5.1**, a privacy-policy URL that did not resolve for the reviewer. The report did not list a runtime or installation failure. The package was validated by Partner Center. Microsoft approval and Store-signed installation validation remain pending; there is no public Store release yet. Keep **Don't publish this submission until I select Publish now** enabled through resubmission.
+
+## Listing correction and policy publication
+
+Use the dedicated public privacy URL: **https://shardapps.github.io/clippboard/privacy/**. Its source is `site/privacy/index.html`. The site contains no JavaScript, analytics, forms or external assets, and works without a GitHub account. Keep this page aligned with the technical [privacy documentation](privacy.md).
+
+The six search terms are `clipboard history`, `copy paste`, `paper notes`, `offline`, `open source`, and `clipboard manager`. Do not re-add the rejected “Windows utility” term or another product's title. Check Microsoft's current keyword rules before changing listing terms.
+
+Website changes go through a PR. Run `python scripts/check-site.py`; CI repeats the page, local-link and privacy checks. After green checks and merge, an authorized maintainer manually runs **Privacy website** on `main` to deploy only `site/` through the GitHub Pages environment. Before saving a Store privacy URL, verify an unauthenticated HTTPS request returns 200 with readable policy HTML and open it in a browser. Recheck the live URL immediately before every submission. A successful deployment is not a substitute for checking the public page.
+
+These findings require a metadata resubmission, using the same validated 0.4.0.0 package. Remove the rejected keyword, save the verified privacy URL, explain the corrections in certification notes, and confirm Partner Center shows the resubmission in certification. Record the observed status separately from expectations.
 
 The manifest uses the assigned public package identity:
 

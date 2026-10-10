@@ -43,7 +43,7 @@ Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setup
 
 **Unsigned alpha binaries:** open a successful [Windows build](https://github.com/shardapps/clippboard/actions/workflows/ci.yml), download the `clippboard-windows-x64-alpha` artifact, and unzip it. Run `installer/Clippboard-Setup-0.4.0.exe` for a per-user installation, or `portable/win-x64/Clippboard.exe` directly. GitHub may require sign-in for artifact downloads; artifacts expire after 14 days. These are evaluation builds, not stable releases.
 
-**Microsoft Store:** Windows 11 x64 version **0.4.0.0** has been submitted under publisher **ShardCoders** and is in certification. Public availability is held manually until Microsoft review and a Store-signed installation check finish; the separate GitHub EXE remains unsigned. [Store distribution](docs/store.md) · [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
+**Microsoft Store:** Windows 11 x64 version **0.4.0.0** is awaiting approval under publisher **ShardCoders**. The initial review rejected a keyword and the privacy URL; the corrections and resubmission procedure are documented in [Store distribution](docs/store.md). Public availability is held manually until Microsoft review and a Store-signed installation check finish; the separate GitHub EXE remains unsigned. [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
 
 1. Clone this repository and open PowerShell in its folder.
 2. Run `./scripts/bootstrap.ps1` to install a private .NET 10 SDK under `.tools/` and build.
@@ -72,7 +72,7 @@ File notes reference originals: moved, deleted, disconnected, or inaccessible fi
 
 Automatic pasting depends on the destination. Windows can block input into elevated apps; if focus restoration or input injection fails, the item remains on the clipboard for manual **Ctrl + V**. Apps can ignore a successful paste keystroke; Clippboard cannot verify acceptance.
 
-Clipboard history can contain private data. The app respects supported exclusion markers but cannot recognize every secret. Pause capture when needed. DPAPI does not protect against software already running as you. [Privacy & storage →](docs/privacy.md)
+Clipboard history can contain private data. The app respects supported exclusion markers but cannot recognize every secret. Pause capture when needed. DPAPI does not protect against software already running as you. [Privacy policy →](https://shardapps.github.io/clippboard/privacy/) · [Technical storage details →](docs/privacy.md)
 
 ### Frequently asked questions
 

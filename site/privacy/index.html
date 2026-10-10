@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Clippboard privacy policy: clipboard history stays encrypted locally, with no telemetry or automatic uploads, and retention of 1–30 days.">
+  <title>Clippboard Privacy Policy</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header><a class="brand" href="../"><span class="logo" aria-hidden="true">▣</span> Clippboard</a><nav aria-label="Main"><a href="https://github.com/shardapps/clippboard">Source code</a><a href="https://github.com/shardapps/clippboard/issues">Support</a></nav></header>
+  <main id="main" class="policy">
+    <p class="eyebrow">Publisher: ShardCoders · Effective October 11, 2026</p>
+    <h1>Privacy policy</h1>
+    <p class="lead">Your clipboard history stays on your computer. Clippboard has no app account, advertising, telemetry or automatic clipboard uploads.</p>
+    <section><h2>What the app processes</h2><p>While running with capture enabled, Clippboard reads supported copied text, bitmap images and original file paths, and records timestamps and starred status so you can find and restore clips. Copied content can include personal information. File contents are not archived; file notes reference the original locations.</p><p>The app does not capture keyboard input, take screenshots or retrieve historical Windows clipboard records. Unsupported or oversized items are skipped.</p></section>
+    <section><h2>Local storage and protection</h2><p>Clipboard payloads and history metadata are encrypted on disk using Windows DPAPI for the current Windows user. Content is decrypted in memory when needed for display or restoration. Restoring an item places it on the system clipboard, where other applications may access it. Encryption does not protect against every process running as the same user.</p><p>Settings contain configuration, not clipboard content. The app does not send history to us, sell personal information, or include an app network service or automatic crash uploads.</p></section>
+    <section><h2>Retention and deletion</h2><p>You can set retention from 1–30 days. This limit also applies to starred items. Default capacity limits are 500 entries and 256 MiB of encrypted history. Older unstarred clips may be evicted when capacity is reached; new clips are rejected if starred items leave no room. Expiry is checked at startup, before additions and reads, and periodically while running.</p><p>Delete a note or use Clear history to remove stored entries, including stars. Clear history inside the app before uninstalling if you want it removed. Deletion does not clear the system clipboard, delete referenced original files, remove independent backups, or guarantee forensic erasure.</p></section>
+    <section><h2>Your controls and sensitive content</h2><p>You can pause capture, choose supported capture types, adjust storage limits and delete history. The app respects supported clipboard exclusion markers, but cannot reliably identify all secrets. Pause before copying passwords or other private content you do not want recorded.</p></section>
+    <section><h2>Support and feedback</h2><p>Feedback and project links open GitHub only when you choose them. Clipboard history is not automatically attached. Any information you choose to post is handled by GitHub; public issues are visible to others. Please do not post clipboard contents, passwords, private file paths or identity documents.</p><p>For privacy questions, contact the project through <a href="https://github.com/shardapps/clippboard/issues">Clippboard support</a>. You can read the <a href="https://github.com/shardapps/clippboard/blob/main/docs/privacy.md">technical storage documentation</a> and inspect the source code.</p></section>
+    <section><h2>This website</h2><p>This policy website is hosted by GitHub Pages. We add no analytics, scripts, forms or cookies. GitHub may process ordinary web-request information, such as IP addresses and browser details, under the <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a>. Visiting this site does not send your clipboard history.</p></section>
+    <section><h2>Policy changes</h2><p>Updates will appear on this page with a revised effective date. Material changes to the app's handling of clipboard information will be documented alongside the release.</p></section>
+  </main>
+  <footer>Clippboard · Publisher: ShardCoders · <a href="../">Project home</a></footer>
+</body>
+</html>

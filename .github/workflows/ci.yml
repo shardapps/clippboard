@@ -76,6 +76,15 @@ jobs:
             artifacts/session-checks/report.json
           if-no-files-found: error
           retention-days: 14
+      - name: Upload small native host for virtual-drive development
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: clippboard-msix-host-x64-alpha
+          path: |
+            artifacts/store/**/stage/app/Clippboard.exe
+            artifacts/store/**/package-info.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload Store submission package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

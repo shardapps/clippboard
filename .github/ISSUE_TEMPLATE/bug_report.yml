@@ -1,0 +1,38 @@
+name: Bug report
+description: Help us reproduce a problem using synthetic clipboard data.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Please keep real clipboard contents and private paths out of reports. Security findings belong in private reporting (see SECURITY.md)."
+  - type: input
+    id: version
+    attributes:
+      label: Clippboard version or commit
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and build
+      placeholder: Windows 11, build number, monitor DPI if relevant
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Use sample text, images, or temporary files.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Destination app and additional context
+      description: Include sanitized screenshots only.

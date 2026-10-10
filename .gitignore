@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+.tools/
+.cache/
+.data/
+artifacts/
+TestResults/
+*.user
+*.suo
+*.pfx
+*.clip
+*.tmp

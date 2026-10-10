@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and design ideas
+    url: https://github.com/shardapps/clippboard/discussions
+    about: Talk through how Clippboard should work.
+  - name: Private security report
+    url: https://github.com/shardapps/clippboard/security/advisories/new
+    about: Keep security findings out of public issues.

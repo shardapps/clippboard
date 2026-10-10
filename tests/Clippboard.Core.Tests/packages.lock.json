@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0-windows7.0": {
+      "Clippboard": {
+        "type": "Project",
+        "dependencies": {
+          "Clippboard.Core": "[0.1.0, )"
+        }
+      },
+      "clippboard.core": {
+        "type": "Project"
+      }
+    }
+  }
+}

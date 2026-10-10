@@ -1,0 +1,51 @@
+<Window x:Class="Clippboard.App.Views.RopeWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Clippboard" WindowStyle="None" AllowsTransparency="True" Background="#01000000"
+ ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize" PreviewKeyDown="OnKeyDown"
+ MouseDown="OnOutsideClick" Deactivated="OnDeactivated" FontFamily="Segoe UI">
+  <Grid>
+    <Grid x:Name="Panel" VerticalAlignment="Top" Margin="24,20,24,0" MaxWidth="1160"
+      HorizontalAlignment="Center" MouseDown="OnPanelClick">
+      <Grid.RenderTransform><TranslateTransform x:Name="Slide" Y="-600"/></Grid.RenderTransform>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <Border Background="#F2182421" CornerRadius="24" Padding="24,18" BorderBrush="#35443D" BorderThickness="1">
+        <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Border Background="#ACDDC9" Width="38" Height="38" CornerRadius="12" Margin="0,0,12,0">
+              <TextBlock Text="c" FontWeight="Bold" FontSize="28" Foreground="#183B2D" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <StackPanel><TextBlock Text="clippboard" FontSize="22" FontWeight="SemiBold" Foreground="#F4F4E9"/>
+              <TextBlock Text="Good things are worth keeping." FontSize="11" Foreground="#A5B6AD"/></StackPanel>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+            <Button x:Name="PauseButton" Content="Pause" Click="OnPause" AutomationProperties.Name="Pause clipboard capture"/>
+            <Button Content="Clear history" Click="OnClear"/>
+            <Button Content="↑" Click="OnClose" AutomationProperties.Name="Retract rope"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+      <Grid Grid.Row="1" Margin="0,10,0,0">
+        <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="300"/></Grid.RowDefinitions>
+        <Path Stroke="#C2A77E" StrokeThickness="3" Data="M 0,0 Q 570,24 1140,0" Stretch="Fill"
+          Height="12" VerticalAlignment="Bottom" Margin="10,0,10,-8"/>
+        <ScrollViewer Grid.Row="1" x:Name="NoteScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" VerticalContentAlignment="Top" Padding="12,0,12,12">
+          <StackPanel x:Name="Notes" Orientation="Horizontal"/>
+        </ScrollViewer>
+        <Border x:Name="EmptyState" Grid.Row="1" Background="#F0F4EDD9" CornerRadius="24" Width="430" Height="200" VerticalAlignment="Top" Margin="0,18,0,0">
+          <StackPanel VerticalAlignment="Center" Margin="28">
+            <TextBlock Text="Your next idea goes here." FontSize="23" FontWeight="SemiBold" Foreground="#293E34" TextAlignment="Center"/>
+            <TextBlock Text="Copy text, an image, or a file.&#10;We'll hang it on the line." FontSize="14" Foreground="#667168" TextAlignment="Center" Margin="0,14,0,0"/>
+          </StackPanel>
+        </Border>
+      </Grid>
+      <Border Grid.Row="2" Background="#F2182421" CornerRadius="14" Padding="18,12" Margin="0,8,0,0">
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <TextBlock x:Name="Status" Text="Local. Private. Ready when you are." Foreground="#ADC3B7" FontSize="12" TextWrapping="Wrap"/>
+          <TextBlock Grid.Column="1" Text="Ctrl + Shift + V  ·  Esc to tuck away" Foreground="#8C9E95" FontSize="12" Margin="20,0,0,0"/>
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

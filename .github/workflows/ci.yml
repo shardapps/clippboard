@@ -50,6 +50,8 @@ jobs:
           ./scripts/dev.ps1 lifecycle -Software
       - name: Publish portable executable
         run: ./scripts/dev.ps1 publish
+      - name: Native listener, hotkey, overlay, accepted paste and restart
+        run: dotnet run --project tests/Clippboard.Core.Tests -c Release --no-build -- --session artifacts/portable/win-x64/Clippboard.exe artifacts/session-checks/report.json
       - name: Build per-user installer
         run: ./scripts/package.ps1 -SkipPublish
       - name: Verify checksums and signature metadata
@@ -71,6 +73,7 @@ jobs:
             artifacts/build-info.json
             artifacts/installer-tests/installed-preview.png
             artifacts/overlay-lifecycle*.json
+            artifacts/session-checks/report.json
             artifacts/store/**/*.msix
             artifacts/store/**/package-info.json
           if-no-files-found: error

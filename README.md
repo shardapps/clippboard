@@ -43,7 +43,7 @@ Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setup
 
 **Unsigned alpha binaries:** open a successful [Windows build](https://github.com/shardapps/clippboard/actions/workflows/ci.yml), download the `clippboard-windows-x64-alpha` artifact, and unzip it. Run `installer/Clippboard-Setup-0.4.0.exe` for a per-user installation, or `portable/win-x64/Clippboard.exe` directly. GitHub may require sign-in for artifact downloads; artifacts expire after 14 days. These are evaluation builds, not stable releases.
 
-**Microsoft Store:** a Windows 11 x64 MSIX is being prepared under publisher **ShardCoders**. It is not publicly available yet. Microsoft certification and a Store-signed installation check must finish before publication; the separate GitHub EXE remains unsigned. [Store distribution](docs/store.md) · [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
+**Microsoft Store:** Windows 11 x64 version **0.4.0.0** has been submitted under publisher **ShardCoders** and is in certification. Public availability is held manually until Microsoft review and a Store-signed installation check finish; the separate GitHub EXE remains unsigned. [Store distribution](docs/store.md) · [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
 
 1. Clone this repository and open PowerShell in its folder.
 2. Run `./scripts/bootstrap.ps1` to install a private .NET 10 SDK under `.tools/` and build.

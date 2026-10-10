@@ -9,7 +9,7 @@ The current target is Windows 11 x64. A green build is necessary, but does not r
 | Overlay lifetime | Eight hardware and eight software process cycles passed. Local idle/active measurements and their limits are in [performance](performance.md). |
 | EXE installer lifecycle | Fresh CI directory: install, same-version reinstall, installed preview, uninstall passed. Interactive clean-device and cross-version upgrade checks remain. |
 | Store package | Assigned ShardCoders identity, x64, disabled startup, contents and SHA-256 verified. Unsigned MSIX is for Store submission only. |
-| Store listing and review | Free productivity utility, privacy policy, accurate capabilities, content ratings and synthetic desktop screenshots prepared. Certification and signed-package review remain external gates. |
+| Store listing and review | Free productivity utility, privacy policy, capability justification, content ratings and four synthetic desktop screenshots saved. Version 0.4.0.0 is in Microsoft certification, with publication held manually. Approval and signed-package review remain external gates. |
 | Installed Store behavior | Pending signed package: first install, launch, hotkey/tray, history restart, startup opt-in/disable, update and uninstall. |
 | Destination application matrix | Pending Notepad Unicode text, Paint bitmap, Explorer files, browser text and restricted/elevated manual-paste fallback. Include moved/deleted/network originals. |
 | Device/accessibility matrix | Pending mixed DPI, multiple monitors, small screens, screen reader, remote session and slower hardware. Synthetic high-contrast/reduced-motion checks passed. |

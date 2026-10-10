@@ -14,6 +14,7 @@ using Clippboard.App.Views;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
 using Clippboard.Core;
+using Clippboard.App.Design;
 
 // A small executable test suite; assertions exercise storage invariants and real Windows DPAPI.
 internal static class Program
@@ -163,20 +164,50 @@ internal static class Program
             RopeWindow? window = null;
             try
             {
-                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext()); var app = new Clippboard.App.App(); app.InitializeComponent();
+                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+                var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Clippboard;component/Design/Controls.xaml", UriKind.Relative) });
                 window = new RopeWindow(new HistoryStore(Path.Combine(root, "visuals"), new TestWindowsProtector()), preview: true, settings: new AppSettings { Animate = false })
-                { Width = 1600, Height = 800 };
+                { Width = 1600, Height = 800, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };
                 window.Show(); window.UpdateLayout(); window.RenderDemo(1000); window.UpdateLayout();
                 Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Check(window.RenderedNoteCount is > 0 and < 10, "1000 clips render only viewport notes");
                 var scroll = (System.Windows.Controls.ScrollViewer)window.FindName("NoteScroll");
                 scroll.ScrollToRightEnd(); window.UpdateLayout();
                 Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                Check(window.RenderedNoteCount is > 0 and < 10 && scroll.HorizontalOffset > 300000, "all history reachable with bounded visuals");
+                Check(window.RenderedNoteCount is > 0 and < 10 && scroll.HorizontalOffset > 300000, $"all history reachable with bounded visuals (offset {scroll.HorizontalOffset}, width {scroll.ScrollableWidth}, cards {window.RenderedNoteCount})");
+                scroll.ScrollToLeftEnd(); window.UpdateLayout();
+                foreach (var theme in Enum.GetValues<AppTheme>())
+                {
+                    window.ApplyAppearance(new AppSettings { Theme = theme, Animate = false });
+                    var owner = Descendants<System.Windows.Controls.Button>(window).First(x => x.ToolTip is not null);
+                    Interaction.PrepareToolTip(owner);
+                    var tip = (System.Windows.Controls.ToolTip)owner.ToolTip;
+                    tip.PlacementTarget = owner; tip.IsOpen = true; tip.ApplyTemplate();
+                    Check(Contrast(((SolidColorBrush)tip.Foreground).Color, ((SolidColorBrush)tip.Background).Color) >= 4.5, "tooltip readable in " + theme);
+                    Check(Descendants<System.Windows.Controls.TextBlock>(tip).Any(x => !string.IsNullOrWhiteSpace(x.Text) && Equals(x.Foreground, tip.Foreground)), "tooltip template uses its explicit ink in " + theme);
+                    tip.IsOpen = false;
+                    Check(Contrast(((SolidColorBrush)window.Resources["Muted"]).Color, ((SolidColorBrush)window.Resources["NoteSurface"]).Color) >= 4.5, "date and metadata contrast in " + theme);
+                }
+                window.ApplyAppearance(new AppSettings { Animate = false });
                 window.OpenSettings(); window.UpdateLayout();
                 var host = (System.Windows.Controls.Border)window.FindName("SidebarHost");
                 Check(host.Child is SettingsView && host.Visibility == Visibility.Visible, "custom settings sidebar opens");
                 var settings = (SettingsView)host.Child;
+                var widthSlider = Descendants<System.Windows.Controls.Slider>(settings).First(x => System.Windows.Automation.AutomationProperties.GetName(x) == "Note width");
+                widthSlider.Value = 380; window.UpdateLayout();
+                Check(window.Appearance.NoteWidth == 380 && window.SavedSettings.NoteWidth == 300 && window.RenderedNoteCount < 10, "size preview is live, bounded and uncommitted");
+                Descendants<System.Windows.Controls.Button>(settings).First(x => System.Windows.Automation.AutomationProperties.GetName(x) == "Close settings").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Check(window.Appearance.NoteWidth == 300 && window.SavedSettings.NoteWidth == 300, "cancel restores saved size");
+                window.OpenSettings(); window.UpdateLayout(); settings = (SettingsView)host.Child;
+                widthSlider = Descendants<System.Windows.Controls.Slider>(settings).First(x => System.Windows.Automation.AutomationProperties.GetName(x) == "Note width");
+                widthSlider.Value = 340;
+                Descendants<System.Windows.Controls.Button>(settings).First(x => Equals(x.Content, "Save changes")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Check(window.SavedSettings.NoteWidth == 340, "save commits preview size");
+                var transform = new TranslateTransform(); Interaction.Move(transform, TranslateTransform.YProperty, -5, false);
+                Check(transform.Y == -5 && !transform.HasAnimatedProperties, "reduced motion applies exact state without clocks");
+                Interaction.Move(transform, TranslateTransform.YProperty, 0, true, 80); Pump(Task.Delay(120));
+                Check(Math.Abs(transform.Y) < .001, "hover settles at exact rest without drift");
                 for (var page = 0; page < 4; page++) { settings.ShowPage(page); window.UpdateLayout(); Check(settings.ActualHeight > 0, "settings page lays out " + page); }
                 settings.ShowPage(2);
                 var retention = Descendants<System.Windows.Controls.Slider>(settings).First(x => System.Windows.Automation.AutomationProperties.GetName(x) == "Keep history");
@@ -217,7 +248,7 @@ internal static class Program
                 Check(window.Retired && !window.IsVisible && window.RenderedNoteCount == 0 && window.CachedImageBytes == 0 && window.DetailText is null, "closing releases native surface, cards, detail and thumbnail cache");
                 for (var cycle = 0; cycle < 3; cycle++)
                 {
-                    window = new RopeWindow(cacheStore, preview: true, settings: new AppSettings { Animate = false }) { Width = 1200, Height = 700 };
+                    window = new RopeWindow(cacheStore, preview: true, settings: new AppSettings { Animate = false }) { Width = 1200, Height = 700, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };
                     window.Show(); window.UpdateLayout(); window.RenderDemo(); window.UpdateLayout();
                     Check(window.RenderedNoteCount > 0 && !window.Retired, "fresh overlay opens after retirement " + cycle);
                     Pump(window.CloseRopeAsync()); Check(window.Retired && window.RenderedNoteCount == 0, "repeat close releases overlay " + cycle);
@@ -235,6 +266,15 @@ internal static class Program
         var frame = new DispatcherFrame();
         Dispatcher.CurrentDispatcher.BeginInvoke(async () => { try { await task; } catch { /* Rethrown below. */ } finally { frame.Continue = false; } });
         Dispatcher.PushFrame(frame); task.GetAwaiter().GetResult();
+    }
+    private static double Contrast(Color a, Color b)
+    {
+        static double L(Color c)
+        {
+            static double Linear(byte value) { var x = value / 255.0; return x <= .04045 ? x / 12.92 : Math.Pow((x + .055) / 1.055, 2.4); }
+            return .2126 * Linear(c.R) + .7152 * Linear(c.G) + .0722 * Linear(c.B);
+        }
+        return (Math.Max(L(a), L(b)) + .05) / (Math.Min(L(a), L(b)) + .05);
     }
     private static System.Collections.Generic.IEnumerable<T> Descendants<T>(DependencyObject parent) where T : DependencyObject
     {

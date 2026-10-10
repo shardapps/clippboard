@@ -17,7 +17,7 @@ internal sealed class SettingsView : UserControl
     private readonly Button[] _tabs = new Button[4];
     private int _page;
     public event Func<AppSettings, Task<string?>>? SaveRequested;
-    public event Action<AppTheme>? ThemePreview;
+    public event Action<AppSettings>? AppearancePreview;
     public event Action? Dismissed;
     public event Func<Task>? ClearRequested;
     internal AppSettings Draft => _draft;
@@ -45,7 +45,7 @@ internal sealed class SettingsView : UserControl
         _save.SetResourceReference(BackgroundProperty, "SelectedSurface"); _save.Click += Save;
         DockPanel.SetDock(_save, Dock.Right); actions.Children.Add(_save);
         var reset = new Button { Content = "Reset defaults", HorizontalAlignment = HorizontalAlignment.Left };
-        reset.Click += (_, _) => { _draft = new(); ThemePreview?.Invoke(_draft.Theme); ShowPage(_page); _notice.Text = "Defaults selected. Save to apply them."; };
+        reset.Click += (_, _) => { _draft = new(); AppearancePreview?.Invoke(_draft); ShowPage(_page); _notice.Text = "Defaults previewed. Save to keep them."; };
         actions.Children.Add(reset); footer.Children.Add(actions); footer.Children.Add(_notice); Grid.SetRow(footer, 2); root.Children.Add(footer);
         Content = root; ShowPage(0);
     }
@@ -56,10 +56,13 @@ internal sealed class SettingsView : UserControl
         if (page == 0)
         {
             Heading("A calmer clipboard", "Choose your paper, then give every note room to breathe.");
-            foreach (var theme in Enum.GetValues<AppTheme>()) ThemeCard(theme);
+            var themes = new System.Windows.Controls.Primitives.UniformGrid { Columns = 2, Margin = new Thickness(0, 5, 0, 5) };
+            foreach (var theme in Enum.GetValues<AppTheme>()) themes.Children.Add(ThemeCard(theme));
+            _content.Children.Add(themes);
             Number("Note width", _draft.NoteWidth, 250, 400, "px", v => _draft = _draft with { NoteWidth = v });
             Number("Space between notes", _draft.NoteSpacing, 24, 96, "px", v => _draft = _draft with { NoteSpacing = v });
-            Number("Text size", _draft.TextSize, 15, 22, "pt", v => _draft = _draft with { TextSize = v });
+            Number("Text size", _draft.TextSize, 15, 22, "px", v => _draft = _draft with { TextSize = v });
+            Hint("The rope previews your appearance changes live. Save to keep them; closing restores your saved appearance.");
         }
         else if (page == 1)
         {
@@ -105,6 +108,8 @@ internal sealed class SettingsView : UserControl
             Toggle("Pause all capture", _draft.CapturePaused, v => _draft = _draft with { CapturePaused = v });
             Hint("Items marked private by the source app are ignored. Moved or deleted files must be copied again. Unsupported formats and oversized items are skipped.");
         }
+        _content.BeginAnimation(OpacityProperty, null); _content.Opacity = 0;
+        Clippboard.App.Design.Interaction.Move(_content, OpacityProperty, 1, _draft.Animate && Clippboard.App.Design.Interaction.GetEnabled(this), 180);
     }
     private async void Save(object sender, RoutedEventArgs e)
     {
@@ -136,18 +141,25 @@ internal sealed class SettingsView : UserControl
         var slider = new Slider { Minimum = min, Maximum = max, Value = initial, TickFrequency = 1, IsSnapToTickEnabled = true, Margin = new Thickness(0, 0, 0, 8), Height = 24 };
         System.Windows.Automation.AutomationProperties.SetName(slider, name);
         slider.ValueChanged += (_, _) => { var value = (int)Math.Round(slider.Value); update(value); label.Text = $"{name} · {value} {unit}"; };
-        _content.Children.Add(label); _content.Children.Add(slider);
+        slider.IsMoveToPointEnabled = true; slider.SmallChange = 1; slider.LargeChange = Math.Max(1, (max - min) / 10);
+        slider.ValueChanged += (_, _) => { if (_page == 0) AppearancePreview?.Invoke(_draft); };
+        var row = new DockPanel();
+        var minus = new Button { Content = "−", ToolTip = "Decrease " + name, Width = 32, Padding = new Thickness(4) };
+        var plus = new Button { Content = "+", ToolTip = "Increase " + name, Width = 32, Padding = new Thickness(4) };
+        minus.Click += (_, _) => slider.Value = Math.Max(min, slider.Value - 1); plus.Click += (_, _) => slider.Value = Math.Min(max, slider.Value + 1);
+        DockPanel.SetDock(minus, Dock.Left); DockPanel.SetDock(plus, Dock.Right); row.Children.Add(minus); row.Children.Add(plus); row.Children.Add(slider);
+        _content.Children.Add(label); _content.Children.Add(row);
     }
-    private void ThemeCard(AppTheme theme)
+    private Button ThemeCard(AppTheme theme)
     {
-        string[] fills = ["#FFFFFF", "#FFF8E9", "#282C38"]; string[] inks = ["#526DCC", "#AF745F", "#BAC6FF"];
+        var palette = new ResourceDictionary(); Clippboard.App.Design.ThemeManager.Apply(theme, palette);
         var button = new Button { Margin = new Thickness(0, 5, 0, 5), HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(12) };
         button.SetResourceReference(BackgroundProperty, _draft.Theme == theme ? "SelectedSurface" : "Chrome");
         var row = new DockPanel();
-        var mini = new Border { Width = 58, Height = 43, CornerRadius = new CornerRadius(9), Background = (Brush)new BrushConverter().ConvertFromString(fills[(int)theme])!, BorderBrush = (Brush)new BrushConverter().ConvertFromString(inks[(int)theme])!, BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 14, 0), Child = new TextBlock { Text = "Aa", FontSize = 21, Foreground = (Brush)new BrushConverter().ConvertFromString(inks[(int)theme])!, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+        var mini = new Border { Width = 58, Height = 43, CornerRadius = new CornerRadius(9), Background = (Brush)palette["NoteSurface"], BorderBrush = (Brush)palette["Accent"], BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 14, 0), Child = new TextBlock { Text = "Aa", FontSize = 21, Foreground = (Brush)palette["Foreground"], HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
         DockPanel.SetDock(mini, Dock.Left); row.Children.Add(mini);
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center }; labels.Children.Add(new TextBlock { Text = theme.ToString(), FontSize = 15, FontWeight = FontWeights.SemiBold });
-        labels.Children.Add(new TextBlock { Text = theme switch { AppTheme.Cloud => "White paper. Clear space.", AppTheme.Paper => "Warm cream. A softer mood.", _ => "Quiet charcoal. Gentle contrast." }, FontSize = 12 }); row.Children.Add(labels); button.Content = row;
-        button.Click += (_, _) => { _draft = _draft with { Theme = theme }; ThemePreview?.Invoke(theme); ShowPage(0); }; _content.Children.Add(button);
+        labels.Children.Add(new TextBlock { Text = theme switch { AppTheme.Cloud => "Clear white", AppTheme.Paper => "Warm cream", AppTheme.Lavender => "Soft lilac", AppTheme.Ocean => "Deep blue", AppTheme.Rose => "Quiet blush", _ => "Charcoal" }, FontSize = 12 }); row.Children.Add(labels); button.Content = row;
+        button.Click += (_, _) => { _draft = _draft with { Theme = theme }; AppearancePreview?.Invoke(_draft); ShowPage(0); }; return button;
     }
 }

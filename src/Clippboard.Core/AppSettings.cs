@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 
 namespace Clippboard.Core;
 
-public enum AppTheme { Cloud, Paper, Midnight }
+// Append themes to preserve existing serialized numeric values.
+public enum AppTheme { Cloud, Paper, Midnight, Lavender, Ocean, Rose }
 public enum ShortcutChoice { CtrlShiftV, AltV, CtrlAltV }
 
 public sealed record AppSettings

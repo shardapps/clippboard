@@ -42,3 +42,9 @@ Reproducible diagnostic: `./scripts/dev.ps1 preview -Measure`. This sample uses 
 | Idle CPU time during five-second sample | 0 seconds |
 
 These numbers show bounded content retention but do **not** establish a low-RAM production app. WPF/CLR, native rendering allocations and screenshot diagnostics contribute to total process memory. Five-minute idle sampling, representative large-image captures, long-running open/close profiling and cold start remain required before a stable release. No working-set trimming tricks or forced GC run in normal application operation.
+
+## Appearance refinement — October 10, 2026
+
+96 local assertions pass. Added checks cover all six palettes, actual tooltip templates and foreground/background contrast (at least 4.5:1), date metadata contrast, live size previews without committing settings, cancellation, Save, reduced-motion final state, and hover settling. The visual harness loads the production control dictionary into a plain WPF Application, preventing queued production startup from running capture/tray integration. Test windows stay off-screen and do not activate.
+
+These are synthetic regression checks, not a guarantee against every crash or a substitute for destination-app and installer lifecycle testing.

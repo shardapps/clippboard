@@ -68,12 +68,13 @@ internal sealed class ClipboardService : IDisposable
         {
             var clip = await _reader.ReadAsync(Settings);
             _retry.Stop();
-            try
+            if (_disposed || Paused || sequence != NativeMethods.GetClipboardSequenceNumber() || clip is null)
             {
-                if (_disposed || Paused || sequence != NativeMethods.GetClipboardSequenceNumber() || clip is null) return;
-                await _save(clip);
+                if (clip?.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png);
+                return;
             }
-            finally { if (clip?.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }
+            // A successful callback owns this payload; clearing it here would corrupt retained consumers.
+            await _save(clip);
         }
         catch (COMException)
         {

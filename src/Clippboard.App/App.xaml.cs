@@ -109,6 +109,7 @@ public partial class App : Application
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         { Notify("Could not save this clip. Check disk space and storage permissions."); }
+        finally { if (clip.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }
     }
 
     private void ToggleRope()

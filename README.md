@@ -41,7 +41,7 @@ Built by [Shard Apps](https://github.com/shardapps). Open source, local first, a
 
 Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setups need further validation before being advertised as supported.
 
-**Unsigned alpha binaries:** open a successful [Windows build](https://github.com/shardapps/clippboard/actions/workflows/ci.yml), download the `clippboard-windows-x64-alpha` artifact, and unzip it. Run `installer/Clippboard-Setup-0.2.0.exe` for a per-user installation, or `portable/win-x64/Clippboard.exe` directly. GitHub may require sign-in for artifact downloads; artifacts expire after 14 days. These are evaluation builds, not stable releases.
+**Unsigned alpha binaries:** open a successful [Windows build](https://github.com/shardapps/clippboard/actions/workflows/ci.yml), download the `clippboard-windows-x64-alpha` artifact, and unzip it. Run `installer/Clippboard-Setup-0.3.0.exe` for a per-user installation, or `portable/win-x64/Clippboard.exe` directly. GitHub may require sign-in for artifact downloads; artifacts expire after 14 days. These are evaluation builds, not stable releases.
 
 1. Clone this repository and open PowerShell in its folder.
 2. Run `./scripts/bootstrap.ps1` to install a private .NET 10 SDK under `.tools/` and build.
@@ -82,7 +82,7 @@ Clipboard history can contain private data. The app respects supported exclusion
 
 **Can I use it instead of Windows clipboard history?** It is a separate experimental app with image/file notes, themes, search and a different interface. Compatibility, accessibility and memory testing remain in progress; it does not replace or configure Windows clipboard history.
 
-**Is there a stable, signed installer?** Not yet. CI produces unsigned evaluation executables and an installer. No trusted publisher identity has been configured. See the alpha limitations above and [validation record](docs/testing.md).
+**Is there a stable, signed installer?** Not yet. CI produces unsigned evaluation executables and an installer. No trusted publisher identity has been configured. [Signing setup and SmartScreen explanation](docs/signing.md). See the alpha limitations above and [validation record](docs/testing.md).
 
 ### Build with us
 

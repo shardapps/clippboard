@@ -52,3 +52,9 @@ These are synthetic regression checks, not a guarantee against every crash or a 
 ## Finding clips and feedback — October 10, 2026
 
 105 local assertions pass after adding search/filter coverage: case-insensitive preview search, no-match state, each clipboard type, restored full history with bounded cards, all five settings pages, correct feedback form URLs, and absence of account/path details in support information. Feedback submissions, browser launch and copying diagnostics are user actions and are not invoked by the synthetic suite.
+
+## 0.3.0 packaging validation
+
+The local suite passes 105 assertions; five packaging guard checks additionally pass for out-of-project signing, incomplete signing configuration, rejecting unsigned artifacts when signing is required, and duplicate checksum metadata. New real-clipboard integration checks are gated to `GITHUB_ACTIONS=true` on isolated Windows runners. Local tests still leave the system clipboard untouched.
+
+CI now exercises actual Windows notifications, Unicode text/image/file capture, pause, own-restore deduplication, exclusion markers, missing originals and clipboard restoration. Packaging checks actual SHA-256 hashes and Authenticode state. Installer checks use a fresh directory and refuse an existing installation: install, same-version reinstall, installed native synthetic preview, and uninstall. These steps do not establish cross-version migration, destination-app paste acceptance, interactive installer behavior, SmartScreen reputation, or signed-build correctness without a real certificate.

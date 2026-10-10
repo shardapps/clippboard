@@ -221,6 +221,7 @@ internal static class Program
                     window.Show(); window.UpdateLayout(); window.RenderDemo(); window.UpdateLayout();
                     Check(window.RenderedNoteCount > 0 && !window.Retired, "fresh overlay opens after retirement " + cycle);
                     Pump(window.CloseRopeAsync()); Check(window.Retired && window.RenderedNoteCount == 0, "repeat close releases overlay " + cycle);
+                    Pump(window.RefreshAsync()); Check(window.RenderedNoteCount == 0, "late refresh cannot revive retired overlay " + cycle);
                 }
             }
             catch (Exception ex) { failure = ex; }

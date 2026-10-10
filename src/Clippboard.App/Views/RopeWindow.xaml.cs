@@ -50,7 +50,7 @@ public partial class RopeWindow : Window
         Rope.ShapeChanged += PositionNotes;
         SettingsRequested += () => OpenSettings();
         ExpandRequested += async entry => await OpenDetailAsync(entry);
-        Closed += (_, _) => { Retired = true; DismissDetail(); _loads.Cancel(); _loads.Dispose(); _cache.Clear(); };
+        Closed += (_, _) => { Retired = true; DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
     }
     public void ApplyAppearance(AppSettings settings)
     {
@@ -101,13 +101,15 @@ public partial class RopeWindow : Window
     private void CancelLoads() { _loads.Cancel(); _loads.Dispose(); _loads = new(); }
     public async Task RefreshAsync()
     {
+        if (Retired) return;
         var version = ++_renderVersion;
         var entries = await Task.Run(() => _store.ListAsync());
-        if (version != _renderVersion || _closing) return;
+        if (version != _renderVersion || _closing || Retired) return;
         _entries = entries; RebuildNotes();
     }
     private void RebuildNotes()
     {
+        if (Retired) return;
         CancelLoads(); Notes.Children.Clear(); _cards.Clear();
         _visible = _entries.Where(x => !_starredOnly || x.Pinned)
             .OrderByDescending(x => _settings.StarredFirst && x.Pinned).ThenByDescending(x => x.CopiedAt).ToList();

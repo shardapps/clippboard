@@ -30,6 +30,7 @@ public partial class RopeWindow
 
     internal void OpenSettings(int page = 0)
     {
+        if (Retired) return;
         DismissDetail();
         SidebarHost.Width = Math.Min(620, Math.Max(360, ActualWidth - 36));
         SidebarHost.MaxHeight = Math.Max(250, ActualHeight - 100);
@@ -58,6 +59,7 @@ public partial class RopeWindow
     }
     internal async Task OpenDetailAsync(ClipSummary entry)
     {
+        if (Retired) return;
         DismissSettings(); DismissDetail();
         var source = _detailLoads = new CancellationTokenSource(); var cancellation = source.Token;
         DetailHost.Width = Math.Min(820, Math.Max(360, ActualWidth - 48));

@@ -25,7 +25,7 @@ Initial file sizes: portable executable 173,061,775 bytes (165.0 MiB); compresse
 
 ## 0.2.0 interface and memory iteration — October 10, 2026
 
-- Release builds pass with warnings as errors. All 70 storage, format, cache and WPF assertions pass locally, using synthetic data and real DPAPI without touching the system clipboard.
+- Release builds pass with warnings as errors. All 73 storage, format, cache and WPF assertions pass locally, using synthetic data and real DPAPI without touching the system clipboard.
 - WPF checks exercise every settings page, retention bounds, behaviour edits, full text beyond the 320-character preview, enlargement within the window, all-history scrolling with 1,000 notes, exact byte-budget LRU eviction, and three fresh-overlay open/close cycles.
 - The close-time queued-scroll regression is covered. Closing releases cards, expanded content, previews, pending loads and the native transparent window surface. The next opening constructs a fresh overlay.
 - White, cream, dark and settings/detail previews were rendered and inspected. Windows reduced motion disables rope motion; both spring and critical-damping curves have bounded endpoint checks. Subjective smoothness, mixed-DPI and screen-reader use still need device testing.

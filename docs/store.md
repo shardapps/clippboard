@@ -2,6 +2,8 @@
 
 The Store account reserved **Clippboard**, Store ID `9PP8015JDJ45`, under publisher display name **ShardCoders**. This is a separate distribution path from the unsigned GitHub EXE. Uploading is not certification, public availability or a trusted signature on the standalone installer.
 
+As of October 11, 2026 (Pakistan), version **0.4.0.0** is **in certification**. Partner Center validated the x64 package, and the free listing, four synthetic desktop screenshots, privacy link, content ratings, runFullTrust justification and tester instructions were saved. The submission is held on **Don't publish this submission until I select Publish now**. Microsoft approval and Store-signed installation validation are pending; there is no public Store release yet.
+
 The manifest uses the assigned public package identity:
 
 - Name: `ShardCoders.Clippboard`
@@ -21,4 +23,6 @@ Packaged installations do not write an executable path into the registry Run key
 
 ## Release gate
 
-Before public availability, validate a Store-signed private flight on a clean Windows 11 device: first install, updates, hotkey and tray, startup opt-in/disable, encrypted history persistence and uninstall. Complete the Store listing, truthful content rating, capability review, and certification. Keep public availability on hold until compatibility and performance gates in [the roadmap](roadmap.md) have passed. MakeAppx validation is not a packaged installation test.
+Before broad public availability, validate the Store-signed package on a clean Windows 11 device: first install, updates, hotkey and tray, startup opt-in/disable, encrypted history persistence and uninstall. Complete the Store listing, truthful content rating, capability review, and certification. Keep public availability on hold until compatibility and performance gates in [the roadmap](roadmap.md) have passed. MakeAppx validation is not a packaged installation test.
+
+[Package flights require an initially published submission](https://learn.microsoft.com/en-us/windows/apps/publish/package-flights); they are not an available first-submission test route while this draft is held. After approval, verify the signed-package acquisition/testing route in Partner Center before releasing the manual hold. Approval alone does not establish the installed behavior.

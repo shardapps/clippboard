@@ -1,5 +1,7 @@
 # Validation record
 
+Current release-candidate gates and their remaining limits are tracked in [the release checklist](release-checklist.md). Older entries below describe their respective builds, not the current architecture.
+
 The executable regression suite covers Unicode/binary persistence, encrypted-at-rest bytes with real Windows DPAPI, file references, dedup/pins, retention, count/disk caps, oversize/full-pin rejection, restart persistence, corruption recovery, clear including pins, and concurrent writes. Synthetic WPF data objects also check format precedence, text/file limits, PNG conversion, sensitive exclusion markers, and the native input ABI. Local checks do not touch the system clipboard. Isolated GitHub Actions runners also exercise real clipboard notifications with synthetic fixtures. Run `scripts/dev.ps1 test`.
 
 Release builds validate core and WPF compilation. The app-rendered sample preview exercises XAML loading without accessing the clipboard. Packaging generates the self-contained executable and checksums.
@@ -86,3 +88,13 @@ This fixes encoded-buffer retention, but decoded-image cache bytes do not repres
 A repeat native diagnostic with Cloud, 1,000 synthetic metadata notes and no settings panel rendered seven cards. Shown/closed working set was 239.9/230.3 MiB, private bytes 174.3/175.6 MiB, closed managed heap 1.98 MiB, and closed cards/cache bytes zero. Idle CPU measured zero over five seconds. Opening settings in a separate diagnostic raised working set to 273.8 MiB shown and 303.0 MiB closed. These short screenshot diagnostics use forced GC after closing and are not production performance certification. Total RAM remains too high to claim a lightweight app; long-running capture, larger images and native allocation profiling remain required.
 
 The 1,000-note preview also exposed a nearly invisible navigation thumb. Its horizontal minimum is now 32 device-independent pixels while retaining proportional sizing and the full scroll range. All 133 local assertions pass, including regression checks of the actual production thumb at both ends of a 1,000-note history. This uses a local WPF track resource, following [Microsoft's minimum-thumb guidance](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/controls/how-to-customize-the-thumb-size-on-a-scrollbar).
+
+## 0.4.0 native release candidate — October 10–11, 2026
+
+[Windows run 38070084969](https://github.com/shardapps/clippboard/actions/runs/38070084969), built from `673bf01a8dbbe3e1958eba9ff469506a277ed7c7`, passed 166 regression assertions, five packaging failure guards, eight hardware and eight software overlay-process cycles, native session integration, the isolated installer lifecycle, and Store MSIX validation. The implementation was merged through PRs #11–#16; no feature changes were pushed directly to main.
+
+The native session fixture waits until the clipboard listener is registered, then performs three Unicode capture → registered hotkey → real overlay → UI Automation restore → accepted paste cycles into a controlled WPF text box. It checks that dismissals terminate overlay processes, own restores do not duplicate history, three clips persist after restarting the native listener, and samples idle CPU/memory for 30 seconds after restart. It runs only on isolated GitHub Actions runners and uses a fresh fixture directory; local tests do not inject input into users' applications. Optional CI diagnostics contain stages and error types, never clipboard contents.
+
+The Store artifact was downloaded and independently checked against its package metadata: SHA-256 `a9f09a8911d0c22fed755982114c8bbc5281184bf6f16374a9a1dbed7737da34`, 75,155,531 bytes, version `0.4.0.0`, x64, assigned publisher identity, required application/assets/block map, and disabled-by-default startup task. It is an unsigned submission package; MakeAppx and checksum checks do not prove a Store-signed installation.
+
+These checks do not certify Notepad, Paint, Explorer, browsers or elevated destinations, mixed-DPI devices, physical display frame pacing, a long-running capture workload, cross-version upgrades or a Store flight. Those remain explicit publication gates rather than a zero-bug or all-hardware claim.

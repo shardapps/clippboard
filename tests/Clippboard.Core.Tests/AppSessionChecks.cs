@@ -36,19 +36,28 @@ internal static class AppSessionChecks
                     if (Directory.Exists(dataRoot)) throw new IOException("Session data must be fresh.");
                     Directory.CreateDirectory(dataRoot);
                     fixture.Show(); fixture.Activate(); textbox.Focus();
+                    Task? listenerReady = null;
                     Process StartListener()
                     {
+                        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                        listenerReady = ready.Task;
                         var launch = new ProcessStartInfo(Path.GetFullPath(executable)) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
                         launch.ArgumentList.Add("--dev"); launch.ArgumentList.Add("--background");
                         launch.Environment["CLIPPBOARD_DEV_DATA"] = dataRoot;
                         launch.Environment["CLIPPBOARD_SESSION_DIAGNOSTICS"] = "1";
                         var process = Process.Start(launch) ?? throw new IOException("Native listener did not start.");
-                        process.ErrorDataReceived += (_, line) => { if (line.Data is not null) Console.Error.WriteLine("Listener: " + line.Data); };
+                        process.ErrorDataReceived += (_, line) =>
+                        {
+                            if (line.Data is null) return;
+                            Console.Error.WriteLine("Listener: " + line.Data);
+                            if (line.Data == "Clipboard listener ready") ready.TrySetResult();
+                        };
                         process.BeginErrorReadLine();
                         return process;
                     }
                     listener = StartListener();
                     await Until(() => FindWindow(listener.Id, "Clippboard listener", visible: false) != 0, "listener startup");
+                    await listenerReady!.WaitAsync(TimeSpan.FromSeconds(15));
                     await Task.Run(() => listener.WaitForInputIdle(5000));
                     var fixtureHandle = new WindowInteropHelper(fixture).Handle;
                     var watch = Stopwatch.StartNew();
@@ -80,6 +89,7 @@ internal static class AppSessionChecks
                     listener.Kill(entireProcessTree: true); await listener.WaitForExitAsync(); listener.Dispose();
                     listener = StartListener();
                     await Until(() => FindWindow(listener.Id, "Clippboard listener", visible: false) != 0, "listener restart");
+                    await listenerReady!.WaitAsync(TimeSpan.FromSeconds(15));
                     if (Directory.GetFiles(Path.Combine(dataRoot, "history"), "*.clip").Length != 3) throw new IOException("History did not persist through restart.");
                     var cpu = listener.TotalProcessorTime; var idle = Stopwatch.StartNew();
                     await Task.Delay(30000); listener.Refresh();

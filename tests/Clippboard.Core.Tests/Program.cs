@@ -27,6 +27,7 @@ internal static class Program
         try
         {
             CheckFormats();
+            await CheckFileProbeAsync(root);
             Check(MotionMath.Settle(0, true) == 0 && MotionMath.Settle(1, true) == 1, "spring rests at exact endpoints");
             Check(Enumerable.Range(0, 101).Select(i => MotionMath.Settle(i / 100.0, true)).Max() is > 1 and < 1.2, "spring bounce bounded");
             Check(MotionMath.RopeHeight(0, 1600, 24) == 20 && MotionMath.RopeHeight(800, 1600, 24) == 44, "rope attachment curve");
@@ -138,6 +139,10 @@ internal static class Program
                 Check(ClipboardService.ReadData(files, () => null)?.Kind == ClipKind.Files, "files before text");
                 var many = new DataObject(); many.SetData(DataFormats.FileDrop, Enumerable.Range(0, 101).Select(i => @"C:\sample-" + i).ToArray());
                 Check(ClipboardService.ReadData(many, () => null) is null, "file count limit");
+                var invalidFiles = new DataObject(); invalidFiles.SetData(DataFormats.FileDrop, new string[] { null! });
+                Check(ClipboardService.ReadData(invalidFiles, () => null) is null, "malformed null file location cannot crash capture");
+                var blankFiles = new DataObject(); blankFiles.SetData(DataFormats.FileDrop, new[] { " " });
+                Check(ClipboardService.ReadData(blankFiles, () => null) is null, "blank file location rejected");
                 var bitmap = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8);
                 var image = new DataObject(); image.SetImage(bitmap);
                 var converted = ClipboardService.ReadData(image, () => bitmap);
@@ -155,6 +160,32 @@ internal static class Program
         });
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
         if (failure is not null) throw new InvalidOperationException("Format checks failed", failure);
+    }
+    private static async Task CheckFileProbeAsync(string root)
+    {
+        var existing = Path.Combine(root, "probe-fixture.txt"); await File.WriteAllTextAsync(existing, "synthetic");
+        var local = new FileAvailabilityProbe();
+        Check(await local.CheckAsync([existing]), "file probe finds existing original");
+        Check(!await local.CheckAsync([Path.Combine(root, "missing.txt")]), "file probe rejects missing original");
+        Check(!await local.CheckAsync([]), "empty file reference rejected");
+        using var release = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var workers = 0;
+        var slow = new FileAvailabilityProbe(_ => { Interlocked.Increment(ref workers); entered.TrySetResult(); release.Wait(); finished.TrySetResult(); return true; }, TimeSpan.FromMilliseconds(100));
+        try
+        {
+            var first = slow.CheckAsync([existing]); await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            var timedOut = false; try { await first; } catch (FileAvailabilityException) { timedOut = true; }
+            Check(timedOut, "offline file wait returns a recoverable timeout");
+            for (var attempt = 0; attempt < 10; attempt++)
+            {
+                var busy = false; try { await slow.CheckAsync([existing]); } catch (FileAvailabilityException) { busy = true; }
+                Check(busy, "retries cannot spawn more blocked workers " + attempt);
+            }
+            Check(workers == 1, "outstanding file workers bounded to one");
+        }
+        finally { release.Set(); await finished.Task.WaitAsync(TimeSpan.FromSeconds(3)); }
     }
     private static void CheckVisuals(string root)
     {
@@ -318,6 +349,11 @@ internal static class Program
                 Check(missingRejected, "missing original does not replace clipboard");
             }
             finally { service.Paused = true; Clipboard.Clear(); }
+            service.Dispose(); service.Dispose(); Check(true, "clipboard listener disposal is idempotent");
+            var disposedRejected = false;
+            try { Pump(service.RestoreAsync(new Clip { Kind = ClipKind.Text, Text = "must not write" })); }
+            catch (ObjectDisposedException) { disposedRejected = true; }
+            Check(disposedRejected, "disposed listener cannot change clipboard");
         }
     }
     private static async Task WaitForCapture(Func<bool> ready)

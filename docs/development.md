@@ -24,4 +24,6 @@ Use synthetic data. Check Notepad text paste, screenshot-to-Paint paste, and fil
 
 Measure idle CPU for five minutes, working set after repeated image captures/reopen, and disk use at quota. Record evidence in `testing.md`; provisional targets are not measured claims.
 
+File restore checks the original locations off the dispatcher with a three-second caller timeout and one outstanding worker. A stalled Windows network-file call may continue in that worker until Windows resolves it; retries fail without creating more workers. Other clip types remain available.
+
 Preview options: `./scripts/dev.ps1 preview -Theme Midnight`, `-Settings`, `-Detail`, and `-PreviewPath docs/assets/rope-preview.png`. `-Measure` uses 1,000 synthetic notes and writes `artifacts/performance.json`. This excludes clipboard capture, real large-image loads, and installation; it is a reproducible diagnostic, not a production benchmark. Force-collection is used only by this diagnostic mode.

@@ -22,6 +22,8 @@ internal sealed class ClipboardService : IDisposable
     private uint _ownSequence;
     private int _attempts;
     private bool _saving;
+    private bool _disposed;
+    private readonly FileAvailabilityProbe _fileProbe = new();
     public bool Paused { get; set; }
     public AppSettings Settings { get; set; } = new();
     public bool HotkeyAvailable { get; private set; }
@@ -35,7 +37,7 @@ internal sealed class ClipboardService : IDisposable
         _save = save;
         _source = new HwndSource(new HwndSourceParameters("Clippboard listener") { Width = 0, Height = 0, WindowStyle = 0 });
         _source.AddHook(WndProc);
-        if (!NativeMethods.AddClipboardFormatListener(_source.Handle)) throw new InvalidOperationException("Cannot listen to the Windows clipboard.");
+        if (!NativeMethods.AddClipboardFormatListener(_source.Handle)) { _source.RemoveHook(WndProc); _source.Dispose(); throw new InvalidOperationException("Cannot listen to the Windows clipboard."); }
         _shortcut = shortcut;
         HotkeyAvailable = NativeMethods.RegisterHotKey(_source.Handle, _hotkeyId, ShortcutModifiers(shortcut), 0x56);
         _retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
@@ -44,6 +46,7 @@ internal sealed class ClipboardService : IDisposable
 
     private nint WndProc(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
+        if (_disposed) return 0;
         if (message == 0x0312 && wParam == _hotkeyId) { ToggleRequested?.Invoke(); handled = true; }
         if (message == 0x031D && !Paused)
         {
@@ -55,6 +58,7 @@ internal sealed class ClipboardService : IDisposable
 
     private async void Retry(object? sender, EventArgs e)
     {
+        if (_disposed) { _retry.Stop(); return; }
         if (_saving) return;
         if (Paused || _sequence == _ownSequence) { _retry.Stop(); return; }
         var sequence = _sequence;
@@ -65,7 +69,7 @@ internal sealed class ClipboardService : IDisposable
             if (sequence != NativeMethods.GetClipboardSequenceNumber() || clip is null) return;
             _saving = true;
             try { await _save(clip); }
-            finally { _saving = false; if (_sequence != sequence && !Paused) _retry.Start(); }
+            finally { _saving = false; if (_sequence != sequence && !Paused && !_disposed) _retry.Start(); }
         }
         catch (COMException)
         {
@@ -101,7 +105,7 @@ internal sealed class ClipboardService : IDisposable
         if (settings?.CaptureFiles != false && data.GetDataPresent(DataFormats.FileDrop))
         {
             var paths = data.GetData(DataFormats.FileDrop) as string[];
-            if (paths is null || paths.Length == 0 || paths.Length > 100 || paths.Any(x => x.Length > 32767)) return null;
+            if (paths is null || paths.Length == 0 || paths.Length > 100 || paths.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 32767)) return null;
             return new Clip { Kind = ClipKind.Files, FilePaths = paths };
         }
         if (settings?.CaptureImages != false && data.GetDataPresent(DataFormats.Bitmap))
@@ -126,6 +130,7 @@ internal sealed class ClipboardService : IDisposable
 
     public async Task RestoreAsync(Clip clip)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var data = new DataObject();
         switch (clip.Kind)
         {
@@ -141,7 +146,7 @@ internal sealed class ClipboardService : IDisposable
             case ClipKind.Files:
                 var paths = clip.FilePaths ?? [];
                 // Avoid blocking Explorer's UI on unavailable network shares.
-                var available = await Task.Run(() => paths.All(x => File.Exists(x) || Directory.Exists(x)));
+                var available = await _fileProbe.CheckAsync(paths);
                 if (!available) throw new FileNotFoundException("An original file was moved, deleted, or is unavailable. Copy it again.");
                 var files = new StringCollection(); files.AddRange(paths); data.SetFileDropList(files);
                 // Always restore as COPY, never replay an old cut operation.
@@ -149,6 +154,7 @@ internal sealed class ClipboardService : IDisposable
                 break;
         }
         // The setter is synchronous, so own sequence is recorded before the message pump handles its event.
+        ObjectDisposedException.ThrowIf(_disposed, this);
         Clipboard.SetDataObject(data, true);
         _ownSequence = NativeMethods.GetClipboardSequenceNumber();
     }
@@ -165,6 +171,8 @@ internal sealed class ClipboardService : IDisposable
     }
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         _retry.Stop(); _retry.Tick -= Retry;
         NativeMethods.UnregisterHotKey(_source.Handle, _hotkeyId);
         NativeMethods.RemoveClipboardFormatListener(_source.Handle);

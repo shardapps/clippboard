@@ -1,5 +1,7 @@
 # Privacy and storage
 
+Public policy for users and the Microsoft Store: [Clippboard Privacy Policy](https://shardapps.github.io/clippboard/privacy/), published by ShardCoders. This document provides additional implementation details. The static policy site adds no analytics, scripts, forms or cookies; GitHub Pages hosting follows [GitHub's Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+
 Capture runs only while the app is running and enabled. The app does not read historical Windows clipboard records, capture keyboard input, take screenshots, or upload clipboard content.
 
 Regular builds use `%LOCALAPPDATA%\ShardApps\Clippboard\history`. `--dev` uses ignored repository `.data/history`. SDK, caches, outputs, and temporary development files stay in the project. Runtime history is never committed.
@@ -26,7 +28,7 @@ Pins are not backups. Clear/delete, disk failure, account loss, and damaged reco
 
 The app checks `ExcludeClipboardContentFromMonitorProcessing` and supported zero-valued `CanIncludeInClipboardHistory` markers. Apps without markers can expose secrets to history. Pause before copying private data; capture preferences, including pause, persist across restarts.
 
-× deletes an entry; Clear history includes pins. Deletion removes history files but does not clear the system clipboard or guarantee forensic erasure on SSDs/backups. Uninstall preserves history for upgrades; clear it first if desired. Google Drive or other backup software may independently sync development `.data/`; use synthetic data in this synced workspace.
+× deletes an entry; Clear history includes pins. Deletion removes history files but does not clear the system clipboard or guarantee forensic erasure on SSDs/backups. The EXE uninstaller preserves history for upgrades; clear history inside the app before uninstalling if you want it removed. Store-installed uninstall behavior still requires validation. Google Drive or other backup software may independently sync development `.data/`; use synthetic data in this synced workspace.
 
 No app network service, updater, telemetry, or crash upload is included. The project menu link opens GitHub in your browser. Development and CI use package/build services.
 

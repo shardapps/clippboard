@@ -27,7 +27,7 @@ Built by [Shard Apps](https://github.com/shardapps). Open source, local first, a
 
 - **One shortcut, one click:** global shortcut and notification-area icon.
 - **Paper, rope, and pegs:** soft colors, rounded notes, smooth entrance and retraction.
-- **Pin what matters:** pinned notes survive expiry; delete individual notes or clear everything.
+- **Star what matters:** starred notes survive capacity eviction; every clip follows the chosen 1–30-day retention period.
 - **Local storage:** Windows DPAPI protects saved contents for your Windows user. No accounts, sync, telemetry, or application network service.
 - **Bounded history:** 30 days for unpinned entries, 500 clips, and 256 MiB of encrypted payloads. New items are rejected if pins fill the budget.
 - **Pause on demand:** use the rope or tray menu before copying something sensitive.

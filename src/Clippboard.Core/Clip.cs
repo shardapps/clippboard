@@ -35,9 +35,15 @@ public sealed record Clip
         {
             ClipKind.Text => (Text ?? "")[..Math.Min(Text?.Length ?? 0, 320)],
             ClipKind.Image => "Copied image",
-            ClipKind.Files => string.Join("\n", (FilePaths ?? []).Take(5).Select(Path.GetFileName)),
+            ClipKind.Files => FilePreview(),
             _ => ""
         }, Fingerprint(), storedBytes);
+
+    private string FilePreview()
+    {
+        var preview = string.Join("\n", (FilePaths ?? []).Take(5).Select(Path.GetFileName));
+        return preview[..Math.Min(preview.Length, 320)];
+    }
 }
 
 public sealed record ClipSummary(string Id, ClipKind Kind, DateTimeOffset CopiedAt,

@@ -1,6 +1,6 @@
 # Validation record
 
-The executable regression suite covers Unicode/binary persistence, encrypted-at-rest bytes with real Windows DPAPI, file references, dedup/pins, retention, count/disk caps, oversize/full-pin rejection, restart persistence, corruption recovery, clear including pins, and concurrent writes. Synthetic WPF data objects also check format precedence, text/file limits, PNG conversion, sensitive exclusion markers, and the native input ABI. These checks do not touch the system clipboard. Run `scripts/dev.ps1 test`. CI uses the same suite.
+The executable regression suite covers Unicode/binary persistence, encrypted-at-rest bytes with real Windows DPAPI, file references, dedup/pins, retention, count/disk caps, oversize/full-pin rejection, restart persistence, corruption recovery, clear including pins, and concurrent writes. Synthetic WPF data objects also check format precedence, text/file limits, PNG conversion, sensitive exclusion markers, and the native input ABI. Local checks do not touch the system clipboard. Isolated GitHub Actions runners also exercise real clipboard notifications with synthetic fixtures. Run `scripts/dev.ps1 test`.
 
 Release builds validate core and WPF compilation. The app-rendered sample preview exercises XAML loading without accessing the clipboard. Packaging generates the self-contained executable and checksums.
 
@@ -70,3 +70,9 @@ CI now exercises actual Windows notifications, Unicode text/image/file capture, 
 ## Control feedback polish
 
 129 local assertions pass. Added checks exercise actual button hover/leave feedback, non-sticky highlights with reduced motion, and initial/toggled switch positions after WPF Loaded events, bounded continuous-sway endpoints and an old dismiss animation that cannot remove reopened settings. Keyboard focus outlines render above the hover layer. Real users and device testing are still needed to evaluate subjective motion, touch and screen-reader accessibility.
+
+## Detached image buffers
+
+131 local assertions pass. A new weak-reference lifetime test failed against the previous decoder: its frozen BitmapImage retained the original PNG MemoryStream despite OnLoad. The fix copies decoded BGRA pixels into an independent frozen BitmapSource. The same test now proves the original encoded buffer can be collected while the decoded image remains alive; an opaque-color roundtrip also preserves original dimensions and pixel values. Thumbnail/full-note decode and clipboard image restoration use this detached path. Image format/size errors produce recoverable status messages. Size-only appearance edits reuse theme brushes.
+
+This fixes encoded-buffer retention, but decoded-image cache bytes do not represent total process RAM. WPF/CLR, compositor surfaces, in-flight decoding and clipboard rendering still add memory. The earlier whole-process diagnostic remains a limitation, not a low-RAM claim.

@@ -13,6 +13,7 @@ using Clippboard.App.Platform;
 using Clippboard.App.Views;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using Clippboard.Core;
 using Clippboard.App.Design;
 
@@ -156,6 +157,17 @@ internal static class Program
                 using var stream = new MemoryStream(); encoder.Save(stream);
                 var thumbnail = PreviewCache.Decode(stream.ToArray(), 360, 230);
                 Check(thumbnail.PixelHeight <= 230 && thumbnail.PixelWidth <= 360 && thumbnail.IsFrozen, "tall image thumbnail stays bounded");
+                var detached = DecodeForLifetimeCheck();
+                GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+                Check(!detached.Encoded.TryGetTarget(out _), "decoded image does not retain its encoded source buffer");
+                GC.KeepAlive(detached.Image);
+                var rgba = new byte[] { 10, 30, 90, 255, 200, 130, 40, 255 };
+                var colorSource = BitmapSource.Create(2, 1, 96, 96, PixelFormats.Bgra32, null, rgba, 8);
+                var colorEncoder = new PngBitmapEncoder(); colorEncoder.Frames.Add(BitmapFrame.Create(colorSource));
+                using var colors = new MemoryStream(); colorEncoder.Save(colors);
+                var colorImage = PreviewCache.Decode(colors.ToArray(), int.MaxValue, int.MaxValue);
+                var restoredPixels = new byte[8]; colorImage.CopyPixels(restoredPixels, 8, 0);
+                Check(colorImage.PixelWidth == 2 && colorImage.PixelHeight == 1 && restoredPixels.SequenceEqual(rgba), "detached decode preserves original dimensions and opaque pixel colors");
                 Check(Marshal.SizeOf<NativeMethods.Input>() == (Environment.Is64BitProcess ? 40 : 28), "native input ABI size");
             }
             catch (Exception ex) { failure = ex; }
@@ -331,6 +343,15 @@ internal static class Program
         });
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
         if (failure is not null) throw new InvalidOperationException("Visual checks failed", failure);
+    }
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (BitmapSource Image, WeakReference<byte[]> Encoded) DecodeForLifetimeCheck()
+    {
+        var source = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8);
+        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(source));
+        using var stream = new MemoryStream(); encoder.Save(stream);
+        var bytes = stream.ToArray();
+        return (PreviewCache.Decode(bytes, 360, 230), new WeakReference<byte[]>(bytes));
     }
     private static void Pump(Task task)
     {

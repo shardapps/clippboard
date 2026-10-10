@@ -110,7 +110,7 @@ public partial class RopeWindow
             Grid.SetRow(footer, 2); body.Children.Add(footer); DetailHost.Child = body; content.Focus();
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException or System.Security.Cryptography.CryptographicException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException or UnauthorizedAccessException or NotSupportedException or ArgumentException or System.Security.Cryptography.CryptographicException)
         { if (!cancellation.IsCancellationRequested) { DetailHost.Child = new TextBlock { Text = "This note could not be opened. Try copying the original again.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24), FontSize = 18 }; } }
     }
     private static ControlTemplate GripTemplate()

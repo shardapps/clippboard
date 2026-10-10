@@ -71,8 +71,9 @@ public partial class RopeWindow : Window
     }
     internal void PreviewAppearance(AppSettings draft)
     {
-        _appearance = draft.Normalize(); Interaction.SetEnabled(this, _appearance.Animate);
-        ThemeManager.Apply(_appearance.Theme, Resources);
+        var next = draft.Normalize();
+        if (_appearance.Theme != next.Theme || !Resources.Contains("Foreground")) ThemeManager.Apply(next.Theme, Resources);
+        _appearance = next; Interaction.SetEnabled(this, _appearance.Animate);
         if (Notes is null || Retired) return;
         Notes.Width = Math.Max(NoteScroll.ViewportWidth, 48 + _visible.Count * Pitch - (_visible.Count > 0 ? _appearance.NoteSpacing : 0));
         foreach (var (index, card) in _cards)
@@ -192,7 +193,7 @@ public partial class RopeWindow : Window
             if (card.Tag is Button select && bitmap is not null) select.Content = new Image { Source = bitmap, Stretch = Stretch.Uniform, MaxHeight = 215 };
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) when (ex is IOException or NotSupportedException or ArgumentException or System.Security.Cryptography.CryptographicException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException or NotSupportedException or ArgumentException or System.Security.Cryptography.CryptographicException)
         { if (!cancellation.IsCancellationRequested) SetStatus("An image preview is unavailable. Expand it to try again."); }
     }
     private Grid BuildNote(ClipSummary entry)

@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
+using System.Windows.Media;
 using Clippboard.Core;
 
 namespace Clippboard.App.Services;
@@ -59,8 +60,14 @@ internal sealed class PreviewCache(HistoryStore store)
         var bitmap = new BitmapImage(); bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad;
         bitmap.DecodePixelWidth = Math.Max(1, (int)(frame.PixelWidth * scale));
         bitmap.DecodePixelHeight = Math.Max(1, (int)(frame.PixelHeight * scale));
-        bitmap.StreamSource = stream; bitmap.EndInit(); bitmap.Freeze();
-        return bitmap;
+        bitmap.StreamSource = stream; bitmap.EndInit();
+        // BitmapImage retains StreamSource even with OnLoad. Copy only decoded
+        // pixels into an independent source so LRU entries cannot retain full PNGs.
+        BitmapSource source = bitmap.Format == PixelFormats.Bgra32 ? bitmap : new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+        var stride = checked(source.PixelWidth * 4);
+        var pixels = new byte[checked(stride * source.PixelHeight)]; source.CopyPixels(pixels, stride, 0);
+        var detached = BitmapSource.Create(source.PixelWidth, source.PixelHeight, source.DpiX, source.DpiY, PixelFormats.Bgra32, null, pixels, stride);
+        detached.Freeze(); return detached;
     }
 
     public void Remove(string id)

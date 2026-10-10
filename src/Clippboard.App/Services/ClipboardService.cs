@@ -136,12 +136,8 @@ internal sealed class ClipboardService : IDisposable
         {
             case ClipKind.Text: data.SetText(clip.Text ?? "", TextDataFormat.UnicodeText); break;
             case ClipKind.Image:
-                using (var stream = new MemoryStream(clip.ImagePng ?? []))
-                {
-                    var bitmap = new BitmapImage();
-                    bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad; bitmap.StreamSource = stream; bitmap.EndInit(); bitmap.Freeze();
-                    data.SetImage(bitmap);
-                }
+                // Preserve original dimensions, without retaining its encoded buffer.
+                data.SetImage(PreviewCache.Decode(clip.ImagePng ?? [], int.MaxValue, int.MaxValue));
                 break;
             case ClipKind.Files:
                 var paths = clip.FilePaths ?? [];

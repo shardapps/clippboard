@@ -78,6 +78,7 @@ internal sealed class SettingsView : UserControl
             shortcut.Click += (_, _) => { _draft = _draft with { Shortcut = (ShortcutChoice)(((int)_draft.Shortcut + 1) % 3) }; shortcut.Content = "Shortcut: " + ShortcutLabel(_draft.Shortcut); };
             _content.Children.Add(shortcut); Hint("Click to cycle shortcuts. A shortcut used by another app will be rejected when saved.");
             if (_startupAvailable) Toggle("Start at Windows sign-in", _draft.StartAtLogin, v => _draft = _draft with { StartAtLogin = v });
+            else Hint("Store installations: use the tray’s Manage Windows startup command to opt in. Development runs do not change startup settings.");
         }
         else if (page == 2)
         {

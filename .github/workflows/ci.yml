@@ -56,6 +56,10 @@ jobs:
         run: ./scripts/verify-package.ps1
       - name: Isolated install, reinstall, native startup and uninstall
         run: ./scripts/test-installer.ps1
+      - name: Build and validate Microsoft Store MSIX
+        run: ./scripts/store-package.ps1
+      - name: Verify Store identity, contents and checksums
+        run: ./scripts/verify-store-package.ps1
       - name: Upload testing builds
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -67,5 +71,7 @@ jobs:
             artifacts/build-info.json
             artifacts/installer-tests/installed-preview.png
             artifacts/overlay-lifecycle*.json
+            artifacts/store/**/*.msix
+            artifacts/store/**/package-info.json
           if-no-files-found: error
           retention-days: 14

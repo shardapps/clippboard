@@ -69,7 +69,7 @@ public partial class App : Application
             if (!_ownsMutex) { MessageBox.Show("Clippboard is already running. Use Ctrl + Shift + V or its tray icon.", "Clippboard"); Shutdown(); return; }
             _settingsStore = new SettingsStore(Path.Combine(root, "settings.json"));
             _settings = await _settingsStore.LoadAsync();
-            if (!_development) _settings = _settings with { StartAtLogin = StartupEnabled() };
+            if (!_development) _settings = _settings with { StartAtLogin = !PackageIdentity.IsPackaged && StartupEnabled() };
             _store = new HistoryStore(Path.Combine(root, "history"), new WindowsProtector(), _settings.HistoryLimits());
             await Task.Run(() => _store.InitializeAsync());
 
@@ -147,6 +147,7 @@ public partial class App : Application
         if (_savingSettings || _clipboard is null) return "A settings change is already in progress. Try again.";
         _savingSettings = true;
         var previous = _settings; var next = settings.Normalize(); var persisted = false;
+        if (PackageIdentity.IsPackaged) next = next with { StartAtLogin = false };
         _clipboard.Paused = true;
         try
         {
@@ -157,7 +158,7 @@ public partial class App : Application
                 return "Starred notes exceed that budget. Unstar or delete some, or increase the limit.";
             if (next.Shortcut != previous.Shortcut && !_clipboard.ChangeShortcut(next.Shortcut))
                 return "That shortcut is in use. Your current shortcut is unchanged.";
-            if (!_development && next.StartAtLogin != previous.StartAtLogin) SetStartup(next.StartAtLogin);
+            if (!_development && !PackageIdentity.IsPackaged && next.StartAtLogin != previous.StartAtLogin) SetStartup(next.StartAtLogin);
             await _settingsStore!.SaveAsync(next); persisted = true;
             if (!await Task.Run(() => _store!.UpdateLimitsAsync(next.HistoryLimits())))
             {
@@ -174,7 +175,7 @@ public partial class App : Application
             else
             {
                 if (next.Shortcut != previous.Shortcut) _clipboard.ChangeShortcut(previous.Shortcut);
-                if (!_development && next.StartAtLogin != previous.StartAtLogin)
+                if (!_development && !PackageIdentity.IsPackaged && next.StartAtLogin != previous.StartAtLogin)
                     try { SetStartup(previous.StartAtLogin); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { Notify("Check your Windows sign-in startup preference."); }
             }
             _clipboard.Settings = _settings; _clipboard.Paused = _settings.CapturePaused;
@@ -183,7 +184,7 @@ public partial class App : Application
             {
                 _tray.Text = _settings.CapturePaused ? "Clippboard · Capture paused" : "Clippboard · " + SettingsView.ShortcutLabel(_settings.Shortcut);
                 _tray.ContextMenuStrip!.Items[0].Text = "Open rope · " + SettingsView.ShortcutLabel(_settings.Shortcut);
-                if (!_development && _tray.ContextMenuStrip.Items[2] is Forms.ToolStripMenuItem startup) startup.Checked = _settings.StartAtLogin;
+                if (!_development && !PackageIdentity.IsPackaged && _tray.ContextMenuStrip.Items[2] is Forms.ToolStripMenuItem startup) startup.Checked = _settings.StartAtLogin;
             }
             _savingSettings = false;
         }
@@ -194,7 +195,9 @@ public partial class App : Application
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Open rope · " + SettingsView.ShortcutLabel(_settings.Shortcut), null, (_, _) => ToggleRope());
         menu.Items.Add("Pause / resume capture", null, (_, _) => TogglePause());
-        if (!_development)
+        if (!_development && PackageIdentity.IsPackaged)
+            menu.Items.Add("Manage Windows startup", null, (_, _) => { try { Process.Start(new ProcessStartInfo("ms-settings:startupapps") { UseShellExecute = true }); } catch (System.ComponentModel.Win32Exception) { Notify("Open Windows Settings → Apps → Startup to enable Clippboard."); } });
+        else if (!_development)
         {
             var startup = new Forms.ToolStripMenuItem("Start at sign-in") { Checked = StartupEnabled() };
             startup.Click += async (_, _) =>

@@ -10,7 +10,7 @@ using Clippboard.Core;
 namespace Clippboard.App.Services;
 
 // Called on the UI dispatcher. Loading/decoding runs off it; no plaintext temp images are created.
-internal sealed class PreviewCache(HistoryStore store)
+internal sealed class PreviewCache(IHistoryAccess store)
 {
     private sealed record Entry(BitmapSource Image, long Bytes, LinkedListNode<string> Node);
     private readonly Dictionary<string, Entry> _images = new();

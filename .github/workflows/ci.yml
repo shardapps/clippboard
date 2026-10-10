@@ -42,6 +42,12 @@ jobs:
         run: ./scripts/dev.ps1 test
       - name: Signing and packaging failure guards
         run: ./scripts/test-packaging-guards.ps1
+      - name: Overlay process lifecycle with hardware and software rendering
+        shell: pwsh
+        run: |
+          ./scripts/dev.ps1 lifecycle
+          Move-Item -LiteralPath artifacts/overlay-lifecycle.json -Destination artifacts/overlay-lifecycle-hardware.json
+          ./scripts/dev.ps1 lifecycle -Software
       - name: Publish portable executable
         run: ./scripts/dev.ps1 publish
       - name: Build per-user installer
@@ -60,5 +66,6 @@ jobs:
             artifacts/SHA256SUMS.txt
             artifacts/build-info.json
             artifacts/installer-tests/installed-preview.png
+            artifacts/overlay-lifecycle*.json
           if-no-files-found: error
           retention-days: 14

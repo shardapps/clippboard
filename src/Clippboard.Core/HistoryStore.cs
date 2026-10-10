@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace Clippboard.Core;
 
 // Only short summaries remain in memory. Payloads are encrypted independently on disk.
-public sealed class HistoryStore(string directory, IContentProtector protector, HistoryLimits? limits = null)
+public sealed class HistoryStore(string directory, IContentProtector protector, HistoryLimits? limits = null) : IHistoryAccess
 {
     private HistoryLimits _limits = Validate(limits ?? new());
     private readonly SemaphoreSlim _gate = new(1, 1);

@@ -36,6 +36,8 @@ Built by [Shard Apps](https://github.com/shardapps). Open source, local first, a
 
 Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setups need further validation before being advertised as supported.
 
+**Unsigned alpha binaries:** open a successful [Windows build](https://github.com/shardapps/clippboard/actions/workflows/ci.yml), download the `clippboard-windows-x64-alpha` artifact, and unzip it. Run `installer/Clippboard-Setup-0.1.0.exe` for a per-user installation, or `portable/win-x64/Clippboard.exe` directly. GitHub may require sign-in for artifact downloads; artifacts expire after 14 days. These are evaluation builds, not stable releases.
+
 1. Clone this repository and open PowerShell in its folder.
 2. Run `./scripts/bootstrap.ps1` to install a private .NET 10 SDK under `.tools/` and build.
 3. Run `./scripts/dev.ps1 run` to start the development app.

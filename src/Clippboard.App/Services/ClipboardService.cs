@@ -24,24 +24,27 @@ internal sealed class ClipboardService : IDisposable
     private bool _saving;
     public bool Paused { get; set; }
     public AppSettings Settings { get; set; } = new();
-    public bool HotkeyAvailable { get; }
+    public bool HotkeyAvailable { get; private set; }
+    private int _hotkeyId = 1;
+    private ShortcutChoice _shortcut;
     public event Action? ToggleRequested;
     public event Action<string>? Notice;
 
-    public ClipboardService(Func<Clip, Task> save)
+    public ClipboardService(Func<Clip, Task> save, ShortcutChoice shortcut = ShortcutChoice.CtrlShiftV)
     {
         _save = save;
         _source = new HwndSource(new HwndSourceParameters("Clippboard listener") { Width = 0, Height = 0, WindowStyle = 0 });
         _source.AddHook(WndProc);
         if (!NativeMethods.AddClipboardFormatListener(_source.Handle)) throw new InvalidOperationException("Cannot listen to the Windows clipboard.");
-        HotkeyAvailable = NativeMethods.RegisterHotKey(_source.Handle, 1, 0x4000 | 0x0002 | 0x0004, 0x56); // No repeat + Ctrl + Shift + V
+        _shortcut = shortcut;
+        HotkeyAvailable = NativeMethods.RegisterHotKey(_source.Handle, _hotkeyId, ShortcutModifiers(shortcut), 0x56);
         _retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
         _retry.Tick += Retry;
     }
 
     private nint WndProc(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
-        if (message == 0x0312) { ToggleRequested?.Invoke(); handled = true; }
+        if (message == 0x0312 && wParam == _hotkeyId) { ToggleRequested?.Invoke(); handled = true; }
         if (message == 0x031D && !Paused)
         {
             _sequence = NativeMethods.GetClipboardSequenceNumber();
@@ -150,10 +153,20 @@ internal sealed class ClipboardService : IDisposable
         _ownSequence = NativeMethods.GetClipboardSequenceNumber();
     }
 
+    internal static uint ShortcutModifiers(ShortcutChoice choice) => 0x4000u | (choice switch { ShortcutChoice.AltV => 0x0001u, ShortcutChoice.CtrlAltV => 0x0003u, _ => 0x0006u });
+    public bool ChangeShortcut(ShortcutChoice choice)
+    {
+        if (choice == _shortcut && HotkeyAvailable) return true;
+        var nextId = _hotkeyId == 1 ? 2 : 1;
+        // Reserve the replacement before releasing the working shortcut.
+        if (!NativeMethods.RegisterHotKey(_source.Handle, nextId, ShortcutModifiers(choice), 0x56)) return false;
+        if (HotkeyAvailable) NativeMethods.UnregisterHotKey(_source.Handle, _hotkeyId);
+        _hotkeyId = nextId; _shortcut = choice; HotkeyAvailable = true; return true;
+    }
     public void Dispose()
     {
         _retry.Stop(); _retry.Tick -= Retry;
-        NativeMethods.UnregisterHotKey(_source.Handle, 1);
+        NativeMethods.UnregisterHotKey(_source.Handle, _hotkeyId);
         NativeMethods.RemoveClipboardFormatListener(_source.Handle);
         _source.RemoveHook(WndProc); _source.Dispose();
     }

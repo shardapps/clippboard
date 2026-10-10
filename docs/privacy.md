@@ -15,7 +15,8 @@ Each entry is encrypted with DPAPI `CurrentUser` before atomic file replacement.
 | Text | 524,288 UTF-16 code units |
 | Image | 16 million pixels / 16 MiB encoded PNG |
 | File references per entry | 100 |
-| Rendered notes | 40 |
+| Rendered notes | Viewport + overscan |
+| Image preview cache | Configurable 4–64 MiB; default 16 MiB |
 
 Expiry runs at startup, before additions/reads, and every 15 minutes. Stars survive normal capacity eviction but still expire after the configured period (maximum 30 days). New clips are rejected when stars leave no room. Duplicate content refreshes the note and preserves its star. Lower budgets are rejected if unexpired stars alone exceed them; delete or unstar items before retrying.
 
@@ -30,3 +31,5 @@ The app checks `ExcludeClipboardContentFromMonitorProcessing` and supported zero
 No app network service, updater, telemetry, or crash upload is included. The project menu link opens GitHub in your browser. Development and CI use package/build services.
 
 Encrypted `.meta` files hold short summaries and payload size/timestamp references, so normal startup does not decrypt image payloads. Missing/stale metadata is rebuilt from the authoritative encrypted payload. Both payloads and metadata are removed on deletion/expiry. Temporary atomic-write files are removed after use and at startup. Settings contain only configuration and are stored separately as JSON; no clipboard payload is written to the settings file.
+
+Image previews decode only when visible, fit within 360 × 230 pixels, and use byte-bounded LRU eviction. At most two thumbnail loads/decode operations run at once. Expanded images fit within 1,600 × 1,000 pixels. Closing cancels pending loads and removes image, detail and card references. No decrypted image temp files are created; encrypted history remains on disk until deletion, expiry or eviction.

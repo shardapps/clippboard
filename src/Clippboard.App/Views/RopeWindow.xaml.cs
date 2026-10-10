@@ -37,6 +37,7 @@ public partial class RopeWindow : Window
     public event Action<ClipSummary>? ExpandRequested;
     internal int RenderedNoteCount => _cards.Count;
     internal long CachedImageBytes => _cache.RetainedBytes;
+    internal bool Retired { get; private set; }
     private double Pitch => _settings.NoteWidth + _settings.NoteSpacing;
     private bool Animated => _settings.Animate && SystemParameters.ClientAreaAnimation;
 
@@ -47,7 +48,9 @@ public partial class RopeWindow : Window
         InitializeComponent();
         ApplyAppearance(_settings);
         Rope.ShapeChanged += PositionNotes;
-        Closed += (_, _) => { _loads.Cancel(); _loads.Dispose(); _cache.Clear(); };
+        SettingsRequested += () => OpenSettings();
+        ExpandRequested += async entry => await OpenDetailAsync(entry);
+        Closed += (_, _) => { Retired = true; DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
     }
     public void ApplyAppearance(AppSettings settings)
     {
@@ -85,8 +88,7 @@ public partial class RopeWindow : Window
     {
         if (!IsVisible || _closing) return;
         _closing = true; ++_renderVersion; CancelLoads();
-        SidebarHost.Visibility = DetailHost.Visibility = Visibility.Collapsed;
-        SidebarHost.Child = DetailHost.Child = null;
+        DismissSettings(); DismissDetail();
         var duration = Animated ? 280 : 1;
         Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-600, TimeSpan.FromMilliseconds(duration))
         { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } });
@@ -94,17 +96,20 @@ public partial class RopeWindow : Window
         Hide(); Notes.Children.Clear(); _cards.Clear(); _cache.Clear();
         Slide.BeginAnimation(TranslateTransform.YProperty, null); Slide.Y = -600;
         Rope.BeginAnimation(RopeVisual.SagProperty, null); _closing = false;
+        Close(); // Destroy the transparent native surface; the tray creates a fresh overlay on next open.
     }
     private void CancelLoads() { _loads.Cancel(); _loads.Dispose(); _loads = new(); }
     public async Task RefreshAsync()
     {
+        if (Retired) return;
         var version = ++_renderVersion;
         var entries = await Task.Run(() => _store.ListAsync());
-        if (version != _renderVersion || _closing) return;
+        if (version != _renderVersion || _closing || Retired) return;
         _entries = entries; RebuildNotes();
     }
     private void RebuildNotes()
     {
+        if (Retired) return;
         CancelLoads(); Notes.Children.Clear(); _cards.Clear();
         _visible = _entries.Where(x => !_starredOnly || x.Pinned)
             .OrderByDescending(x => _settings.StarredFirst && x.Pinned).ThenByDescending(x => x.CopiedAt).ToList();
@@ -248,7 +253,7 @@ public partial class RopeWindow : Window
     private void OnPause(object sender, RoutedEventArgs e) => PauseRequested?.Invoke();
     private async void OnKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) { e.Handled = true; if (DetailHost.Visibility == Visibility.Visible) { DetailHost.Visibility = Visibility.Collapsed; DetailHost.Child = null; } else if (SidebarHost.Visibility == Visibility.Visible) { SidebarHost.Visibility = Visibility.Collapsed; SidebarHost.Child = null; } else await CloseRopeAsync(); }
+        if (e.Key == Key.Escape) { e.Handled = true; if (DetailHost.Visibility == Visibility.Visible) DismissDetail(); else if (SidebarHost.Visibility == Visibility.Visible) DismissSettings(); else await CloseRopeAsync(); }
         else if (SidebarHost.Visibility != Visibility.Visible && DetailHost.Visibility != Visibility.Visible && e.Key is Key.Left or Key.Right)
         { ScrollTo(NoteScroll.HorizontalOffset + (e.Key == Key.Left ? -Pitch : Pitch)); e.Handled = true; }
     }

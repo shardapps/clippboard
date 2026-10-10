@@ -38,7 +38,7 @@ jobs:
         run: dotnet restore Clippboard.slnx --locked-mode
       - name: Compile with warnings as errors
         run: dotnet build Clippboard.slnx -c Release --no-restore -p:ContinuousIntegrationBuild=true
-      - name: Storage regression checks
+      - name: Storage, format and WPF regression checks
         run: ./scripts/dev.ps1 test
       - name: Publish portable executable
         run: ./scripts/dev.ps1 publish

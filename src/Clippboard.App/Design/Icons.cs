@@ -8,7 +8,8 @@ public sealed class IconView : FrameworkElement
 {
     public static readonly DependencyProperty InkProperty = DependencyProperty.Register(nameof(Ink), typeof(Brush), typeof(IconView), new FrameworkPropertyMetadata(Brushes.Black, FrameworkPropertyMetadataOptions.AffectsRender));
     public Brush Ink { get => (Brush)GetValue(InkProperty); set => SetValue(InkProperty, value); }
-    public string Symbol { get; set; } = "logo";
+    public static readonly DependencyProperty SymbolProperty = DependencyProperty.Register(nameof(Symbol), typeof(string), typeof(IconView), new FrameworkPropertyMetadata("logo", FrameworkPropertyMetadataOptions.AffectsRender));
+    public string Symbol { get => (string)GetValue(SymbolProperty); set => SetValue(SymbolProperty, value); }
     public IconView() { Width = 22; Height = 22; IsHitTestVisible = false; SetResourceReference(InkProperty, "Foreground"); }
     protected override void OnRender(DrawingContext dc)
     {

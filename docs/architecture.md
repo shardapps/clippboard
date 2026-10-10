@@ -18,7 +18,7 @@ flowchart LR
 
 ## Resources
 
-Capture is event-driven, with an 80 ms retry timer only during clipboard contention (eight attempts maximum). Rapid clipboard changes may supersede intermediate copies; capture is not lossless. Store operations are serialized and run off the UI thread where practical. Only encrypted metadata summaries are loaded at startup; payloads are opened on demand. The rope renders the viewport plus one note of overscan per side, so every saved entry is reachable without rendering the whole history. Image previews fit within 360 × 230 pixels and use a byte-bounded LRU cache. Hiding cancels loads and releases cards and cached images. No decrypted temporary image files are written.
+Capture is event-driven, with an 80 ms retry timer only during clipboard contention (eight attempts maximum). Rapid clipboard changes may supersede intermediate copies; capture is not lossless. Store operations are serialized and run off the UI thread where practical. Only encrypted metadata summaries are loaded at startup; payloads are opened on demand. The rope renders the viewport plus one note of overscan per side, so every saved entry is reachable without rendering the whole history. Image previews fit within 360 × 230 pixels and use a byte-bounded LRU cache. Closing cancels loads, releases cards and cached images, and destroys the transparent native surface. The next opening creates a fresh overlay. No decrypted temporary image files are written.
 
 Capture limits bound retained resources but cannot control Windows clipboard conversion allocations or another app's delayed rendering. Network-path existence checks can be slow. Stricter timeouts/isolation are planned before stable release.
 
@@ -27,3 +27,5 @@ The overlay uses physical monitor work-area coordinates. Mixed DPI, negative ori
 ## Paste policy
 
 Restore, retract, return focus, wait for modifiers to release, verify foreground, then send Ctrl+V. Denied focus/input leaves the item available for manual paste. Shift+click restores only. File references are checked and restored with copy effect. Destination acceptance cannot be reliably confirmed.
+
+`Design` owns theme brushes and original vector icons/rope geometry. `SettingsView` edits a draft; themes preview without changing capture policy. Saving validates budgets and shortcut availability, persists configuration, then applies the limits and Windows behavior. Expanded views retrieve one full payload on demand and clear it when dismissed. Temporary atomic-write files are cleaned; full-size plaintext image temp files are never needed.

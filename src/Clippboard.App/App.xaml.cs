@@ -36,6 +36,7 @@ public partial class App : Application
     private bool _development;
     private AppSettings _settings = new();
     private SettingsStore? _settingsStore;
+    private bool _savingSettings;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -50,19 +51,18 @@ public partial class App : Application
             _store = new HistoryStore(Path.Combine(root, "history"), new WindowsProtector());
             if (preview >= 0)
             {
-                await PreviewAsync(preview + 1 < e.Args.Length ? e.Args[preview + 1] : throw new ArgumentException("Preview output path required."));
+                await PreviewAsync(preview + 1 < e.Args.Length ? e.Args[preview + 1] : throw new ArgumentException("Preview output path required."), e.Args);
                 Shutdown(); return;
             }
             _instance = new Mutex(true, @"Local\ShardApps.Clippboard." + Environment.UserName + (_development ? ".dev" : ""), out _ownsMutex);
             if (!_ownsMutex) { MessageBox.Show("Clippboard is already running. Use Ctrl + Shift + V or its tray icon.", "Clippboard"); Shutdown(); return; }
             _settingsStore = new SettingsStore(Path.Combine(root, "settings.json"));
             _settings = await _settingsStore.LoadAsync();
+            if (!_development) _settings = _settings with { StartAtLogin = StartupEnabled() };
             _store = new HistoryStore(Path.Combine(root, "history"), new WindowsProtector(), _settings.HistoryLimits());
             await Task.Run(() => _store.InitializeAsync());
-            _rope = new RopeWindow(_store, settings: _settings);
-            _rope.Selected += SelectAsync;
-            _rope.PauseRequested += TogglePause;
-            _clipboard = new ClipboardService(SaveAsync) { Settings = _settings, Paused = _settings.CapturePaused };
+            _rope = CreateRope();
+            _clipboard = new ClipboardService(SaveAsync, _settings.Shortcut) { Settings = _settings, Paused = _settings.CapturePaused };
             _rope.SetPaused(_settings.CapturePaused);
             _clipboard.ToggleRequested += ToggleRope;
             _clipboard.Notice += Notify;
@@ -75,7 +75,7 @@ public partial class App : Application
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Notify("History cleanup failed. Check available disk space and permissions."); }
             };
             _maintenance.Start();
-            if (!_clipboard.HotkeyAvailable) Notify("Ctrl + Shift + V is used by another app. Open Clippboard from its tray icon.");
+            if (!_clipboard.HotkeyAvailable) Notify(SettingsView.ShortcutLabel(_settings.Shortcut) + " is used by another app. Open Clippboard from its tray icon.");
             if (_store.UnreadableEntries > 0) Notify($"Removed {_store.UnreadableEntries} damaged or unreadable history entries.");
             if (!e.Args.Contains("--background")) ToggleRope();
         }
@@ -107,12 +107,21 @@ public partial class App : Application
             if (_rope.IsVisible) await _rope.CloseRopeAsync();
             else
             {
+                if (_rope.Retired) _rope = CreateRope();
                 _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
                 await _rope.OpenAsync(_target);
             }
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException) { Notify("Could not open history. Try again."); }
         finally { _toggling = false; }
+    }
+
+    private RopeWindow CreateRope()
+    {
+        var window = new RopeWindow(_store!, settings: _settings) { StartupAvailable = !_development };
+        window.SettingsSaveRequested += SaveSettingsAsync;
+        window.Selected += SelectAsync; window.PauseRequested += TogglePause;
+        return window;
     }
 
     private async Task SelectAsync(ClipSummary summary)
@@ -148,29 +157,69 @@ public partial class App : Application
     private async void TogglePause()
     {
         if (_clipboard is null) return;
-        var next = _settings with { CapturePaused = !_clipboard.Paused };
-        try { await _settingsStore!.SaveAsync(next); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Notify("Could not save capture preference."); return; }
-        _settings = next;
-        _clipboard.Settings = next;
-        _clipboard.Paused = next.CapturePaused;
-        _rope!.SetPaused(_clipboard.Paused);
-        _tray!.Text = _clipboard.Paused ? "Clippboard · Capture paused" : "Clippboard · Ctrl + Shift + V";
-        Notify(_clipboard.Paused ? "Capture paused. New copies won't be saved." : "Capture resumed.");
+        var error = await SaveSettingsAsync(_settings with { CapturePaused = !_settings.CapturePaused });
+        Notify(error ?? (_settings.CapturePaused ? "Capture paused. New copies won't be saved." : "Capture resumed."));
+    }
+
+    private async Task<string?> SaveSettingsAsync(AppSettings settings)
+    {
+        if (_savingSettings || _clipboard is null) return "A settings change is already in progress. Try again.";
+        _savingSettings = true;
+        var previous = _settings; var next = settings.Normalize(); var persisted = false;
+        _clipboard.Paused = true;
+        try
+        {
+            var entries = await Task.Run(() => _store!.ListAsync());
+            var cutoff = DateTimeOffset.UtcNow.AddDays(-next.RetentionDays);
+            var pins = entries.Where(x => x.Pinned && x.CopiedAt >= cutoff).ToArray();
+            if (pins.Length > next.MaxEntries || pins.Sum(x => x.StoredBytes) > next.HistoryLimits().MaxBytes)
+                return "Starred notes exceed that budget. Unstar or delete some, or increase the limit.";
+            if (next.Shortcut != previous.Shortcut && !_clipboard.ChangeShortcut(next.Shortcut))
+                return "That shortcut is in use. Your current shortcut is unchanged.";
+            if (!_development && next.StartAtLogin != previous.StartAtLogin) SetStartup(next.StartAtLogin);
+            await _settingsStore!.SaveAsync(next); persisted = true;
+            if (!await Task.Run(() => _store!.UpdateLimitsAsync(next.HistoryLimits())))
+            {
+                await _settingsStore.SaveAsync(previous); persisted = false;
+                return "Starred notes changed while saving. Increase the budget and try again.";
+            }
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException or System.Security.Cryptography.CryptographicException)
+        { return persisted ? "Settings saved, but history cleanup could not finish. Check storage permissions." : "Could not save settings. Check storage permissions and try again."; }
+        finally
+        {
+            if (persisted) _settings = next;
+            else
+            {
+                if (next.Shortcut != previous.Shortcut) _clipboard.ChangeShortcut(previous.Shortcut);
+                if (!_development && next.StartAtLogin != previous.StartAtLogin)
+                    try { SetStartup(previous.StartAtLogin); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { Notify("Check your Windows sign-in startup preference."); }
+            }
+            _clipboard.Settings = _settings; _clipboard.Paused = _settings.CapturePaused;
+            _rope!.ApplyAppearance(_settings);
+            if (_tray is not null)
+            {
+                _tray.Text = _settings.CapturePaused ? "Clippboard · Capture paused" : "Clippboard · " + SettingsView.ShortcutLabel(_settings.Shortcut);
+                _tray.ContextMenuStrip!.Items[0].Text = "Open rope · " + SettingsView.ShortcutLabel(_settings.Shortcut);
+                if (!_development && _tray.ContextMenuStrip.Items[2] is Forms.ToolStripMenuItem startup) startup.Checked = _settings.StartAtLogin;
+            }
+            _savingSettings = false;
+        }
     }
 
     private void CreateTray()
     {
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("Open rope · Ctrl + Shift + V", null, (_, _) => ToggleRope());
+        menu.Items.Add("Open rope · " + SettingsView.ShortcutLabel(_settings.Shortcut), null, (_, _) => ToggleRope());
         menu.Items.Add("Pause / resume capture", null, (_, _) => TogglePause());
         if (!_development)
         {
             var startup = new Forms.ToolStripMenuItem("Start at sign-in") { Checked = StartupEnabled() };
-            startup.Click += (_, _) =>
+            startup.Click += async (_, _) =>
             {
-                try { SetStartup(!startup.Checked); startup.Checked = StartupEnabled(); }
-                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException) { Notify("Could not change sign-in startup. Check your Windows account permissions."); }
+                var error = await SaveSettingsAsync(_settings with { StartAtLogin = !startup.Checked });
+                if (error is not null) Notify(error);
             };
             menu.Items.Add(startup);
         }
@@ -178,7 +227,7 @@ public partial class App : Application
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quit Clippboard", null, (_, _) => Shutdown());
         _trayIcon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? (Icon)SystemIcons.Application.Clone();
-        _tray = new Forms.NotifyIcon { Icon = _trayIcon, Text = "Clippboard · Ctrl + Shift + V", ContextMenuStrip = menu, Visible = true };
+        _tray = new Forms.NotifyIcon { Icon = _trayIcon, Text = "Clippboard · " + SettingsView.ShortcutLabel(_settings.Shortcut), ContextMenuStrip = menu, Visible = true };
         _tray.MouseClick += (_, e) => { if (e.Button == Forms.MouseButtons.Left) ToggleRope(); };
     }
 
@@ -201,14 +250,48 @@ public partial class App : Application
         _tray?.ShowBalloonTip(4500, "Clippboard", message, Forms.ToolTipIcon.Info);
     }
 
-    private async Task PreviewAsync(string output)
+    private async Task PreviewAsync(string output, string[] args)
     {
-        _rope = new RopeWindow(_store!, preview: true) { Width = 1600, Height = 800, ShowInTaskbar = false };
-        _rope.Show(); _rope.RenderDemo();
+        var themeIndex = Array.IndexOf(args, "--theme");
+        var theme = themeIndex >= 0 && themeIndex + 1 < args.Length && Enum.TryParse<AppTheme>(args[themeIndex + 1], out var parsed) ? parsed : AppTheme.Cloud;
+        _rope = new RopeWindow(_store!, preview: true, settings: new AppSettings { Theme = theme, Animate = false }) { Width = 1600, Height = 900, ShowInTaskbar = false };
+        var measureIndex = Array.IndexOf(args, "--measure");
+        _rope.Show(); _rope.RenderDemo(measureIndex >= 0 ? 1000 : 8);
+        if (args.Contains("--settings")) _rope.OpenSettings();
+        if (args.Contains("--detail"))
+        {
+            var clip = new Clip { Kind = ClipKind.Text, Text = "A little more room to think.\n\n" + string.Join("\n\n", Enumerable.Repeat("Open the whole note. Read at your own pace. Resize it, select a passage, then restore it when you need it.", 12)) };
+            await _rope.PreviewDetailAsync(clip);
+        }
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
         _rope.UpdateLayout();
-        var bitmap = new RenderTargetBitmap(1600, 800, 96, 96, PixelFormats.Pbgra32);
-        bitmap.Render(_rope);
+        SavePreview(output);
+        if (measureIndex >= 0 && measureIndex + 1 < args.Length)
+        {
+            using var process = Process.GetCurrentProcess(); process.Refresh();
+            var shownBytes = process.WorkingSet64; var shownPrivate = process.PrivateMemorySize64;
+            var rendered = _rope.RenderedNoteCount;
+            await _rope.CloseRopeAsync();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            await Task.Run(() => { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); });
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            await Task.Delay(2000);
+            process.Refresh(); var hiddenBytes = process.WorkingSet64; var hiddenPrivate = process.PrivateMemorySize64;
+            var initialCpu = process.TotalProcessorTime; var watch = Stopwatch.StartNew();
+            await Task.Delay(5000); process.Refresh();
+            var cpuPercent = (process.TotalProcessorTime - initialCpu).TotalSeconds / watch.Elapsed.TotalSeconds * 100;
+            var report = new { Scenario = "Synthetic 1000 metadata notes; no clipboard listener; forced GC after hide", Runtime = Environment.Version.ToString(),
+                RenderedNotes = rendered, ShownWorkingSetBytes = shownBytes, ShownPrivateBytes = shownPrivate, HiddenWorkingSetBytes = hiddenBytes,
+                HiddenPrivateBytes = hiddenPrivate, HiddenCachedImageBytes = _rope.CachedImageBytes, HiddenRenderedNotes = _rope.RenderedNoteCount,
+                HiddenManagedBytes = GC.GetTotalMemory(false), IdleCpuPercentOneCore = Math.Round(cpuPercent, 3), IdleSampleSeconds = watch.Elapsed.TotalSeconds };
+            var reportPath = Path.GetFullPath(args[measureIndex + 1]); Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
+            await File.WriteAllTextAsync(reportPath, System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        }
+    }
+
+    private void SavePreview(string output)
+    {
+        var bitmap = new RenderTargetBitmap(1600, 900, 96, 96, PixelFormats.Pbgra32); bitmap.Render(_rope!);
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
         using var file = File.Create(output); encoder.Save(file);

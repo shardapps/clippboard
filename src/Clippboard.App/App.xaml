@@ -37,5 +37,12 @@
       </ControlTemplate></Setter.Value></Setter>
       <Style.Triggers><Trigger Property="Orientation" Value="Horizontal"><Setter Property="Width" Value="Auto"/><Setter Property="Height" Value="12"/></Trigger></Style.Triggers>
     </Style>
+    <Style TargetType="CheckBox">
+      <Setter Property="Foreground" Value="{DynamicResource Foreground}"/><Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox"><Grid Background="Transparent"><Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Border x:Name="Switch" Width="34" Height="20" Background="{DynamicResource Outline}" CornerRadius="10" HorizontalAlignment="Left"><Border x:Name="Knob" Background="White" Width="14" Height="14" CornerRadius="7" HorizontalAlignment="Left" Margin="3"/></Border><ContentPresenter Grid.Column="1" VerticalAlignment="Center" RecognizesAccessKey="True"/><Border x:Name="Focus" Grid.ColumnSpan="2" BorderThickness="1" BorderBrush="Transparent" CornerRadius="6"/></Grid><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Switch" Property="Background" Value="{DynamicResource Accent}"/><Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Focus" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="Slider">
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid Background="Transparent" Height="24"><Border Height="4" CornerRadius="2" Background="{DynamicResource Outline}"/><Track x:Name="PART_Track"><Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Opacity="0"/></Track.DecreaseRepeatButton><Track.Thumb><Thumb Width="20" Height="20"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="{DynamicResource NoteSurface}" BorderBrush="{DynamicResource Accent}" BorderThickness="2" CornerRadius="10"/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Command="Slider.IncreaseLarge" Opacity="0"/></Track.IncreaseRepeatButton></Track></Grid></ControlTemplate></Setter.Value></Setter>
+    </Style>
   </Application.Resources>
 </Application>

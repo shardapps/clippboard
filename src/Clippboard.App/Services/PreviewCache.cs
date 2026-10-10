@@ -14,6 +14,7 @@ internal sealed class PreviewCache(HistoryStore store)
     private sealed record Entry(BitmapSource Image, long Bytes, LinkedListNode<string> Node);
     private readonly Dictionary<string, Entry> _images = new();
     private readonly LinkedList<string> _recency = new();
+    private readonly SemaphoreSlim _decodeSlots = new(2, 2);
     private long _bytes;
     public long BudgetBytes { get; set; } = 16 * 1024 * 1024;
     public long RetainedBytes => _bytes;
@@ -23,13 +24,17 @@ internal sealed class PreviewCache(HistoryStore store)
     {
         cancellation.ThrowIfCancellationRequested();
         if (_images.TryGetValue(id, out var cached)) { _recency.Remove(cached.Node); _recency.AddFirst(cached.Node); return cached.Image; }
-        var image = await Task.Run(async () =>
+        await _decodeSlots.WaitAsync(cancellation);
+        BitmapSource? image;
+        try { image = await Task.Run(async () =>
         {
             var clip = await store.GetAsync(id);
             cancellation.ThrowIfCancellationRequested();
             if (clip?.ImagePng is null) return null;
-            return Decode(clip.ImagePng, 360, 230);
-        }, cancellation);
+            try { return Decode(clip.ImagePng, 360, 230); }
+            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(clip.ImagePng); }
+        }, cancellation); }
+        finally { _decodeSlots.Release(); }
         cancellation.ThrowIfCancellationRequested();
         if (image is null) return null;
         var bytes = (long)image.PixelWidth * image.PixelHeight * 4;

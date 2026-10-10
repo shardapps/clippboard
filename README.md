@@ -29,14 +29,15 @@ Built by [Shard Apps](https://github.com/shardapps). Open source, local first, a
 - **Paper, rope, and pegs:** soft colors, rounded notes, smooth entrance and retraction.
 - **Star what matters:** starred notes survive capacity eviction; every clip follows the chosen 1–30-day retention period.
 - **Local storage:** Windows DPAPI protects saved contents for your Windows user. No accounts, sync, telemetry, or application network service.
-- **Bounded history:** 30 days for unpinned entries, 500 clips, and 256 MiB of encrypted payloads. New items are rejected if pins fill the budget.
+- **Bounded history:** Configurable 1–30 days for all entries, 50–1,000 clips, and 32–512 MiB of encrypted payloads (defaults: 30 days / 500 / 256 MiB). New items are rejected if pins fill the budget.
+- **Make it yours:** Cloud (white), Paper (cream), and Midnight themes; note size, spacing, text size, motion, shortcuts, capture types, starred ordering, retention, and storage/cache budgets.
 - **Pause on demand:** use the rope or tray menu before copying something sensitive.
 
 ### Try the alpha
 
 Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setups need further validation before being advertised as supported.
 
-**Unsigned alpha binaries:** open a successful [Windows build](https://github.com/shardapps/clippboard/actions/workflows/ci.yml), download the `clippboard-windows-x64-alpha` artifact, and unzip it. Run `installer/Clippboard-Setup-0.1.0.exe` for a per-user installation, or `portable/win-x64/Clippboard.exe` directly. GitHub may require sign-in for artifact downloads; artifacts expire after 14 days. These are evaluation builds, not stable releases.
+**Unsigned alpha binaries:** open a successful [Windows build](https://github.com/shardapps/clippboard/actions/workflows/ci.yml), download the `clippboard-windows-x64-alpha` artifact, and unzip it. Run `installer/Clippboard-Setup-0.2.0.exe` for a per-user installation, or `portable/win-x64/Clippboard.exe` directly. GitHub may require sign-in for artifact downloads; artifacts expire after 14 days. These are evaluation builds, not stable releases.
 
 1. Clone this repository and open PowerShell in its folder.
 2. Run `./scripts/bootstrap.ps1` to install a private .NET 10 SDK under `.tools/` and build.
@@ -45,13 +46,19 @@ Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setup
 
 Development runs store history under this repository's ignored `.data/` folder. Quit from the tray when finished. Startup at sign-in is disabled for development runs.
 
-**Controls:** click a note to restore and request paste; **Shift + click** restores without requesting paste; **☆ / ★** pins or unpins; **×** deletes. Tab navigates buttons and Enter activates them. The alpha displays up to 40 notes, with pins first; browsing/searching older notes is on the roadmap.
+**Controls:** click a note to restore and request paste; **Shift + click** restores without requesting paste; **☆ / ★** pins or unpins; **×** deletes. Tab navigates buttons and Enter activates them. Use the mouse wheel, arrow keys, or custom navigation strip to browse all saved notes. **Expand** opens full content in a resizable panel. **All clips / Starred** filters the list. The logo or gear opens settings.
 
 For a self-contained executable, run `./scripts/dev.ps1 publish`. Output: `artifacts/portable/win-x64/Clippboard.exe`; recipients do not need .NET installed. Build the setup executable with `./scripts/package.ps1` after installing Inno Setup 6. CI produces portable and setup artifacts. These are unsigned testing builds. [Packaging details →](docs/development.md)
 
+<details><summary>Settings and themes preview</summary>
+
+<img src="docs/assets/settings-preview.png" alt="Custom settings sidebar with three themes and spacing controls" width="100%" />
+
+</details>
+
 ### Know what is saved
 
-Capture begins when Clippboard is running. It cannot reconstruct things copied before it started or while paused. **Start at sign-in** is an opt-in tray setting in regular builds.
+Capture begins when Clippboard is running. It cannot reconstruct things copied before it started or while paused. **Start at sign-in** is opt-in through settings or the tray in regular builds.
 
 File notes reference originals: moved, deleted, disconnected, or inaccessible files cannot be restored. Files are restored as copies rather than repeating an old cut. Virtual attachments and proprietary app formats are not supported yet. HTML/RTF styling is not preserved.
 
@@ -68,11 +75,11 @@ Clipboard history can contain private data. The app respects supported exclusion
 ./scripts/dev.ps1 publish  # Self-contained Windows x64 executable
 ```
 
-The stack is **C# / .NET 10 LTS / WPF / Win32**. Capture uses notifications rather than polling; only summaries stay in memory, and decoded thumbnails are released when the rope closes. Download size and resident memory will be measured rather than guessed.
+The stack is **C# / .NET 10 LTS / WPF / Win32**. Capture uses notifications rather than polling; only summaries stay in memory, and decoded thumbnails are released when the rope closes. The image cache is bounded and clears on hide; payloads load on demand from encrypted storage. [Measured limits and remaining validation](docs/testing.md) are documented; runtime performance is still an alpha work item.
 
 ```text
 src/        Core storage and Windows application
-tests/      Executable storage regression suite
+tests/      Executable storage, format, cache, and WPF regression suite
 assets/     Brand graphics and application icon
 docs/       Architecture, privacy, roadmap, testing
 scripts/    Local setup, build, preview, packaging

@@ -59,7 +59,7 @@ public partial class App : Application
             _settings = await _settingsStore.LoadAsync();
             _store = new HistoryStore(Path.Combine(root, "history"), new WindowsProtector(), _settings.HistoryLimits());
             await Task.Run(() => _store.InitializeAsync());
-            _rope = new RopeWindow(_store);
+            _rope = new RopeWindow(_store, settings: _settings);
             _rope.Selected += SelectAsync;
             _rope.PauseRequested += TogglePause;
             _clipboard = new ClipboardService(SaveAsync) { Settings = _settings, Paused = _settings.CapturePaused };
@@ -203,11 +203,11 @@ public partial class App : Application
 
     private async Task PreviewAsync(string output)
     {
-        _rope = new RopeWindow(_store!, preview: true) { Width = 1240, Height = 560, ShowInTaskbar = false };
+        _rope = new RopeWindow(_store!, preview: true) { Width = 1600, Height = 800, ShowInTaskbar = false };
         _rope.Show(); _rope.RenderDemo();
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
         _rope.UpdateLayout();
-        var bitmap = new RenderTargetBitmap(1240, 560, 96, 96, PixelFormats.Pbgra32);
+        var bitmap = new RenderTargetBitmap(1600, 800, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(_rope);
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);

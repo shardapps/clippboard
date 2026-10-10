@@ -6,8 +6,15 @@ namespace Clippboard.App.Design;
 
 internal static class ThemeManager
 {
-    public static void Apply(AppTheme theme, ResourceDictionary resources)
+    public static void Apply(AppTheme theme, ResourceDictionary resources, bool? highContrast = null)
     {
+        if (highContrast ?? SystemParameters.HighContrast)
+        {
+            resources["Chrome"] = resources["NoteSurface"] = resources["SelectedSurface"] = SystemColors.WindowBrush;
+            resources["Foreground"] = resources["Muted"] = resources["StarColor"] = SystemColors.WindowTextBrush;
+            resources["Outline"] = resources["Accent"] = SystemColors.HighlightBrush;
+            return;
+        }
         var colors = theme switch
         {
             AppTheme.Midnight => new[] { "#FF242833", "#FF2B303C", "#F1F4FC", "#B3BDCF", "#434B5E", "#ABC0FF", "#354360", "#FFC973" },

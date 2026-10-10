@@ -57,6 +57,8 @@ public partial class RopeWindow : Window
         _cache = new PreviewCache(store);
         InitializeComponent();
         ApplyAppearance(_settings);
+        SystemParameters.StaticPropertyChanged += OnSystemAppearanceChanged;
+        Closed += (_, _) => SystemParameters.StaticPropertyChanged -= OnSystemAppearanceChanged;
         Rope.ShapeChanged += PositionNotes;
         SettingsRequested += () => OpenSettings();
         ExpandRequested += async entry => await OpenDetailAsync(entry);
@@ -97,6 +99,11 @@ public partial class RopeWindow : Window
         }
     }
     public void SetStatus(string message) => Status.Text = message;
+    private void OnSystemAppearanceChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (nameof(SystemParameters.HighContrast) or nameof(SystemParameters.ClientAreaAnimation))) return;
+        Dispatcher.BeginInvoke(new Action(() => { if (!Retired) { ThemeManager.Apply(_appearance.Theme, Resources); PreviewAppearance(_appearance); } }));
+    }
     public void SetPaused(bool paused)
     {
         PauseButton.Content = new IconView { Symbol = paused ? "play" : "pause" };

@@ -35,13 +35,13 @@ public partial class RopeWindow
         SidebarHost.Width = Math.Min(620, Math.Max(360, ActualWidth - 36));
         SidebarHost.MaxHeight = Math.Max(250, ActualHeight - 100);
         var view = new SettingsView(_settings, StartupAvailable);
-        view.ThemePreview += theme => ThemeManager.Apply(theme, Resources);
+        view.AppearancePreview += PreviewAppearance;
         view.Dismissed += DismissSettings;
         view.SaveRequested += async settings =>
         {
             var error = _preview ? null : SettingsSaveRequested is null ? "Settings are unavailable." : await SettingsSaveRequested(settings);
             if (error is null) { ApplyAppearance(settings); RebuildNotes(); }
-            else RebuildNotes();
+            else PreviewAppearance(_settings);
             return error;
         };
         view.ClearRequested += async () => { if (_preview) { _entries = []; RebuildNotes(); } else { await Task.Run(() => _store.ClearAsync()); await RefreshAsync(); } };
@@ -49,13 +49,13 @@ public partial class RopeWindow
     }
     private void DismissSettings()
     {
-        SidebarHost.Visibility = Visibility.Collapsed; SidebarHost.Child = null;
-        ThemeManager.Apply(_settings.Theme, Resources);
+        HidePanel(SidebarHost);
+        PreviewAppearance(_settings);
     }
     private void DismissDetail()
     {
         _detailLoads?.Cancel(); _detailLoads?.Dispose(); _detailLoads = null;
-        DetailHost.Visibility = Visibility.Collapsed; DetailHost.Child = null; DetailText = null;
+        HidePanel(DetailHost); DetailText = null;
     }
     internal async Task OpenDetailAsync(ClipSummary entry)
     {
@@ -95,10 +95,10 @@ public partial class RopeWindow
             var grip = new Thumb { Width = 28, Height = 28, Cursor = System.Windows.Input.Cursors.SizeNWSE,
                 Template = GripTemplate() };
             System.Windows.Automation.AutomationProperties.SetName(grip, "Resize expanded note");
-            grip.DragDelta += (_, e) => { DetailHost.Width = Math.Clamp(DetailHost.Width + e.HorizontalChange * 2, Math.Min(360, ActualWidth - 32), ActualWidth - 32); DetailHost.Height = Math.Clamp(DetailHost.Height + e.VerticalChange * 2, Math.Min(260, ActualHeight - 32), ActualHeight - 32); };
+            grip.DragDelta += (_, e) => { Interaction.Move(DetailHost, WidthProperty, Math.Clamp(DetailHost.Width + e.HorizontalChange * 2, Math.Min(360, ActualWidth - 32), ActualWidth - 32), false); Interaction.Move(DetailHost, HeightProperty, Math.Clamp(DetailHost.Height + e.VerticalChange * 2, Math.Min(260, ActualHeight - 32), ActualHeight - 32), false); };
             DockPanel.SetDock(grip, Dock.Right); footer.Children.Add(grip);
             var larger = new Button { Content = "Larger", ToolTip = "Enlarge note" };
-            larger.Click += (_, _) => { DetailHost.Width = Math.Min(ActualWidth - 32, DetailHost.Width + 160); DetailHost.Height = Math.Min(ActualHeight - 32, DetailHost.Height + 100); };
+            larger.Click += (_, _) => { Interaction.Move(DetailHost, WidthProperty, Math.Min(ActualWidth - 32, DetailHost.Width + 160), Animated); Interaction.Move(DetailHost, HeightProperty, Math.Min(ActualHeight - 32, DetailHost.Height + 100), Animated); };
             DockPanel.SetDock(larger, Dock.Right); footer.Children.Add(larger);
             var paste = new Button { Content = _settings.AutoPaste ? "Restore & paste" : "Copy to clipboard", Padding = new Thickness(16, 9, 16, 9) };
             paste.SetResourceReference(BackgroundProperty, "SelectedSurface"); paste.Click += async (_, _) => { if (Selected is not null) await Selected(entry); };
@@ -118,10 +118,24 @@ public partial class RopeWindow
     }
     private void Reveal(UIElement element, double from)
     {
+        element.IsHitTestVisible = true;
         element.BeginAnimation(OpacityProperty, null); element.Opacity = 1;
         element.RenderTransform = new TranslateTransform();
         if (!Animated) return;
-        element.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200)));
-        ((TranslateTransform)element.RenderTransform).BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(from, 0, TimeSpan.FromMilliseconds(260)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+        element.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(280)) { FillBehavior = FillBehavior.Stop });
+        ((TranslateTransform)element.RenderTransform).BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(from, 0, TimeSpan.FromMilliseconds(380)) { FillBehavior = FillBehavior.Stop, EasingFunction = new SpringEase { Bounce = false } });
+    }
+    private async void HidePanel(Border panel)
+    {
+        if (panel.Visibility != Visibility.Visible) return;
+        panel.IsHitTestVisible = false;
+        if (Animated && !_closing && !Retired)
+        {
+            Interaction.Move(panel, OpacityProperty, 0, true, 180);
+            await Task.Delay(180);
+            if (panel.IsHitTestVisible) return; // A newer open owns the panel now.
+        }
+        panel.BeginAnimation(OpacityProperty, null); panel.Opacity = 1;
+        panel.Visibility = Visibility.Collapsed; panel.Child = null;
     }
 }

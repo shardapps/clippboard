@@ -1,5 +1,5 @@
 param([ValidateSet('build','test','run','publish','preview','format')][string]$Task = 'build',
-  [ValidateSet('Cloud','Paper','Midnight')][string]$Theme = 'Cloud',
+  [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
   [switch]$Settings, [switch]$Detail, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot

@@ -24,6 +24,7 @@ internal sealed class ClipboardService : IDisposable
     private bool _saving;
     private bool _disposed;
     private readonly FileAvailabilityProbe _fileProbe = new();
+    private readonly BoundedClipboardReader _reader = new(ReadCurrent);
     public bool Paused { get; set; }
     public AppSettings Settings { get; set; } = new();
     public bool HotkeyAvailable { get; private set; }
@@ -62,24 +63,29 @@ internal sealed class ClipboardService : IDisposable
         if (_saving) return;
         if (Paused || _sequence == _ownSequence) { _retry.Stop(); return; }
         var sequence = _sequence;
+        _saving = true;
         try
         {
-            var clip = ReadCurrent(Settings);
+            var clip = await _reader.ReadAsync(Settings);
             _retry.Stop();
-            if (sequence != NativeMethods.GetClipboardSequenceNumber() || clip is null) return;
-            _saving = true;
-            try { await _save(clip); }
-            finally { _saving = false; if (_sequence != sequence && !Paused && !_disposed) _retry.Start(); }
+            if (_disposed || Paused || sequence != NativeMethods.GetClipboardSequenceNumber() || clip is null)
+            {
+                if (clip?.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png);
+                return;
+            }
+            // A successful callback owns this payload; clearing it here would corrupt retained consumers.
+            await _save(clip);
         }
         catch (COMException)
         {
-            if (++_attempts >= 8) { _retry.Stop(); Notice?.Invoke("Clipboard was busy. Copy that item again to save it."); }
+            if (++_attempts >= 8) { _retry.Stop(); if (!_disposed) Notice?.Invoke("Clipboard was busy. Copy that item again to save it."); }
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException or NotSupportedException)
         {
             _retry.Stop();
-            Notice?.Invoke("This clipboard item could not be saved. Try copying it again.");
+            if (!_disposed) Notice?.Invoke("This clipboard item could not be saved. Try copying it again.");
         }
+        finally { _saving = false; if (_sequence != sequence && !Paused && !_disposed && !_reader.HasOutstandingRead) _retry.Start(); }
     }
 
     internal static Clip? ReadCurrent(AppSettings? settings = null)
@@ -169,7 +175,7 @@ internal sealed class ClipboardService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _retry.Stop(); _retry.Tick -= Retry;
+        _reader.Dispose(); _retry.Stop(); _retry.Tick -= Retry;
         NativeMethods.UnregisterHotKey(_source.Handle, _hotkeyId);
         NativeMethods.RemoveClipboardFormatListener(_source.Handle);
         _source.RemoveHook(WndProc); _source.Dispose();

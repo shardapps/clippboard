@@ -21,6 +21,26 @@ using Clippboard.App.Design;
 internal static class Program
 {
     private static int _assertions;
+    private static async Task CheckBoundedReaderAsync()
+    {
+        var apartment = ApartmentState.Unknown;
+        using var quick = new BoundedClipboardReader(_ => { apartment = Thread.CurrentThread.GetApartmentState(); return new Clip { Kind = ClipKind.Text, Text = "STA fixture" }; });
+        Check((await quick.ReadAsync(new()))?.Text == "STA fixture" && apartment == ApartmentState.STA, "clipboard read runs on separate STA");
+        using var release = new ManualResetEventSlim(false); var calls = 0; var bytes = new byte[]{1,2,3};
+        using var stalled = new BoundedClipboardReader(_ => { Interlocked.Increment(ref calls); release.Wait(); return new Clip { Kind = ClipKind.Image, ImagePng = bytes }; }, TimeSpan.FromMilliseconds(60));
+        var timedOut = false;
+        try { await stalled.ReadAsync(new()); } catch (IOException) { timedOut = true; }
+        Check(timedOut && stalled.HasOutstandingRead, "stalled clipboard owner returns deadline failure without blocking caller");
+        for (var i = 0; i < 10; i++) { try { await stalled.ReadAsync(new()); } catch (IOException) { } }
+        Check(calls == 1, "retries cannot spawn additional blocked clipboard workers");
+        release.Set();
+        for (var i = 0; i < 100 && stalled.HasOutstandingRead; i++) await Task.Delay(10);
+        Check(!stalled.HasOutstandingRead && bytes.All(x => x == 0), "late image result discarded and worker released");
+        Check(await stalled.ReadAsync(new()) is not null && calls == 2, "reads resume after owner recovers");
+        stalled.Dispose(); var disposed = false;
+        try { await stalled.ReadAsync(new()); } catch (ObjectDisposedException) { disposed = true; }
+        Check(disposed, "disposed clipboard reader rejects new work");
+    }
     private static async Task CheckOverlayTransportAsync()
     {
         using var stream = new MemoryStream();
@@ -58,6 +78,7 @@ internal static class Program
         try
         {
             CheckFormats();
+            await CheckBoundedReaderAsync();
             await CheckOverlayTransportAsync();
             await CheckFileProbeAsync(root);
             Check(MotionMath.Settle(0, true) == 0 && MotionMath.Settle(1, true) == 1, "spring rests at exact endpoints");

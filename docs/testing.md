@@ -6,6 +6,8 @@ Release builds validate core and WPF compilation. The app-rendered sample previe
 
 Actual capture/paste into Notepad, Paint, Explorer, browsers, and elevated apps still needs integration validation. Mixed DPI, remote sessions, slow clipboard owners, network shares, accessibility, startup, installer lifecycle, memory/CPU, and cold start are not certified by storage tests or previews.
 
+Clipboard capture now uses a separate STA worker with a three-second response deadline. Only one read may remain outstanding: retries cannot accumulate blocked threads. Late results are discarded, encoded image buffers are cleared, and reads can resume when the owner responds. Six synthetic worker regressions cover STA affinity, timeout, repeated attempts, late results, recovery and disposal. This bounds the caller's wait; Windows COM cannot safely abort an unresponsive clipboard owner, so one background worker may remain blocked until the owner recovers or Clippboard exits.
+
 ## Initial local verification — October 10, 2026
 
 - .NET SDK 10.0.401, Windows x64, project stored on Google Drive J:.

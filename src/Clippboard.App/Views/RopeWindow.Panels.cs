@@ -36,7 +36,7 @@ public partial class RopeWindow
         if (Retired) return;
         DismissDetail();
         SidebarHost.Width = Math.Min(620, Math.Max(220, ActualWidth - 36));
-        SidebarHost.MaxHeight = Math.Max(180, ActualHeight - 100);
+        SidebarHost.MaxHeight = Math.Max(180, AvailableHeight - 100);
         var view = new SettingsView(_settings, StartupAvailable);
         view.AppearancePreview += PreviewAppearance;
         view.Dismissed += DismissSettings;
@@ -66,12 +66,13 @@ public partial class RopeWindow
         DismissSettings(); DismissDetail();
         var source = _detailLoads = new CancellationTokenSource(); var cancellation = source.Token;
         DetailHost.Width = Math.Min(820, Math.Max(200, ActualWidth - 48));
-        DetailHost.Height = Math.Min(560, Math.Max(180, ActualHeight - 48));
+        DetailHost.Height = Math.Min(560, Math.Max(180, AvailableHeight - 48));
         DetailHost.Child = new TextBlock { Text = "Opening note…", Margin = new Thickness(24), FontSize = 20 };
         DetailHost.Visibility = Visibility.Visible; Reveal(DetailHost, 12);
+        Clip? loaded = null;
         try
         {
-            var clip = _preview && _previewDetail?.Id == entry.Id ? _previewDetail : await Task.Run(() => _store.GetAsync(entry.Id), cancellation);
+            var clip = loaded = _preview && _previewDetail?.Id == entry.Id ? _previewDetail : await Task.Run(() => _store.GetAsync(entry.Id), cancellation);
             cancellation.ThrowIfCancellationRequested();
             if (_preview && clip is null) clip = new Clip { Id = entry.Id, Kind = entry.Kind, Text = entry.Preview, FilePaths = entry.Kind == ClipKind.Files ? entry.Preview.Split('\n') : null };
             if (clip is null) { SetStatus("This note has expired or was deleted."); DismissDetail(); return; }
@@ -112,6 +113,7 @@ public partial class RopeWindow
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException or UnauthorizedAccessException or NotSupportedException or ArgumentException or System.Security.Cryptography.CryptographicException)
         { if (!cancellation.IsCancellationRequested) { DetailHost.Child = new TextBlock { Text = "This note could not be opened. Try copying the original again.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24), FontSize = 18 }; } }
+        finally { if (loaded?.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }
     }
     private static ControlTemplate GripTemplate()
     {

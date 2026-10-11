@@ -73,8 +73,9 @@ public partial class App
         _rope.Closed += (_, _) => { poll.Stop(); if (!_selecting) { closed.TrySetResult(); Shutdown(); } };
         if (initial.Demo)
         {
-            _rope.Width = 1600; _rope.Height = 900; _rope.ShowActivated = false; _rope.Topmost = false;
+            _rope.Width = 1600; _rope.Height = 720; _rope.ShowActivated = false; _rope.Topmost = false;
             _rope.Show(); _rope.RenderDemo(1000); _rope.UpdateLayout(); _rope.AnimateEntrance();
+            _rope.DiagnosticCompactSurface();
             await Task.Delay(1700); _rope.DiagnosticScroll(900); await Task.Delay(900);
             _rope.OpenSettings(); await Task.Delay(700); await _rope.CloseRopeAsync();
         }

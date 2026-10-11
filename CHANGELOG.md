@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 — alpha development build
+
+- Horizontal two-finger trackpad and tilt-wheel scrolling, including fractional deltas, Windows scroll settings and signed multi-monitor coordinates.
+- Render-transform scrolling, continuous interrupted motion, layout-free note reordering and immediate slider sizing previews. Keyboard, drag and reduced-motion paths remain available.
+- Reuse unchanged note visuals; cancel offscreen thumbnail work and animation clocks. Late image loads wipe encoded payloads and cannot repopulate a cleared cache.
+- A transparent rope surface capped at 720 device-independent pixels, reusing it for settings and full notes without extra resize buffers. Background clicks dismiss through window deactivation.
+- Five-minute native capture soak with rapid copy bursts, two 2048×2048 images, file references, bounded encrypted history and restart validation on isolated CI.
+
+This build does not replace the 0.4.0.0 package already under Microsoft Store review. Physical trackpads, mixed-DPI devices, third-party destinations and Store-signed installation remain validation gates.
+
 ## 0.4.0 — alpha release candidate
 
 - Continuous damped springs preserve position and velocity when motion changes direction. Notes follow the rope with render transforms; moving blur surfaces are removed.

@@ -12,6 +12,11 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Collections.Generic;
+using System.Security.Cryptography;
+using Clippboard.Core;
 using Clippboard.App.Platform;
 
 // Runs only on disposable CI desktops. Never inject input on a developer's desktop.
@@ -60,6 +65,7 @@ internal static class AppSessionChecks
                     await listenerReady!.WaitAsync(TimeSpan.FromSeconds(15));
                     await Task.Run(() => listener.WaitForInputIdle(5000));
                     var fixtureHandle = new WindowInteropHelper(fixture).Handle;
+                    var historyDirectory = Path.Combine(dataRoot, "history");
                     var watch = Stopwatch.StartNew();
                     for (var cycle = 0; cycle < 3; cycle++)
                     {
@@ -86,16 +92,48 @@ internal static class AppSessionChecks
                         await Until(() => !NativeMethods.IsWindow(overlay), "overlay destruction");
                         if (Directory.GetFiles(Path.Combine(dataRoot, "history"), "*.clip").Length != cycle + 1) throw new IOException("Own restore created a duplicate capture.");
                     }
+                    // Fast changes are coalesced by Windows/the reader; require
+                    // the final item, not an invented guarantee of every transient.
+                    for (var i = 0; i < 100; i++) { var text = $"Synthetic burst {i} — 🧵"; await SetClipboardAsync(() => Clipboard.SetText(text)); await Task.Delay(10); }
+                    var finalText = "Final synthetic burst item — 🧵";
+                    await SetClipboardAsync(() => Clipboard.SetText(finalText));
+                    await Until(() => ReadFixtureSummaries(historyDirectory).Any(x => x.Preview == finalText), "final rapid-copy item persisted");
+                    for (var image = 0; image < 2; image++)
+                    {
+                        var pixels = new byte[2048 * 2048 * 4];
+                        for (var p = 0; p < pixels.Length; p += 4) { pixels[p] = (byte)(p / 4 % 251); pixels[p + 1] = (byte)(image * 90); pixels[p + 2] = (byte)(p / 8192 % 251); pixels[p + 3] = 255; }
+                        var bitmap = BitmapSource.Create(2048, 2048, 96, 96, PixelFormats.Bgra32, null, pixels, 8192); bitmap.Freeze();
+                        await SetClipboardAsync(() => Clipboard.SetImage(bitmap));
+                        var count = image + 1;
+                        await Until(() => ReadFixtureSummaries(historyDirectory).Count(x => x.Kind == ClipKind.Image) == count, "large native image persisted");
+                    }
+                    var originalFile = Path.Combine(dataRoot, "synthetic-文件.txt"); await File.WriteAllTextAsync(originalFile, "Synthetic original");
+                    await SetClipboardAsync(() => Clipboard.SetFileDropList(new System.Collections.Specialized.StringCollection { originalFile }));
+                    await Until(() => ReadFixtureSummaries(historyDirectory).Any(x => x.Kind == ClipKind.Files), "native file reference persisted");
+                    // Release the OS clipboard image before sampling idle capture.
+                    await SetClipboardAsync(() => Clipboard.SetText(finalText)); await Task.Delay(2000);
+                    var summaries = ReadFixtureSummaries(historyDirectory);
+                    var persisted = summaries.Count;
+                    var diskBytes = Directory.EnumerateFiles(historyDirectory, "*.clip").Sum(path => new FileInfo(path).Length);
+                    if (persisted > 500 || diskBytes > 256L * 1024 * 1024 || summaries.Count(x => x.Kind == ClipKind.Image) != 2) throw new IOException("Native burst violated history bounds or lost an image.");
+                    var samples = new List<object>(); var cpu = listener.TotalProcessorTime; var idle = Stopwatch.StartNew();
+                    for (var sample = 0; sample < 30; sample++)
+                    {
+                        await Task.Delay(10000);
+                        if (listener.HasExited) throw new IOException("Listener crashed during the five-minute soak.");
+                        listener.Refresh(); samples.Add(new { Seconds = idle.Elapsed.TotalSeconds, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, Handles = listener.HandleCount });
+                    }
+                    var idleCpu = (listener.TotalProcessorTime - cpu).TotalSeconds / idle.Elapsed.TotalSeconds * 100;
+                    var warmWorkingSet = listener.WorkingSet64; var warmPrivate = listener.PrivateMemorySize64;
                     listener.Kill(entireProcessTree: true); await listener.WaitForExitAsync(); listener.Dispose();
                     listener = StartListener();
                     await Until(() => FindWindow(listener.Id, "Clippboard listener", visible: false) != 0, "listener restart");
                     await listenerReady!.WaitAsync(TimeSpan.FromSeconds(15));
-                    if (Directory.GetFiles(Path.Combine(dataRoot, "history"), "*.clip").Length != 3) throw new IOException("History did not persist through restart.");
-                    var cpu = listener.TotalProcessorTime; var idle = Stopwatch.StartNew();
-                    await Task.Delay(30000); listener.Refresh();
+                    if (Directory.GetFiles(historyDirectory, "*.clip").Length != persisted) throw new IOException("History did not persist through restart.");
+                    await Task.Delay(10000); listener.Refresh();
                     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
-                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode clipboard capture/hotkey/overlay/restore/paste cycles into a controlled WPF destination, restart, 30-second idle", Cycles = 3, Seconds = watch.Elapsed.TotalSeconds, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, IdleCpuPercentOneCore = (listener.TotalProcessorTime - cpu).TotalSeconds / idle.Elapsed.TotalSeconds * 100, Limitations = "Does not certify Notepad, Paint, Explorer, browsers, elevated apps or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
-                    Console.WriteLine("PASS: native clipboard capture, hotkey, overlay, restore, foreground paste acceptance, repeat close and restart persistence.");
+                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
+                    Console.WriteLine("PASS: native capture/paste, bursts, large images, file reference, bounded history, five-minute idle without crash, and restart persistence.");
                     result.TrySetResult(0);
                 }
                 catch (Exception ex) { Console.Error.WriteLine(ex); result.TrySetResult(1); }
@@ -113,6 +151,32 @@ internal static class AppSessionChecks
     {
         var watch = Stopwatch.StartNew();
         while (!condition()) { if (watch.Elapsed > TimeSpan.FromSeconds(15)) throw new IOException("Session deadline: " + stage); await Task.Delay(100); }
+    }
+    private static async Task SetClipboardAsync(Action set)
+    {
+        var deadline = Stopwatch.StartNew();
+        while (true)
+        {
+            try { set(); return; }
+            catch (ExternalException) when (deadline.Elapsed < TimeSpan.FromSeconds(5)) { await Task.Delay(30); }
+        }
+    }
+    private static IReadOnlyList<ClipSummary> ReadFixtureSummaries(string directory)
+    {
+        var results = new List<ClipSummary>();
+        foreach (var path in Directory.EnumerateFiles(directory, "*.meta"))
+        {
+            byte[]? plaintext = null;
+            try
+            {
+                plaintext = new WindowsProtector().Unprotect(File.ReadAllBytes(path));
+                using var json = JsonDocument.Parse(plaintext);
+                if (json.RootElement.GetProperty("Summary").Deserialize<ClipSummary>() is { } summary) results.Add(summary);
+            }
+            catch (IOException) { /* Atomic metadata replacement can race this read-only fixture snapshot. */ }
+            finally { if (plaintext is not null) CryptographicOperations.ZeroMemory(plaintext); }
+        }
+        return results;
     }
     private static void InputChord()
     {

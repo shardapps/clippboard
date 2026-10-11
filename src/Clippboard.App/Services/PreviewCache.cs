@@ -17,6 +17,7 @@ internal sealed class PreviewCache(IHistoryAccess store)
     private readonly LinkedList<string> _recency = new();
     private readonly SemaphoreSlim _decodeSlots = new(2, 2);
     private long _bytes;
+    private long _generation;
     public long BudgetBytes { get; set; } = 16 * 1024 * 1024;
     public long RetainedBytes => _bytes;
     public int Count => _images.Count;
@@ -25,24 +26,28 @@ internal sealed class PreviewCache(IHistoryAccess store)
     {
         cancellation.ThrowIfCancellationRequested();
         if (_images.TryGetValue(id, out var cached)) { _recency.Remove(cached.Node); _recency.AddFirst(cached.Node); return cached.Image; }
+        var generation = _generation;
         await _decodeSlots.WaitAsync(cancellation);
         BitmapSource? image;
         try { image = await Task.Run(async () =>
         {
             var clip = await store.GetAsync(id);
-            cancellation.ThrowIfCancellationRequested();
-            if (clip?.ImagePng is null) return null;
-            try { return Decode(clip.ImagePng, 360, 230); }
-            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(clip.ImagePng); }
+            try
+            {
+                cancellation.ThrowIfCancellationRequested();
+                return clip?.ImagePng is null ? null : Decode(clip.ImagePng, 360, 230);
+            }
+            finally { if (clip?.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }
         }, cancellation); }
         finally { _decodeSlots.Release(); }
         cancellation.ThrowIfCancellationRequested();
         if (image is null) return null;
+        if (generation != _generation) return image;
         var bytes = (long)image.PixelWidth * image.PixelHeight * 4;
         // Concurrent requests may finish for the same item; replace rather than double count.
         Remove(id);
         while (_bytes + bytes > BudgetBytes && _recency.Last is not null) Remove(_recency.Last.Value);
-        if (bytes <= BudgetBytes)
+        if (generation == _generation && bytes <= BudgetBytes)
         {
             var node = _recency.AddFirst(id); _images[id] = new(image, bytes, node); _bytes += bytes;
         }
@@ -75,5 +80,5 @@ internal sealed class PreviewCache(IHistoryAccess store)
         if (!_images.Remove(id, out var entry)) return;
         _recency.Remove(entry.Node); _bytes -= entry.Bytes;
     }
-    public void Clear() { _images.Clear(); _recency.Clear(); _bytes = 0; }
+    public void Clear() { ++_generation; _images.Clear(); _recency.Clear(); _bytes = 0; }
 }

@@ -36,7 +36,7 @@ internal static class SmoothMotion
     {
         if (States.TryGetValue(target, out var properties))
         {
-            foreach (var property in new List<DependencyProperty>(properties.Keys)) { var current = target.GetValue(property); Apply(target, property, null); target.SetValue(property, current); }
+            foreach (var property in new List<DependencyProperty>(properties.Keys)) { var current = target.GetValue(property); target.SetValue(property, current); Apply(target, property, null); properties[property].Clock.Controller?.Remove(); }
             properties.Clear(); States.Remove(target);
         }
         if (target is UIElement element) CancelTree(element.RenderTransform);
@@ -53,17 +53,20 @@ internal static class SmoothMotion
     internal static void Move(DependencyObject target, DependencyProperty property, double destination, bool animated, int milliseconds, double damping = 1)
     {
         var current = (double)target.GetValue(property); var velocity = Velocity(target, property);
-        var properties = States.GetOrCreateValue(target); properties.Remove(property);
-        Apply(target, property, null); target.SetValue(property, destination);
-        if (!animated || !double.IsFinite(current) || (Math.Abs(current - destination) < .001 && Math.Abs(velocity) < .01)) return;
+        var properties = States.GetOrCreateValue(target); properties.Remove(property, out var previous);
+        // Set the base beneath the old clock before removing it. Do not briefly
+        // publish the destination: DP callbacks can otherwise build offscreen cards.
+        target.SetValue(property, double.IsFinite(current) ? current : destination);
+        Apply(target, property, null); previous?.Clock.Controller?.Remove();
+        if (!animated || !double.IsFinite(current) || (Math.Abs(current - destination) < .001 && Math.Abs(velocity) < .01)) { target.SetValue(property, destination); return; }
         var seconds = Math.Max(.06, milliseconds / 1000.0);
         // Keep the current base value until WPF starts the new clock on its next rendering tick.
         target.SetValue(property, current);
         var animation = new SpringAnimation { From = current, To = destination, Velocity = velocity, Frequency = 6 / seconds, Damping = damping, Duration = TimeSpan.FromSeconds(seconds * 2 / damping), FillBehavior = FillBehavior.HoldEnd };
         if (property == UIElement.OpacityProperty) { animation.Minimum = 0; animation.Maximum = 1; }
         if (property == FrameworkElement.WidthProperty || property == FrameworkElement.HeightProperty || property == System.Windows.Controls.TextBlock.FontSizeProperty) animation.Minimum = .01;
-        animation.Freeze(); var clock = animation.CreateClock(); var state = new State(animation, clock); properties[property] = state;
-        clock.Completed += (_, _) => { if (properties.TryGetValue(property, out var active) && ReferenceEquals(active, state)) { properties.Remove(property); target.SetValue(property, destination); Apply(target, property, null); } };
+        animation.Freeze(); var clock = (AnimationClock)animation.CreateClock(true); var state = new State(animation, clock); properties[property] = state;
+        clock.Completed += (_, _) => { if (properties.TryGetValue(property, out var active) && ReferenceEquals(active, state)) { properties.Remove(property); target.SetValue(property, destination); Apply(target, property, null); clock.Controller?.Remove(); } };
         Apply(target, property, clock);
     }
     private static void Apply(DependencyObject target, DependencyProperty property, AnimationClock? clock)

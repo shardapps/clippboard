@@ -305,7 +305,11 @@ internal static class Program
                     "image worker concurrency respects memory headroom and processor availability");
                 var messageCount = 0;
                 using (var messages = new MessageWindow((message, _, _) => { if (message != 0x8005) return false; ++messageCount; return true; }))
-                { SendMessage(messages.Handle, 0x8005, 0, 0); Check(messageCount == 1, "non-rendering message window dispatches owned native messages"); }
+                {
+                    SendMessage(messages.Handle, 0x8005, 0, 0); Check(messageCount == 1, "non-rendering message window dispatches owned native messages");
+                    Check(AppSessionChecks.FindOwnedMessageWindow(Environment.ProcessId, "Clippboard listener") == messages.Handle,
+                        "native session probe finds the message-only listener owned by its process");
+                }
                 var navigation = (System.Windows.Controls.Primitives.ScrollBar)window.FindName("HistoryScroll");
                 navigation.ApplyTemplate();
                 var navigationTrack = (System.Windows.Controls.Primitives.Track)navigation.Template.FindName("PART_Track", navigation);

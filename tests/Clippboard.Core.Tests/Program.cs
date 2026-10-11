@@ -506,6 +506,8 @@ internal static class Program
                 for (var cycle = 0; cycle < 3; cycle++)
                 {
                     window = new RopeWindow(cacheStore, preview: true, settings: new AppSettings { Animate = false }) { Width = 1200, Height = 1000, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };
+                    window.DiagnosticCompactSurface();
+                    Check(window.Height < 1000, "surface can be measured before a native window exists");
                     window.Show(); window.UpdateLayout(); window.RenderDemo(); window.UpdateLayout();
                     window.DiagnosticCompactSurface(); window.UpdateLayout();
                     var compactHeight = window.ActualHeight;

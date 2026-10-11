@@ -17,7 +17,13 @@ internal static class OverlayDiagnostics
         var before = Sample(); var cycles = new List<object>();
         for (var cycle = 0; cycle < 8; cycle++)
         {
-            using var overlay = new OverlayProcess(_ => Task.FromResult(new OverlayReply(Settings: new AppSettings(), StartupAvailable: false, Demo: true)), software);
+            string? renderer = null;
+            var preferencePath = software && cycle % 2 == 1;
+            using var overlay = new OverlayProcess(request =>
+            {
+                if (request.Command == "diagnostic-renderer") renderer = request.Id;
+                return Task.FromResult(new OverlayReply(Settings: new AppSettings { LowMemoryRendering = preferencePath }, StartupAvailable: false, Demo: true));
+            }, software && !preferencePath);
             var watch = Stopwatch.StartNew(); long peak = 0; long combined = 0;
             while (!overlay.Process.HasExited)
             {
@@ -27,8 +33,9 @@ internal static class OverlayDiagnostics
                 await Task.Delay(100);
             }
             if (overlay.Process.ExitCode != 0) throw new IOException("Overlay diagnostic failed.");
+            if (renderer != (software ? "SoftwareOnly" : "Default")) throw new IOException("Overlay rendering preference did not apply.");
             await Task.Delay(350);
-            cycles.Add(new { Cycle = cycle + 1, ChildPeakWorkingSetBytes = peak, CombinedPeakWorkingSetBytes = combined, Seconds = watch.Elapsed.TotalSeconds, Closed = Sample() });
+            cycles.Add(new { Cycle = cycle + 1, RenderingMode = renderer, PreferencePath = preferencePath, ChildPeakWorkingSetBytes = peak, CombinedPeakWorkingSetBytes = combined, Seconds = watch.Elapsed.TotalSeconds, Closed = Sample() });
         }
         var cpu = current.TotalProcessorTime; var idle = Stopwatch.StartNew(); await Task.Delay(10000); current.Refresh();
         var report = new { Scenario = "Eight disposable overlay processes; synthetic 1000 notes, scroll and settings; no clipboard, forced GC or working-set trim", SoftwareRendering = software,

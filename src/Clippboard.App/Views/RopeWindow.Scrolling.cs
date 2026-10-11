@@ -49,7 +49,12 @@ public partial class RopeWindow
     {
         if (Retired || _closing || !double.IsFinite(value)) return;
         _scrollTarget = Math.Clamp(value, 0, NoteScroll.ScrollableWidth);
-        _scrollAnimating = true;
+        if (!Animated)
+        {
+            ++_scrollVersion;
+            SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, false, 1);
+            NoteScroll.ScrollToHorizontalOffset(_scrollTarget); return;
+        }
         var version = ++_scrollVersion;
         SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, Animated, milliseconds);
         FinishScrollAsync(version, milliseconds);
@@ -59,7 +64,6 @@ public partial class RopeWindow
         await Task.Delay(Animated ? milliseconds * 2 + 40 : 1);
         if (version != _scrollVersion || Retired || _closing) return;
         SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, false, 1);
-        _scrollAnimating = false;
         NoteScroll.ScrollToHorizontalOffset(_scrollTarget);
     }
     private void SyncScroll()
@@ -75,14 +79,14 @@ public partial class RopeWindow
     }
     private void OnScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (!_scrollAnimating && e.HorizontalChange != 0)
+        if (e.HorizontalChange != 0)
         {
             ++_scrollVersion; _scrollTarget = NoteScroll.HorizontalOffset;
             SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, false, 1);
         }
-        if (ScrollOffset > NoteScroll.ScrollableWidth)
+        if ((double)GetValue(ScrollPositionProperty) > NoteScroll.ScrollableWidth || _scrollTarget > NoteScroll.ScrollableWidth)
         {
-            ++_scrollVersion; _scrollAnimating = false; _scrollTarget = NoteScroll.ScrollableWidth;
+            ++_scrollVersion; _scrollTarget = NoteScroll.ScrollableWidth;
             SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, false, 1);
         }
         ApplyScrollPosition();
@@ -96,7 +100,7 @@ public partial class RopeWindow
     private void OnScrollbarChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_scrollSync || NoteScroll is null || Retired || _closing) return;
-        ++_scrollVersion; _scrollAnimating = false; _scrollTarget = e.NewValue;
+        ++_scrollVersion; _scrollTarget = e.NewValue;
         SmoothMotion.Move(this, ScrollPositionProperty, e.NewValue, false, 1);
         NoteScroll.ScrollToHorizontalOffset(e.NewValue);
     }

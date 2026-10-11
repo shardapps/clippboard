@@ -1,4 +1,4 @@
-# 0.4.0 publication checklist
+# Publication checklist — 0.4.0 Store submission / 0.5.0 development
 
 The current target is Windows 11 x64. A green build is necessary, but does not replace Microsoft certification or testing the installed Store package. Keep public publication on manual hold until the unresolved gates below pass.
 
@@ -9,11 +9,11 @@ The current target is Windows 11 x64. A green build is necessary, but does not r
 | Overlay lifetime | Eight hardware and eight software process cycles passed. Local idle/active measurements and their limits are in [performance](performance.md). |
 | EXE installer lifecycle | Fresh CI directory: install, same-version reinstall, installed preview, uninstall passed. Interactive clean-device and cross-version upgrade checks remain. |
 | Store package | Assigned ShardCoders identity, x64, disabled startup, contents and SHA-256 verified. Unsigned MSIX is for Store submission only. |
-| Store listing and review | Initial 0.4.0.0 review rejected the “Windows utility” keyword and an inaccessible privacy URL. Use the dedicated [policy page](https://shardapps.github.io/clippboard/privacy/), verify unauthenticated HTTPS 200, remove that keyword and resubmit with publication held manually. Approval and signed-package review remain external gates. |
+| Store listing and review | Initial 0.4.0.0 review rejected the “Windows utility” keyword and an inaccessible privacy URL. The keyword was removed and the dedicated [policy page](https://shardapps.github.io/clippboard/privacy/) verified without authentication. The corrected 0.4.0.0 submission is under certification with publication held manually; development builds do not replace it. Approval and signed-package review remain external gates. |
 | Installed Store behavior | Pending signed package: first install, launch, hotkey/tray, history restart, startup opt-in/disable, update and uninstall. |
 | Destination application matrix | Pending Notepad Unicode text, Paint bitmap, Explorer files, browser text and restricted/elevated manual-paste fallback. Include moved/deleted/network originals. |
 | Device/accessibility matrix | Pending mixed DPI, multiple monitors, small screens, screen reader, remote session and slower hardware. Synthetic high-contrast/reduced-motion checks passed. |
-| Sustained performance | Pending at least five minutes idle after real capture, rapid-copy bursts, representative large images, repeated opens, cold start and disk growth. Short synthetic profiles are not universal ceilings. |
+| Sustained performance | 0.5.0 adds an isolated native fixture covering 100 rapid clipboard changes, final-item persistence, two 2048×2048 images, file references, encrypted disk bounds, five-minute warm idle and restart. Record its CI results before claiming it passes. Physical-device capture/overlay profiles, cold-start distributions and longer real workloads remain pending. |
 | Trust and public release | Microsoft signs the Store distribution after certification. The separate EXE needs a trusted CA identity and reputation; it remains unsigned. No zero-bug/all-hardware claim. |
 
 ## Reproducing the automated checks

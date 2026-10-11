@@ -114,6 +114,9 @@ internal static class Program
             Check(normalized.RetentionDays == 30 && normalized.PreviewCacheMiB == 64 && normalized.NoteSpacing == 24 && normalized.Theme == AppTheme.Cloud, "settings bounds");
             await settingsStore.SaveAsync(new AppSettings { Theme = AppTheme.Midnight, RetentionDays = 7, AutoPaste = false });
             Check((await settingsStore.LoadAsync()).RetentionDays == 7 && !(await settingsStore.LoadAsync()).AutoPaste, "settings persistence");
+            Check(!(await settingsStore.LoadAsync()).LowMemoryRendering, "existing settings keep smooth hardware rendering preference");
+            await settingsStore.SaveAsync((await settingsStore.LoadAsync()) with { LowMemoryRendering = true });
+            Check((await settingsStore.LoadAsync()).LowMemoryRendering, "low-RAM rendering preference persists for next overlay session");
             await File.WriteAllTextAsync(settingsFile, "broken json");
             Check((await settingsStore.LoadAsync()).RetentionDays == 30, "settings corruption fallback");
             Check(!new AppSettings { CaptureImages = false }.Captures(ClipKind.Image), "format opt out");
@@ -285,6 +288,9 @@ internal static class Program
                 window.Show(); window.UpdateLayout(); window.RenderDemo(1000); window.UpdateLayout();
                 Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Check(window.RenderedNoteCount is > 0 and < 10, "1000 clips render only viewport notes");
+                var initialCards = window.CreatedNoteCount;
+                ((System.Windows.Controls.Button)window.FindName("AllButton")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Check(window.CreatedNoteCount == initialCards, "unchanged summaries retain note visuals on list refresh");
                 var navigation = (System.Windows.Controls.Primitives.ScrollBar)window.FindName("HistoryScroll");
                 navigation.ApplyTemplate();
                 var navigationTrack = (System.Windows.Controls.Primitives.Track)navigation.Template.FindName("PART_Track", navigation);
@@ -387,7 +393,13 @@ internal static class Program
                 Check(Math.Abs(transform.Y) < .001, "hover settles at exact rest without drift");
                 Interaction.Move(transform, TranslateTransform.YProperty, 100, true, 250); Pump(Task.Delay(90));
                 var priorPosition = transform.Y; var priorVelocity = SmoothMotion.Velocity(transform, TranslateTransform.YProperty);
+                var transientDestination = false;
+                var descriptor = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(TranslateTransform.YProperty, typeof(TranslateTransform));
+                EventHandler observe = (_, _) => { if (transform.Y == -20) transientDestination = true; };
+                descriptor.AddValueChanged(transform, observe);
                 Interaction.Move(transform, TranslateTransform.YProperty, -20, true, 250);
+                descriptor.RemoveValueChanged(transform, observe);
+                Check(!transientDestination, "retargeting does not publish a temporary destination to dependency-property callbacks");
                 Check(Math.Abs(transform.Y - priorPosition) < .001 && Math.Abs(SmoothMotion.Velocity(transform, TranslateTransform.YProperty) - priorVelocity) < .001, "actual WPF motion preserves position and velocity when interrupted");
                 Interaction.Move(transform, TranslateTransform.YProperty, 0, false);
                 Check(transform.Y == 0 && !transform.HasAnimatedProperties && SmoothMotion.Velocity(transform, TranslateTransform.YProperty) == 0, "reduced motion cancels an active spring immediately");
@@ -437,6 +449,25 @@ internal static class Program
                 }
                 Check(cache.Count == 5 && cache.RetainedBytes == 200000, "LRU evicts images at exact byte budget");
                 cache.Clear(); Check(cache.Count == 0 && cache.RetainedBytes == 0, "preview cache clears all references");
+                var deferred = new DeferredHistory();
+                var deferredCache = new PreviewCache(deferred);
+                var pending = deferredCache.GetAsync("fixture", CancellationToken.None);
+                Pump(deferred.Started.Task.WaitAsync(TimeSpan.FromSeconds(3)));
+                deferredCache.Clear();
+                var tiny = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8);
+                var tinyEncoder = new PngBitmapEncoder(); tinyEncoder.Frames.Add(BitmapFrame.Create(tiny));
+                using var tinyBuffer = new MemoryStream(); tinyEncoder.Save(tinyBuffer);
+                var encoded = tinyBuffer.ToArray();
+                deferred.Result.SetResult(new Clip { Kind = ClipKind.Image, ImagePng = encoded }); Pump(pending);
+                Check(pending.Result is not null && deferredCache.Count == 0 && encoded.All(x => x == 0), "late preview after clear cannot repopulate cache and releases encoded payload");
+                var cancelledHistory = new DeferredHistory(); var cancelledCache = new PreviewCache(cancelledHistory);
+                using var cancelledLoads = new CancellationTokenSource();
+                var queued = Enumerable.Range(0, 20).Select(i => cancelledCache.GetAsync(i.ToString(), cancelledLoads.Token)).ToArray();
+                Pump(cancelledHistory.Started.Task.WaitAsync(TimeSpan.FromSeconds(3))); cancelledLoads.Cancel();
+                var abandoned = new byte[] { 1, 2, 3 };
+                cancelledHistory.Result.SetResult(new Clip { Kind = ClipKind.Image, ImagePng = abandoned });
+                try { Pump(Task.WhenAll(queued)); } catch (OperationCanceledException) { }
+                Check(queued.All(x => x.IsCanceled) && cancelledHistory.Calls <= 2 && abandoned.All(x => x == 0), "cancelled thumbnail queue bounds workers and wipes late payloads before decode");
                 if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true") CheckWindowsClipboard(root);
                 var close = window.CloseRopeAsync();
                 var frame = new DispatcherFrame();
@@ -445,8 +476,13 @@ internal static class Program
                 Check(window.Retired && !window.IsVisible && window.RenderedNoteCount == 0 && window.CachedImageBytes == 0 && window.DetailText is null, "closing releases native surface, cards, detail and thumbnail cache");
                 for (var cycle = 0; cycle < 3; cycle++)
                 {
-                    window = new RopeWindow(cacheStore, preview: true, settings: new AppSettings { Animate = false }) { Width = 1200, Height = 700, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };
+                    window = new RopeWindow(cacheStore, preview: true, settings: new AppSettings { Animate = false }) { Width = 1200, Height = 1000, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };
                     window.Show(); window.UpdateLayout(); window.RenderDemo(); window.UpdateLayout();
+                    window.DiagnosticCompactSurface(); window.UpdateLayout();
+                    var compactHeight = window.ActualHeight;
+                    Check(compactHeight == 720 && compactHeight >= ((System.Windows.Controls.Grid)window.FindName("Panel")).ActualHeight, "transparent surface fits rope and panels rather than entire desktop");
+                    window.OpenSettings(); window.UpdateLayout();
+                    Check(window.ActualHeight == compactHeight, "settings reuses surface without retaining resize buffers");
                     Check(window.RenderedNoteCount > 0 && !window.Retired, "fresh overlay opens after retirement " + cycle);
                     Pump(window.CloseRopeAsync()); Check(window.Retired && window.RenderedNoteCount == 0, "repeat close releases overlay " + cycle);
                     Pump(window.RefreshAsync()); Check(window.RenderedNoteCount == 0, "late refresh cannot revive retired overlay " + cycle);
@@ -544,6 +580,17 @@ internal static class Program
             if (child is T item) yield return item;
             foreach (var item2 in Descendants<T>(child)) yield return item2;
         }
+    }
+    private sealed class DeferredHistory : IHistoryAccess
+    {
+        internal readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal readonly TaskCompletionSource<Clip?> Result = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal int Calls;
+        public Task<System.Collections.Generic.IReadOnlyList<ClipSummary>> ListAsync() => Task.FromResult<System.Collections.Generic.IReadOnlyList<ClipSummary>>([]);
+        public Task<Clip?> GetAsync(string id) { Interlocked.Increment(ref Calls); Started.TrySetResult(); return Result.Task; }
+        public Task SetPinnedAsync(string id, bool pinned) => Task.CompletedTask;
+        public Task DeleteAsync(string id) => Task.CompletedTask;
+        public Task ClearAsync() => Task.CompletedTask;
     }
     private sealed class TestWindowsProtector : IContentProtector
     {

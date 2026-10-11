@@ -291,6 +291,25 @@ internal static class Program
                 var initialCards = window.CreatedNoteCount;
                 ((System.Windows.Controls.Button)window.FindName("AllButton")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 Check(window.CreatedNoteCount == initialCards, "unchanged summaries retain note visuals on list refresh");
+                Check(window.PreviewBudgetBytes < window.SavedSettings.PreviewCacheMiB * 1024L * 1024, "preview retention follows the viewport within the user's ceiling");
+                Check(MemoryAvailability.PreviewBudget(16000000, 6, 300000, 1000000000) == 3600000
+                    && MemoryAvailability.PreviewBudget(16000000, 6, 300000, 10000000) == 100000
+                    && MemoryAvailability.PreviewBudget(50000, 6, 300000, 10000000) == 50000,
+                    "adaptive cache respects demand, live physical memory pressure and user limit");
+                Check(MemoryAvailability.PreviewBudget(16000000, 6, 300000, 0) == 0
+                    && MemoryAvailability.PreviewBudget(16000000, 6, 300000, -1) == 3600000,
+                    "zero memory headroom disables retention; unavailable telemetry uses bounded viewport demand");
+                Check(MemoryAvailability.DecodeConcurrency(10000000, 16, 24000000) == 1
+                    && MemoryAvailability.DecodeConcurrency(16000000000, 16, 24000000) == 2
+                    && MemoryAvailability.DecodeConcurrency(16000000000, 1, 24000000) == 1,
+                    "image worker concurrency respects memory headroom and processor availability");
+                var messageCount = 0;
+                using (var messages = new MessageWindow((message, _, _) => { if (message != 0x8005) return false; ++messageCount; return true; }))
+                {
+                    SendMessage(messages.Handle, 0x8005, 0, 0); Check(messageCount == 1, "non-rendering message window dispatches owned native messages");
+                    Check(AppSessionChecks.FindOwnedMessageWindow(Environment.ProcessId, "Clippboard listener") == messages.Handle,
+                        "native session probe finds the message-only listener owned by its process");
+                }
                 var navigation = (System.Windows.Controls.Primitives.ScrollBar)window.FindName("HistoryScroll");
                 navigation.ApplyTemplate();
                 var navigationTrack = (System.Windows.Controls.Primitives.Track)navigation.Template.FindName("PART_Track", navigation);
@@ -299,6 +318,13 @@ internal static class Program
                 scroll.ScrollToRightEnd(); window.UpdateLayout();
                 Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Check(window.RenderedNoteCount is > 0 and < 10 && scroll.HorizontalOffset > 300000, $"all history reachable with bounded visuals (offset {scroll.HorizontalOffset}, width {scroll.ScrollableWidth}, cards {window.RenderedNoteCount})");
+                Check(window.CreatedNoteCount <= initialCards + 2, "jumping through 1000 notes reuses viewport controls");
+                ClipSummary? restored = null; window.Selected += entry => { restored = entry; return Task.CompletedTask; };
+                var notes = (System.Windows.Controls.Canvas)window.FindName("Notes");
+                var recycledSelect = (System.Windows.Controls.Button)((System.Windows.Controls.Grid)notes.Children[0]).Tag;
+                recycledSelect.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Check(restored is not null && recycledSelect.Content is System.Windows.Controls.TextBlock recycledText && restored.Preview == recycledText.Text,
+                    "recycled note restores its current content rather than its previous binding");
                 Check(Math.Abs(navigation.Value - navigation.Maximum) < 1 && navigationTrack.Thumb.ActualWidth >= 32, "minimum thumb preserves navigation to the final note");
                 scroll.ScrollToLeftEnd(); window.UpdateLayout();
                 Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
@@ -324,6 +350,15 @@ internal static class Program
                 Check(SystemParameters.ClientAreaAnimation ? Math.Abs(window.ScrollOffset - midScroll) < .001 : window.ScrollOffset == 200, "rapid scroll reversal preserves animated position or applies reduced motion immediately");
                 Pump(Task.Delay(650)); window.UpdateLayout();
                 Check(Math.Abs(window.ScrollOffset - 200) < .001 && Math.Abs(scroll.HorizontalOffset - 200) < .001, "rendered and accessible scroll positions commit together at rest");
+                Check(!window.ScrollRunning, "scroll frame subscription stops at rest");
+                for (var tick = 0; tick < 60; tick++) { window.DiagnosticGesture(tick < 30 ? .75 : -.75); Pump(Task.Delay(4)); }
+                Pump(Task.Delay(650)); window.UpdateLayout();
+                Check(Math.Abs(window.ScrollOffset - 200) < .001 && !window.ScrollRunning, "fractional sustained gestures and reversal settle without cumulative drift");
+                var beforePan = window.CreatedNoteCount;
+                for (var tick = 0; tick < 40; tick++) { window.DiagnosticGesture(tick < 20 ? 100 : -100); Pump(Task.Delay(8)); }
+                Pump(Task.Delay(650)); window.UpdateLayout();
+                Check(Math.Abs(window.ScrollOffset - 200) < .001 && window.CreatedNoteCount - beforePan <= 2,
+                    "sustained panning crosses viewport boundaries with bounded control allocations");
                 window.ApplyAppearance(window.SavedSettings with { Animate = false });
                 window.DiagnosticScroll(0); Pump(Task.Delay(30)); window.UpdateLayout();
                 foreach (var theme in Enum.GetValues<AppTheme>())
@@ -448,6 +483,7 @@ internal static class Program
                     Pump(Task.Run(() => cacheStore.AddAsync(clip))); Pump(cache.GetAsync(clip.Id, CancellationToken.None));
                 }
                 Check(cache.Count == 5 && cache.RetainedBytes == 200000, "LRU evicts images at exact byte budget");
+                cache.BudgetBytes = 80000; Check(cache.Count == 2 && cache.RetainedBytes == 80000, "memory pressure immediately releases excess decoded previews");
                 cache.Clear(); Check(cache.Count == 0 && cache.RetainedBytes == 0, "preview cache clears all references");
                 var deferred = new DeferredHistory();
                 var deferredCache = new PreviewCache(deferred);
@@ -477,10 +513,12 @@ internal static class Program
                 for (var cycle = 0; cycle < 3; cycle++)
                 {
                     window = new RopeWindow(cacheStore, preview: true, settings: new AppSettings { Animate = false }) { Width = 1200, Height = 1000, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };
+                    window.DiagnosticCompactSurface();
+                    Check(window.Height < 1000, "surface can be measured before a native window exists");
                     window.Show(); window.UpdateLayout(); window.RenderDemo(); window.UpdateLayout();
                     window.DiagnosticCompactSurface(); window.UpdateLayout();
                     var compactHeight = window.ActualHeight;
-                    Check(compactHeight == 720 && compactHeight >= ((System.Windows.Controls.Grid)window.FindName("Panel")).ActualHeight, "transparent surface fits rope and panels rather than entire desktop");
+                    Check(compactHeight < 1000 && compactHeight >= ((System.Windows.Controls.Grid)window.FindName("Panel")).ActualHeight, "transparent surface follows measured content rather than a hardcoded desktop size");
                     window.OpenSettings(); window.UpdateLayout();
                     Check(window.ActualHeight == compactHeight, "settings reuses surface without retaining resize buffers");
                     Check(window.RenderedNoteCount > 0 && !window.Retired, "fresh overlay opens after retirement " + cycle);

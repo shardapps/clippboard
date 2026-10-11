@@ -43,6 +43,10 @@ public partial class App : Application
         base.OnStartup(e);
         try
         {
+            // Only disposable visual processes need the control/style tree.
+            // The long-lived tray listener keeps no application UI dictionary.
+            if (e.Args.Contains("--overlay") || e.Args.Contains("--preview") || e.Args.Contains("--diagnostics"))
+                Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Clippboard;component/Design/Controls.xaml", UriKind.Relative) });
             var lifecycleIndex = Array.IndexOf(e.Args, "--lifecycle-diagnostics");
             if (lifecycleIndex >= 0) { if (lifecycleIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await OverlayDiagnostics.RunAsync(e.Args[lifecycleIndex + 1], e.Args.Contains("--software")); Shutdown(); return; }
             var overlayIndex = Array.IndexOf(e.Args, "--overlay");
@@ -57,7 +61,8 @@ public partial class App : Application
             if (diagnostic >= 0)
             {
                 if (diagnostic + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic report path required.");
-                await PerformanceDiagnostics.RunAsync(_store, e.Args[diagnostic + 1], e.Args.Contains("--software"));
+                if (e.Args.Contains("--scroll-only")) await PerformanceDiagnostics.RunScrollAsync(_store, e.Args[diagnostic + 1]);
+                else await PerformanceDiagnostics.RunAsync(_store, e.Args[diagnostic + 1], e.Args.Contains("--software"));
                 Shutdown(); return;
             }
             if (preview >= 0)

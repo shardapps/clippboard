@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using System.Windows.Media;
 using Clippboard.Core;
+using Clippboard.App.Platform;
 
 namespace Clippboard.App.Services;
 
@@ -15,10 +16,15 @@ internal sealed class PreviewCache(IHistoryAccess store)
     private sealed record Entry(BitmapSource Image, long Bytes, LinkedListNode<string> Node);
     private readonly Dictionary<string, Entry> _images = new();
     private readonly LinkedList<string> _recency = new();
-    private readonly SemaphoreSlim _decodeSlots = new(2, 2);
+    private readonly SemaphoreSlim _decodeSlots = new(MemoryAvailability.DecodeConcurrency(MemoryAvailability.AvailableBytes(), Environment.ProcessorCount, new AppSettings().HistoryLimits().MaxEntryBytes), 2);
     private long _bytes;
     private long _generation;
-    public long BudgetBytes { get; set; } = 16 * 1024 * 1024;
+    private long _budgetBytes = 16 * 1024 * 1024;
+    public long BudgetBytes
+    {
+        get => _budgetBytes;
+        set { _budgetBytes = Math.Max(0, value); while (_bytes > _budgetBytes && _recency.Last is not null) Remove(_recency.Last.Value); }
+    }
     public long RetainedBytes => _bytes;
     public int Count => _images.Count;
 
@@ -28,6 +34,8 @@ internal sealed class PreviewCache(IHistoryAccess store)
         if (_images.TryGetValue(id, out var cached)) { _recency.Remove(cached.Node); _recency.AddFirst(cached.Node); return cached.Image; }
         var generation = _generation;
         await _decodeSlots.WaitAsync(cancellation);
+        // A request queued behind an identical load can reuse its result.
+        if (_images.TryGetValue(id, out cached)) { _decodeSlots.Release(); cancellation.ThrowIfCancellationRequested(); _recency.Remove(cached.Node); _recency.AddFirst(cached.Node); return cached.Image; }
         BitmapSource? image;
         try { image = await Task.Run(async () =>
         {

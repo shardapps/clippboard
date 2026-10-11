@@ -17,6 +17,33 @@ namespace Clippboard.App.Services;
 // Explicit synthetic diagnostic. No screenshot buffers, clipboard listener or forced collections.
 internal static class PerformanceDiagnostics
 {
+    internal static async Task RunScrollAsync(HistoryStore store, string output)
+    {
+        using var process = Process.GetCurrentProcess();
+        var cycles = new List<object>();
+        for (var cycle = 0; cycle < 4; cycle++)
+        {
+            var window = new RopeWindow(store, preview: true, settings: new AppSettings { Animate = true }) { Width = 1600, Height = 900, ShowActivated = false, Topmost = false };
+            window.Show(); window.RenderDemo(1000); window.UpdateLayout(); window.DiagnosticCompactSurface();
+            await Task.Delay(500);
+            var samples = new List<double>(); TimeSpan? previous = null;
+            EventHandler frame = (_, args) => { var time = ((RenderingEventArgs)args).RenderingTime; if (previous is TimeSpan last && time > last) samples.Add((time - last).TotalMilliseconds); previous = time; };
+            var allocated = GC.GetTotalAllocatedBytes(); var created = window.CreatedNoteCount;
+            CompositionTarget.Rendering += frame;
+            try
+            {
+                // Sustained fractional gesture, many viewport boundaries, then reversal.
+                for (var tick = 0; tick < 360; tick++) { window.DiagnosticGesture(tick < 180 ? 32.5 : -32.5); await Task.Delay(8); }
+                await Task.Delay(700);
+            }
+            finally { CompositionTarget.Rendering -= frame; }
+            process.Refresh(); var sorted = samples.Order().ToArray();
+            cycles.Add(new { Cycle = cycle, Frames = sorted.Length, P95FrameGapMs = sorted.Length == 0 ? 0 : sorted[(int)((sorted.Length - 1) * .95)], MaxFrameGapMs = sorted.LastOrDefault(), GapsOver33Ms = sorted.Count(x => x > 33.4), CreatedCards = window.CreatedNoteCount - created, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated, WorkingSetBytes = process.WorkingSet64, PrivateBytes = process.PrivateMemorySize64, RetainedPreviewBytes = window.CachedImageBytes, FinalOffset = window.ScrollOffset });
+            await window.CloseRopeAsync();
+        }
+        var path = Path.GetFullPath(output); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new { Scenario = "Four sustained 360-update precision gestures and reversals over 1000 synthetic notes; rendering callbacks, not display FPS; no clipboard or forced GC", Cycles = cycles }, new JsonSerializerOptions { WriteIndented = true }));
+    }
     public static async Task RunAsync(HistoryStore store, string output, bool software)
     {
         if (software) RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;

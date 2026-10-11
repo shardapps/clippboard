@@ -61,7 +61,7 @@ internal static class AppSessionChecks
                         return process;
                     }
                     listener = StartListener();
-                    await Until(() => FindWindow(listener.Id, "Clippboard listener", visible: false) != 0, "listener startup");
+                    await Until(() => FindOwnedMessageWindow(listener.Id, "Clippboard listener") != 0, "listener startup");
                     await listenerReady!.WaitAsync(TimeSpan.FromSeconds(15));
                     await Task.Run(() => listener.WaitForInputIdle(5000));
                     var fixtureHandle = new WindowInteropHelper(fixture).Handle;
@@ -127,7 +127,7 @@ internal static class AppSessionChecks
                     var warmWorkingSet = listener.WorkingSet64; var warmPrivate = listener.PrivateMemorySize64;
                     listener.Kill(entireProcessTree: true); await listener.WaitForExitAsync(); listener.Dispose();
                     listener = StartListener();
-                    await Until(() => FindWindow(listener.Id, "Clippboard listener", visible: false) != 0, "listener restart");
+                    await Until(() => FindOwnedMessageWindow(listener.Id, "Clippboard listener") != 0, "listener restart");
                     await listenerReady!.WaitAsync(TimeSpan.FromSeconds(15));
                     if (Directory.GetFiles(historyDirectory, "*.clip").Length != persisted) throw new IOException("History did not persist through restart.");
                     await Task.Delay(10000); listener.Refresh();
@@ -196,6 +196,17 @@ internal static class AppSessionChecks
         }, 0);
         return found;
     }
+    internal static nint FindOwnedMessageWindow(int process, string title)
+    {
+        nint window = 0;
+        while ((window = FindWindowEx(new nint(-3), window, null, title)) != 0)
+        {
+            NativeMethods.GetWindowThreadProcessId(window, out var pid);
+            if (pid == process) return window;
+        }
+        return 0;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint FindWindowEx(nint parent, nint after, string? className, string title);
     private delegate bool EnumWindowProc(nint window, nint parameter);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowProc callback, nint parameter);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(nint window, StringBuilder text, int maximum);

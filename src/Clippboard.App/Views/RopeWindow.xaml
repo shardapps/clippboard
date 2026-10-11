@@ -23,7 +23,7 @@
       <Grid Grid.Row="1" x:Name="Board" SizeChanged="OnBoardSizeChanged">
         <d:RopeVisual x:Name="Rope" Height="100" VerticalAlignment="Top" IsHitTestVisible="False"/>
         <ScrollViewer x:Name="NoteScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" ScrollChanged="OnScrollChanged" HorizontalContentAlignment="Left" VerticalContentAlignment="Top">
-          <Canvas x:Name="Notes" Height="390"/>
+          <Canvas x:Name="Notes" Height="390"><Canvas.RenderTransform><TranslateTransform x:Name="NotesMotion"/></Canvas.RenderTransform></Canvas>
         </ScrollViewer>
         <Border x:Name="EmptyState" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Outline}" BorderThickness="1" CornerRadius="22" Width="360" Height="160" VerticalAlignment="Top" Margin="0,70,0,0" MouseDown="OnInsideClick">
           <StackPanel VerticalAlignment="Center" Margin="24"><TextBlock x:Name="EmptyTitle" Text="Room for your next idea." FontSize="22" FontWeight="SemiBold" TextAlignment="Center"/><TextBlock x:Name="EmptyHint" Text="Copy something. We'll hang it here." Foreground="{DynamicResource Muted}" TextAlignment="Center" FontSize="15" Margin="0,12,0,0"/></StackPanel>

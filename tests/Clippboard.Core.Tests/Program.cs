@@ -296,6 +296,9 @@ internal static class Program
                     && MemoryAvailability.PreviewBudget(16000000, 6, 300000, 10000000) == 100000
                     && MemoryAvailability.PreviewBudget(50000, 6, 300000, 10000000) == 50000,
                     "adaptive cache respects demand, live physical memory pressure and user limit");
+                Check(MemoryAvailability.PreviewBudget(16000000, 6, 300000, 0) == 0
+                    && MemoryAvailability.PreviewBudget(16000000, 6, 300000, -1) == 3600000,
+                    "zero memory headroom disables retention; unavailable telemetry uses bounded viewport demand");
                 Check(MemoryAvailability.DecodeConcurrency(10000000, 16, 24000000) == 1
                     && MemoryAvailability.DecodeConcurrency(16000000000, 16, 24000000) == 2
                     && MemoryAvailability.DecodeConcurrency(16000000000, 1, 24000000) == 1,

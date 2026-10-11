@@ -17,14 +17,14 @@ internal static class MemoryAvailability
     internal static long AvailableBytes()
     {
         var status = new Status { Length = (uint)Marshal.SizeOf<Status>() };
-        return GlobalMemoryStatusEx(ref status) ? (long)Math.Min(status.AvailablePhysical, (ulong)long.MaxValue) : 0;
+        return GlobalMemoryStatusEx(ref status) ? (long)Math.Min(status.AvailablePhysical, (ulong)long.MaxValue) : -1;
     }
     internal static long PreviewBudget(long userLimit, int viewportCards, long bytesPerPreview, long available)
     {
         // Keep approximately two viewports warm, within the user's ceiling and
         // one percent of currently available physical RAM. Zero means no cache.
         var demand = Math.Max(0, viewportCards) * Math.Max(0, bytesPerPreview) * 2;
-        return Math.Max(0, Math.Min(Math.Min(userLimit, demand), available > 0 ? available / 100 : demand));
+        return Math.Max(0, Math.Min(Math.Min(userLimit, demand), available >= 0 ? available / 100 : demand));
     }
     internal static int DecodeConcurrency(long available, int processors, long maxPayload)
         => (int)Math.Clamp(Math.Min(Math.Max(1, processors), available > 0 ? available / 100 / Math.Max(1, maxPayload) : 1), 1, 2);

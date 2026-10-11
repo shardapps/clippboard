@@ -57,7 +57,8 @@ public partial class App : Application
             if (diagnostic >= 0)
             {
                 if (diagnostic + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic report path required.");
-                await PerformanceDiagnostics.RunAsync(_store, e.Args[diagnostic + 1], e.Args.Contains("--software"));
+                if (e.Args.Contains("--scroll-only")) await PerformanceDiagnostics.RunScrollAsync(_store, e.Args[diagnostic + 1]);
+                else await PerformanceDiagnostics.RunAsync(_store, e.Args[diagnostic + 1], e.Args.Contains("--software"));
                 Shutdown(); return;
             }
             if (preview >= 0)

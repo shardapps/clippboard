@@ -1,6 +1,6 @@
 param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','format')][string]$Task = 'build',
   [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
-  [switch]$Settings, [switch]$Detail, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software)
+  [switch]$Settings, [switch]$Detail, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
@@ -22,6 +22,7 @@ switch ($Task) {
   }
   'diagnostics' {
     $diagnosticArgs = @('--diagnostics', (Join-Path $projectRoot 'artifacts/motion-diagnostics.json'))
+    if ($ScrollOnly) { $diagnosticArgs += '--scroll-only' }
     if ($Software) { $diagnosticArgs += '--software' }
     & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- @diagnosticArgs
   }

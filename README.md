@@ -41,7 +41,7 @@ Built by [Shard Apps](https://github.com/shardapps). Open source, local first, a
 
 Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setups need further validation before being advertised as supported.
 
-**Unsigned alpha binaries:** open a successful [Windows build](https://github.com/shardapps/clippboard/actions/workflows/ci.yml), download the `clippboard-windows-x64-alpha` artifact, and unzip it. Run `installer/Clippboard-Setup-0.4.0.exe` for a per-user installation, or `portable/win-x64/Clippboard.exe` directly. GitHub may require sign-in for artifact downloads; artifacts expire after 14 days. These are evaluation builds, not stable releases.
+**Unsigned alpha binaries:** open a successful [Windows build](https://github.com/shardapps/clippboard/actions/workflows/ci.yml), download the `clippboard-windows-x64-alpha` artifact, and unzip it. Run the `Clippboard-Setup-<version>.exe` in `installer/` for a per-user installation, or `portable/win-x64/Clippboard.exe` directly. GitHub may require sign-in for artifact downloads; artifacts expire after 14 days. These are evaluation builds, not stable releases.
 
 **Microsoft Store:** Windows 11 x64 version **0.4.0.0** is awaiting approval under publisher **ShardCoders**. The initial review rejected a keyword and the privacy URL; the corrections and resubmission procedure are documented in [Store distribution](docs/store.md). Public availability is held manually until Microsoft review and a Store-signed installation check finish; the separate GitHub EXE remains unsigned. [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
 

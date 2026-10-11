@@ -5,7 +5,6 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Clippboard.App.Platform;
@@ -15,7 +14,7 @@ namespace Clippboard.App.Services;
 
 internal sealed class ClipboardService : IDisposable
 {
-    private readonly HwndSource _source;
+    private readonly MessageWindow _source;
     private readonly DispatcherTimer _retry;
     private readonly Func<Clip, Task> _save;
     private uint _sequence;
@@ -40,9 +39,8 @@ internal sealed class ClipboardService : IDisposable
     public ClipboardService(Func<Clip, Task> save, ShortcutChoice shortcut = ShortcutChoice.CtrlShiftV)
     {
         _save = save;
-        _source = new HwndSource(new HwndSourceParameters("Clippboard listener") { Width = 0, Height = 0, WindowStyle = 0 });
-        _source.AddHook(WndProc);
-        if (!NativeMethods.AddClipboardFormatListener(_source.Handle)) { _source.RemoveHook(WndProc); _source.Dispose(); throw new InvalidOperationException("Cannot listen to the Windows clipboard."); }
+        _source = new MessageWindow(WndProc);
+        if (!NativeMethods.AddClipboardFormatListener(_source.Handle)) { _source.Dispose(); throw new InvalidOperationException("Cannot listen to the Windows clipboard."); }
         _shortcut = shortcut;
         HotkeyAvailable = NativeMethods.RegisterHotKey(_source.Handle, _hotkeyId, ShortcutModifiers(shortcut), 0x56);
         _retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
@@ -50,17 +48,17 @@ internal sealed class ClipboardService : IDisposable
         SessionTrace("Clipboard listener ready");
     }
 
-    private nint WndProc(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
+    private bool WndProc(int message, nint wParam, nint lParam)
     {
-        if (_disposed) return 0;
-        if (message == 0x0312 && wParam == _hotkeyId) { ToggleRequested?.Invoke(); handled = true; }
+        if (_disposed) return false;
+        if (message == 0x0312 && wParam == _hotkeyId) { ToggleRequested?.Invoke(); return true; }
         if (message == 0x031D && !Paused)
         {
             SessionTrace("Clipboard update received");
             _sequence = NativeMethods.GetClipboardSequenceNumber();
             if (_sequence != _ownSequence) { _attempts = 0; _retry.Start(); }
         }
-        return 0;
+        return false;
     }
 
     private async void Retry(object? sender, EventArgs e)
@@ -187,6 +185,6 @@ internal sealed class ClipboardService : IDisposable
         _reader.Dispose(); _retry.Stop(); _retry.Tick -= Retry;
         NativeMethods.UnregisterHotKey(_source.Handle, _hotkeyId);
         NativeMethods.RemoveClipboardFormatListener(_source.Handle);
-        _source.RemoveHook(WndProc); _source.Dispose();
+        _source.Dispose();
     }
 }

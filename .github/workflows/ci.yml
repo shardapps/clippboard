@@ -42,6 +42,8 @@ jobs:
         run: ./scripts/dev.ps1 test
       - name: Signing and packaging failure guards
         run: ./scripts/test-packaging-guards.ps1
+      - name: Sustained precision scrolling and reversal profile
+        run: ./scripts/dev.ps1 diagnostics -ScrollOnly
       - name: Overlay process lifecycle with hardware and software rendering
         shell: pwsh
         run: |
@@ -73,6 +75,7 @@ jobs:
             artifacts/build-info.json
             artifacts/installer-tests/installed-preview.png
             artifacts/overlay-lifecycle*.json
+            artifacts/motion-diagnostics.json
             artifacts/session-checks/report.json
           if-no-files-found: error
           retention-days: 14

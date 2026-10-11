@@ -13,6 +13,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using Clippboard.App.Design;
 using Clippboard.App.Services;
+using Clippboard.App.Platform;
 using Clippboard.Core;
 
 namespace Clippboard.App.Views;
@@ -29,13 +30,20 @@ public partial class RopeWindow : Window
     private IReadOnlyList<ClipSummary> _entries = [];
     private List<ClipSummary> _visible = [];
     private readonly Dictionary<int, Grid> _cards = new();
+    private sealed record NoteBinding(TextBlock Label, TextBlock Date, Button Select, Button Star)
+    {
+        internal ClipSummary Entry { get; set; } = null!;
+    }
+    private readonly Dictionary<Grid, NoteBinding> _bindings = new();
+    private readonly Stack<Grid> _spareCards = new();
+    private (int First, int Last) _renderedRange = (-1, -1);
     private readonly Dictionary<Grid, CancellationTokenSource> _thumbnailLoads = new();
     private readonly Dictionary<string, BitmapSource> _demoImages = new();
     private CancellationTokenSource _loads = new();
     private int _renderVersion;
     private bool _closing, _starredOnly, _scrollSync;
-    private long _scrollVersion;
     private readonly System.Windows.Threading.DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(160) };
+    private readonly System.Windows.Threading.DispatcherTimer _memoryTimer = new(System.Windows.Threading.DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(5) };
     private string _query = "";
     private ClipKind? _kind;
     private double _scrollTarget;
@@ -46,6 +54,7 @@ public partial class RopeWindow : Window
     public event Action<ClipSummary>? ExpandRequested;
     internal int RenderedNoteCount => _cards.Count;
     internal long CachedImageBytes => _cache.RetainedBytes;
+    internal long PreviewBudgetBytes => _cache.BudgetBytes;
     internal bool Retired { get; private set; }
     internal int VisibleNoteCount => _visible.Count;
     internal int PendingThumbnailCount => _thumbnailLoads.Count;
@@ -64,16 +73,19 @@ public partial class RopeWindow : Window
         SystemParameters.StaticPropertyChanged += OnSystemAppearanceChanged;
         Closed += (_, _) => SystemParameters.StaticPropertyChanged -= OnSystemAppearanceChanged;
         Rope.ShapeChanged += PositionNotes;
+        _memoryTimer.Tick += (_, _) => { if (!_scrollRunning) UpdatePreviewBudget(); };
+        IsVisibleChanged += (_, _) => { if (IsVisible && !_closing) _memoryTimer.Start(); else _memoryTimer.Stop(); };
+        Closed += (_, _) => _memoryTimer.Stop();
         SettingsRequested += () => OpenSettings();
         ExpandRequested += async entry => await OpenDetailAsync(entry);
         _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); _query = SearchBox.Text.Trim(); RebuildNotes(); ScrollTo(0); };
-        Closed += (_, _) => { Retired = true; SmoothMotion.CancelTree(this); _searchTimer.Stop(); DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
+        Closed += (_, _) => { Retired = true; SmoothMotion.CancelTree(this); _searchTimer.Stop(); DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _spareCards.Clear(); _bindings.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
     }
     public void ApplyAppearance(AppSettings settings)
     {
         _settings = settings.Normalize();
         PreviewAppearance(_settings);
-        _cache.BudgetBytes = _settings.PreviewCacheMiB * 1024L * 1024;
+        UpdatePreviewBudget();
         _cache.Clear(); SetPaused(_settings.CapturePaused);
     }
     internal void PreviewAppearance(AppSettings draft)
@@ -84,6 +96,7 @@ public partial class RopeWindow : Window
         if (Notes is null || Retired) return;
         if (!Animated && IsVisible && !_closing)
         {
+            if (_scrollRunning) ScrollTo(_scrollTarget);
             SmoothMotion.Move(Slide, TranslateTransform.YProperty, 0, false, 1);
             SmoothMotion.Move(Rope, RopeVisual.SagProperty, 24, false, 1);
             foreach (var card in _cards.Values)
@@ -120,17 +133,18 @@ public partial class RopeWindow : Window
     {
         if (_closing) return;
         var bounds = System.Windows.Forms.Screen.FromHandle(target).WorkingArea;
-        _availableHeightPixels = bounds.Height;
         Slide.BeginAnimation(TranslateTransform.YProperty, null); Slide.Y = -600;
         _starredOnly = _settings.OpenStarredOnly;
-        Height = AvailableHeight; Width = bounds.Width / VisualTreeHelper.GetDpi(this).DpiScaleX;
+        Width = bounds.Width / VisualTreeHelper.GetDpi(this).DpiScaleX;
+        PrepareSurface(bounds.Height);
         Show();
-        SetWindowPos(new WindowInteropHelper(this).Handle, 0, bounds.Left, bounds.Top, bounds.Width, Math.Min(bounds.Height, (int)Math.Ceiling(720 * VisualTreeHelper.GetDpi(this).DpiScaleY)), 0x0014);
+        SetWindowPos(new WindowInteropHelper(this).Handle, 0, bounds.Left, bounds.Top, bounds.Width, Math.Min(bounds.Height, (int)Math.Ceiling(AvailableHeight * VisualTreeHelper.GetDpi(this).DpiScaleY)), 0x0014);
         Activate(); UpdateLayout(); await RefreshAsync();
         if (!IsVisible || _closing) return;
         FitSurface(); AnimateEntrance();
     }
     internal void DiagnosticScroll(double offset) => ScrollTo(offset);
+    internal void DiagnosticGesture(double distance) => GestureScroll(distance);
     internal void AnimateEntrance()
     {
         Slide.BeginAnimation(TranslateTransform.YProperty, null); Slide.Y = -600;
@@ -144,7 +158,7 @@ public partial class RopeWindow : Window
     public async Task CloseRopeAsync()
     {
         if (!IsVisible || _closing) return;
-        _closing = true; _searchTimer.Stop(); ++_renderVersion; CancelLoads();
+        _closing = true; StopScroll(); _memoryTimer.Stop(); _searchTimer.Stop(); ++_renderVersion; CancelLoads();
         DismissSettings(); DismissDetail();
         var duration = Animated ? 560 : 1;
         SmoothMotion.Move(Slide, TranslateTransform.YProperty, -Math.Max(600, Panel.ActualHeight + 24), Animated, 260);
@@ -192,6 +206,7 @@ public partial class RopeWindow : Window
             PlaceCard(prior.Card, 24 + i * Pitch, Animated);
         }
         foreach (var prior in reusable.Values) RetireCard(prior.Card);
+        _renderedRange = (-1, -1);
         SetStatus($"{_visible.Count} {(_starredOnly ? "starred clips" : "clips")} · {_settings.RetentionDays}-day history · Esc to tuck away");
         RenderVisible(); SyncScroll();
     }
@@ -199,16 +214,38 @@ public partial class RopeWindow : Window
     {
         if (!IsVisible || _closing || NoteScroll.ViewportWidth <= 0) return;
         var range = MotionMath.VisibleRange(_visible.Count, Math.Max(0, ScrollOffset - 24), NoteScroll.ViewportWidth, Pitch);
+        if (range == _renderedRange) { PositionNotes(); return; }
+        _renderedRange = range;
+        UpdatePreviewBudget();
+        var spare = new Queue<Grid>();
         foreach (var index in _cards.Keys.Where(i => i < range.First || i > range.Last).ToArray())
-        { RetireCard(_cards[index]); _cards.Remove(index); }
+        { var card = _cards[index]; ResetCard(card); spare.Enqueue(card); _cards.Remove(index); }
         for (var i = range.First; i <= range.Last; i++)
         {
             if (_cards.ContainsKey(i)) continue;
-            var card = BuildNote(_visible[i]); _cards[i] = card; Notes.Children.Add(card);
+            var card = spare.Count > 0 ? spare.Dequeue() : _spareCards.Count > 0 ? _spareCards.Pop() : BuildNote(_visible[i]);
+            BindNote(card, _visible[i]); _cards[i] = card;
+            if (!Notes.Children.Contains(card)) Notes.Children.Add(card);
             Canvas.SetLeft(card, 24 + i * Pitch);
             if (_visible[i].Kind == ClipKind.Image) StartThumbnail(_visible[i], card);
         }
+        // Entering/leaving range boundaries do not happen at the same pixel.
+        // Keep that small difference warm, bounded by viewport geometry, so
+        // the next boundary does not allocate a new control tree.
+        var capacity = Math.Min(_visible.Count, (int)Math.Ceiling(NoteScroll.ViewportWidth / Pitch) + 4);
+        foreach (var card in spare)
+        {
+            Notes.Children.Remove(card);
+            if (_cards.Count + _spareCards.Count < capacity) _spareCards.Push(card);
+            else _bindings.Remove(card);
+        }
+        while (_spareCards.Count > 0 && _cards.Count + _spareCards.Count > capacity) _bindings.Remove(_spareCards.Pop());
         PositionNotes();
+    }
+    private void UpdatePreviewBudget()
+    {
+        var cards = (int)Math.Ceiling(Math.Max(0, NoteScroll?.ViewportWidth ?? 0) / Pitch) + 2;
+        _cache.BudgetBytes = MemoryAvailability.PreviewBudget(_settings.PreviewCacheMiB * 1024L * 1024, cards, 360L * 230 * 4, MemoryAvailability.AvailableBytes());
     }
     private void PositionNotes()
     {
@@ -227,12 +264,38 @@ public partial class RopeWindow : Window
         Canvas.SetLeft(card, left);
         SmoothMotion.Move(shift, TranslateTransform.XProperty, 0, animate, 240);
     }
-    private void RetireCard(Grid card)
+    private void ResetCard(Grid card)
     {
         if (_thumbnailLoads.Remove(card, out var source)) { source.Cancel(); source.Dispose(); }
         SmoothMotion.CancelTree(card);
         if (card.Tag is Button button && button.Content is Image image) image.Source = null;
-        Notes.Children.Remove(card);
+        if (card.RenderTransform is TransformGroup transforms)
+        {
+            ((RotateTransform)transforms.Children[0]).Angle = 0;
+            ((TranslateTransform)transforms.Children[1]).Y = 0;
+            ((TranslateTransform)transforms.Children[3]).X = 0;
+        }
+        if (card.Children[1] is Border paper && paper.RenderTransform is TranslateTransform hover) hover.Y = 0;
+        card.Opacity = 1;
+    }
+    private void RetireCard(Grid card)
+    {
+        ResetCard(card); Notes.Children.Remove(card); _bindings.Remove(card);
+    }
+    private void BindNote(Grid card, ClipSummary entry)
+    {
+        var binding = _bindings[card]; binding.Entry = entry;
+        binding.Label.Text = entry.Kind.ToString().ToUpperInvariant();
+        binding.Date.Text = entry.CopiedAt.ToLocalTime().ToString("MMM d · HH:mm");
+        if (binding.Select.Content is TextBlock text) { text.Text = entry.Preview; text.FontSize = _appearance.TextSize; }
+        else binding.Select.Content = new TextBlock { Text = entry.Preview, FontSize = _appearance.TextSize, TextWrapping = TextWrapping.Wrap, TextTrimming = TextTrimming.CharacterEllipsis, MaxHeight = 210 };
+        System.Windows.Automation.AutomationProperties.SetName(binding.Select, $"Restore {entry.Kind}: {entry.Preview}");
+        var name = entry.Pinned ? "Unstar clip" : "Star clip";
+        ((IconView)binding.Star.Content).Symbol = entry.Pinned ? "star" : "star-outline";
+        ((IconView)binding.Star.Content).SetResourceReference(IconView.InkProperty, entry.Pinned ? "StarColor" : "Foreground");
+        binding.Star.ToolTip = name;
+        System.Windows.Automation.AutomationProperties.SetName(binding.Star, name);
+        card.Width = _appearance.NoteWidth;
     }
     private void StartThumbnail(ClipSummary entry, Grid card)
     {
@@ -258,6 +321,7 @@ public partial class RopeWindow : Window
     {
         ++CreatedNoteCount;
         var wrapper = new Grid { Width = _appearance.NoteWidth, Height = 330, RenderTransformOrigin = new Point(.5, 0) };
+        ClipSummary Current() => _bindings[wrapper].Entry;
         var attachment = new TransformGroup(); attachment.Children.Add(new RotateTransform()); attachment.Children.Add(new TranslateTransform()); attachment.Children.Add(new TranslateTransform()); attachment.Children.Add(new TranslateTransform()); wrapper.RenderTransform = attachment;
         var hover = new TranslateTransform();
         wrapper.MouseDown += OnInsideClick;
@@ -275,17 +339,18 @@ public partial class RopeWindow : Window
             VerticalContentAlignment = VerticalAlignment.Top, ToolTip = "Restore this clip · Shift-click to copy without pasting",
             Content = new TextBlock { Text = entry.Preview, FontSize = _appearance.TextSize, TextWrapping = TextWrapping.Wrap, TextTrimming = TextTrimming.CharacterEllipsis, MaxHeight = 210 } };
         System.Windows.Automation.AutomationProperties.SetName(select, $"Restore {entry.Kind}: {entry.Preview}");
-        select.Click += async (_, _) => { if (Selected is not null) await Selected(entry); };
+        select.Click += async (_, _) => { if (Selected is not null) await Selected(Current()); };
         Grid.SetRow(select, 1); body.Children.Add(select); wrapper.Tag = select;
         var footer = new Grid(); footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         var date = new TextBlock { Text = entry.CopiedAt.ToLocalTime().ToString("MMM d · HH:mm"), FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center };
         date.SetResourceReference(TextBlock.ForegroundProperty, "Muted"); footer.Children.Add(date);
         var actions = new StackPanel { Orientation = Orientation.Horizontal }; Grid.SetColumn(actions, 1); footer.Children.Add(actions);
         var star = IconButton(entry.Pinned ? "star" : "star-outline", entry.Pinned ? "Unstar clip" : "Star clip");
+        _bindings.Add(wrapper, new NoteBinding(label, date, select, star) { Entry = entry });
         if (entry.Pinned) ((IconView)star.Content).SetResourceReference(IconView.InkProperty, "StarColor");
-        star.Click += async (_, _) => await ChangeNoteAsync(entry, false); actions.Children.Add(star);
-        var expand = IconButton("expand", "Expand and resize note"); expand.Click += (_, _) => ExpandRequested?.Invoke(entry); actions.Children.Add(expand);
-        var delete = IconButton("close", "Delete clip"); delete.Click += async (_, _) => await ChangeNoteAsync(entry, true); actions.Children.Add(delete);
+        star.Click += async (_, _) => await ChangeNoteAsync(Current(), false); actions.Children.Add(star);
+        var expand = IconButton("expand", "Expand and resize note"); expand.Click += (_, _) => ExpandRequested?.Invoke(Current()); actions.Children.Add(expand);
+        var delete = IconButton("close", "Delete clip"); delete.Click += async (_, _) => await ChangeNoteAsync(Current(), true); actions.Children.Add(delete);
         Grid.SetRow(footer, 2); body.Children.Add(footer); paper.Child = body; wrapper.Children.Add(paper);
         var peg = new Border { Width = 17, Height = 47, CornerRadius = new CornerRadius(5), Background = new SolidColorBrush(Color.FromRgb(189, 151, 108)),
             BorderBrush = new SolidColorBrush(Color.FromRgb(139, 103, 68)), BorderThickness = new Thickness(1), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false,

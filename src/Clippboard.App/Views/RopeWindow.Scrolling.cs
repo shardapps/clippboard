@@ -1,9 +1,11 @@
 using System;
-using System.Threading.Tasks;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
+using Clippboard.Core;
 using Clippboard.App.Design;
 using Clippboard.App.Platform;
 
@@ -12,6 +14,12 @@ namespace Clippboard.App.Views;
 public partial class RopeWindow
 {
     private HwndSource? _inputSource;
+    private bool _scrollRunning;
+    private long _scrollFrameStamp, _gestureStamp;
+    private TimeSpan? _scrollRenderTime;
+    private double _scrollVelocity, _scrollResponse = .24, _frameSeconds, _gestureSeconds;
+    private double? _committedScroll;
+    internal bool ScrollRunning => _scrollRunning;
     internal double ScrollOffset => Math.Clamp((double)GetValue(ScrollPositionProperty), 0, NoteScroll?.ScrollableWidth ?? 0);
     public static readonly DependencyProperty ScrollPositionProperty = DependencyProperty.Register("ScrollPosition", typeof(double), typeof(RopeWindow),
         new PropertyMetadata(0.0, (d, _) => ((RopeWindow)d).ApplyScrollPosition()));
@@ -23,6 +31,7 @@ public partial class RopeWindow
     }
     private void DetachScrollInput()
     {
+        StopScroll();
         _inputSource?.RemoveHook(OnNativeScroll); _inputSource = null;
     }
     private nint OnNativeScroll(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
@@ -33,7 +42,7 @@ public partial class RopeWindow
         if (!new Rect(Board.RenderSize).Contains(point)) return 0;
         var distance = HorizontalWheel.Distance(HorizontalWheel.Delta(wParam), HorizontalWheel.ScrollCharacters(), NoteScroll.ViewportWidth);
         if (distance == 0) return 0;
-        ScrollTo(_scrollTarget + distance, 90);
+        GestureScroll(distance);
         handled = true; return 0;
     }
 
@@ -51,20 +60,57 @@ public partial class RopeWindow
         _scrollTarget = Math.Clamp(value, 0, NoteScroll.ScrollableWidth);
         if (!Animated)
         {
-            ++_scrollVersion;
-            SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, false, 1);
-            NoteScroll.ScrollToHorizontalOffset(_scrollTarget); return;
+            StopScroll();
+            SetCurrentValue(ScrollPositionProperty, _scrollTarget);
+            CommitScroll(); return;
         }
-        var version = ++_scrollVersion;
-        SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, Animated, milliseconds);
-        FinishScrollAsync(version, milliseconds);
+        _scrollResponse = milliseconds / 1000.0;
+        if (_scrollRunning) return;
+        _scrollRunning = true; _scrollFrameStamp = Stopwatch.GetTimestamp(); _scrollRenderTime = null;
+        CompositionTarget.Rendering += OnScrollFrame;
     }
-    private async void FinishScrollAsync(long version, int milliseconds)
+    private void GestureScroll(double distance)
     {
-        await Task.Delay(Animated ? milliseconds * 2 + 40 : 1);
-        if (version != _scrollVersion || Retired || _closing) return;
-        SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, false, 1);
-        NoteScroll.ScrollToHorizontalOffset(_scrollTarget);
+        var now = Stopwatch.GetTimestamp();
+        if (_gestureStamp != 0 && _scrollRunning)
+        {
+            var interval = Stopwatch.GetElapsedTime(_gestureStamp, now).TotalSeconds;
+            _gestureSeconds = _gestureSeconds == 0 ? interval : (_gestureSeconds + interval) / 2;
+        }
+        else _gestureSeconds = 0;
+        _gestureStamp = now;
+        ScrollTo(_scrollTarget + distance);
+        // Track the device's actual input cadence and observed render cadence.
+        // OS momentum is already in the deltas; do not add another fling.
+        if (_gestureSeconds > 0) _scrollResponse = Math.Min(_scrollResponse, Math.Max(_gestureSeconds, _frameSeconds) * 4);
+    }
+    private void OnScrollFrame(object? sender, EventArgs e)
+    {
+        if (Retired || _closing || !IsVisible) { StopScroll(); return; }
+        var renderTime = ((RenderingEventArgs)e).RenderingTime;
+        if (_scrollRenderTime == renderTime) return;
+        _scrollRenderTime = renderTime;
+        var now = Stopwatch.GetTimestamp();
+        var seconds = Stopwatch.GetElapsedTime(_scrollFrameStamp, now).TotalSeconds;
+        if (seconds <= 0) return;
+        _scrollFrameStamp = now;
+        _frameSeconds = _frameSeconds == 0 ? seconds : (_frameSeconds + seconds) / 2;
+        var next = MotionMath.Spring(ScrollOffset, _scrollVelocity, _scrollTarget, seconds, 6 / _scrollResponse);
+        var position = Math.Clamp(next.Position, 0, NoteScroll.ScrollableWidth);
+        _scrollVelocity = position == next.Position ? next.Velocity : 0;
+        // Commit at physical-pixel rest, rather than a wall-clock deadline which
+        // can snap midway through motion after a delayed render frame.
+        var pixel = 1 / VisualTreeHelper.GetDpi(this).DpiScaleX;
+        var settled = Math.Abs(position - _scrollTarget) < pixel / 2 && Math.Abs(_scrollVelocity * _frameSeconds) < pixel / 2;
+        SetCurrentValue(ScrollPositionProperty, settled ? _scrollTarget : position);
+        if (!settled) return;
+        StopScroll(); CommitScroll();
+    }
+    private void CommitScroll() { _committedScroll = _scrollTarget; NoteScroll.ScrollToHorizontalOffset(_scrollTarget); }
+    private void StopScroll()
+    {
+        if (_scrollRunning) CompositionTarget.Rendering -= OnScrollFrame;
+        _scrollRunning = false; _scrollVelocity = 0;
     }
     private void SyncScroll()
     {
@@ -81,13 +127,19 @@ public partial class RopeWindow
     {
         if (e.HorizontalChange != 0)
         {
-            ++_scrollVersion; _scrollTarget = NoteScroll.HorizontalOffset;
-            SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, false, 1);
+            // A queued commit may arrive after the next gesture has begun.
+            // It updates the layout origin without interrupting new motion.
+            if (_committedScroll is double committed && Math.Abs(NoteScroll.HorizontalOffset - committed) < .001) _committedScroll = null;
+            else
+            {
+                _committedScroll = null; StopScroll(); _scrollTarget = NoteScroll.HorizontalOffset;
+                SetCurrentValue(ScrollPositionProperty, _scrollTarget);
+            }
         }
         if ((double)GetValue(ScrollPositionProperty) > NoteScroll.ScrollableWidth || _scrollTarget > NoteScroll.ScrollableWidth)
         {
-            ++_scrollVersion; _scrollTarget = NoteScroll.ScrollableWidth;
-            SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, false, 1);
+            StopScroll(); _scrollTarget = NoteScroll.ScrollableWidth;
+            SetCurrentValue(ScrollPositionProperty, _scrollTarget);
         }
         ApplyScrollPosition();
     }
@@ -100,16 +152,17 @@ public partial class RopeWindow
     private void OnScrollbarChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_scrollSync || NoteScroll is null || Retired || _closing) return;
-        ++_scrollVersion; _scrollTarget = e.NewValue;
-        SmoothMotion.Move(this, ScrollPositionProperty, e.NewValue, false, 1);
-        NoteScroll.ScrollToHorizontalOffset(e.NewValue);
+        StopScroll(); _scrollTarget = e.NewValue;
+        SetCurrentValue(ScrollPositionProperty, e.NewValue);
+        CommitScroll();
     }
     private void OnMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (SidebarHost.Visibility == Visibility.Visible || DetailHost.Visibility == Visibility.Visible || Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
         var lines = SystemParameters.WheelScrollLines;
-        var distance = e.Delta / 120.0 * (lines < 0 ? NoteScroll.ViewportWidth : lines * 100.0);
-        ScrollTo(_scrollTarget - distance, Math.Abs(e.Delta) < 120 ? 90 : 180); e.Handled = true;
+        var distance = e.Delta / 120.0 * (lines < 0 ? NoteScroll.ViewportWidth : lines * Pitch / 3);
+        if (Math.Abs(e.Delta) < 120) GestureScroll(-distance); else ScrollTo(_scrollTarget - distance, 180);
+        e.Handled = true;
     }
     private void OnPrevious(object sender, RoutedEventArgs e) => ScrollTo(_scrollTarget - Pitch);
     private void OnNext(object sender, RoutedEventArgs e) => ScrollTo(_scrollTarget + Pitch);

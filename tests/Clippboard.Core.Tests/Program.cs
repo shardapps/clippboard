@@ -312,10 +312,10 @@ internal static class Program
                 }
                 window.ApplyAppearance(window.SavedSettings with { Animate = true });
                 window.DiagnosticScroll(600); Pump(Task.Delay(90));
-                Check(window.ScrollOffset > 0 && scroll.HorizontalOffset == 0, "animated scrolling moves notes before a ScrollViewer layout commit");
+                Check(SystemParameters.ClientAreaAnimation ? window.ScrollOffset > 0 && scroll.HorizontalOffset == 0 : window.ScrollOffset == 600 && scroll.HorizontalOffset == 600, "scrolling uses render motion or immediate reduced-motion commit");
                 var midScroll = window.ScrollOffset;
                 window.DiagnosticScroll(200);
-                Check(Math.Abs(window.ScrollOffset - midScroll) < .001, "rapid scroll reversal retains visible position");
+                Check(SystemParameters.ClientAreaAnimation ? Math.Abs(window.ScrollOffset - midScroll) < .001 : window.ScrollOffset == 200, "rapid scroll reversal preserves animated position or applies reduced motion immediately");
                 Pump(Task.Delay(650)); window.UpdateLayout();
                 Check(Math.Abs(window.ScrollOffset - 200) < .001 && Math.Abs(scroll.HorizontalOffset - 200) < .001, "rendered and accessible scroll positions commit together at rest");
                 window.ApplyAppearance(window.SavedSettings with { Animate = false });

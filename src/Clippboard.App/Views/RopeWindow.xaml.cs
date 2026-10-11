@@ -56,6 +56,8 @@ public partial class RopeWindow : Window
         _store = store; _preview = preview; _settings = (settings ?? new()).Normalize();
         _cache = new PreviewCache(store);
         InitializeComponent();
+        SourceInitialized += AttachScrollInput;
+        Closed += (_, _) => DetachScrollInput();
         ApplyAppearance(_settings);
         SystemParameters.StaticPropertyChanged += OnSystemAppearanceChanged;
         Closed += (_, _) => SystemParameters.StaticPropertyChanged -= OnSystemAppearanceChanged;
@@ -169,7 +171,7 @@ public partial class RopeWindow : Window
         EmptyTitle.Text = _query.Length > 0 || _kind is not null ? "No matching notes." : _starredOnly ? "Your favourites live here." : "Room for your next idea.";
         EmptyHint.Text = _query.Length > 0 || _kind is not null ? "Try a different search or choose All types." : _starredOnly ? "Star a note to find it quickly." : "Copy something. We'll hang it here.";
         Notes.Width = Math.Max(NoteScroll.ViewportWidth, 48 + _visible.Count * Pitch - (_visible.Count > 0 ? _appearance.NoteSpacing : 0));
-        var range = MotionMath.VisibleRange(_visible.Count, Math.Max(0, NoteScroll.HorizontalOffset - 24), NoteScroll.ViewportWidth, Pitch);
+        var range = MotionMath.VisibleRange(_visible.Count, Math.Max(0, ScrollOffset - 24), NoteScroll.ViewportWidth, Pitch);
         for (var i = range.First; i <= range.Last; i++)
         {
             if (!reusable.TryGetValue(_visible[i].Id, out var card)) continue;
@@ -185,7 +187,7 @@ public partial class RopeWindow : Window
     private void RenderVisible()
     {
         if (!IsVisible || _closing || NoteScroll.ViewportWidth <= 0) return;
-        var range = MotionMath.VisibleRange(_visible.Count, Math.Max(0, NoteScroll.HorizontalOffset - 24), NoteScroll.ViewportWidth, Pitch);
+        var range = MotionMath.VisibleRange(_visible.Count, Math.Max(0, ScrollOffset - 24), NoteScroll.ViewportWidth, Pitch);
         foreach (var index in _cards.Keys.Where(i => i < range.First || i > range.Last).ToArray())
         { Notes.Children.Remove(_cards[index]); _cards.Remove(index); }
         for (var i = range.First; i <= range.Last; i++)
@@ -201,7 +203,7 @@ public partial class RopeWindow : Window
     {
         foreach (var (index, card) in _cards)
         {
-            var center = 24 + index * Pitch + _appearance.NoteWidth / 2 - NoteScroll.HorizontalOffset;
+            var center = 24 + index * Pitch + _appearance.NoteWidth / 2 - ScrollOffset;
             if (card.RenderTransform is TransformGroup transforms && transforms.Children[2] is TranslateTransform anchor) anchor.Y = Rope.HeightAt(center) - 8;
         }
     }
@@ -289,37 +291,6 @@ public partial class RopeWindow : Window
             SmoothMotion.Move(vertical, TranslateTransform.YProperty, 0, Animated, 450, .8);
         }
     }
-    public static readonly DependencyProperty ScrollPositionProperty = DependencyProperty.Register("ScrollPosition", typeof(double), typeof(RopeWindow),
-        new PropertyMetadata(0.0, (d, e) => ((RopeWindow)d).NoteScroll.ScrollToHorizontalOffset((double)e.NewValue)));
-    private void ScrollTo(double value)
-    {
-        _scrollTarget = Math.Clamp(value, 0, NoteScroll.ScrollableWidth);
-        _scrollAnimating = true;
-        var version = ++_scrollVersion;
-        if (!HasAnimatedProperties) SetValue(ScrollPositionProperty, NoteScroll.HorizontalOffset);
-        SmoothMotion.Move(this, ScrollPositionProperty, _scrollTarget, Animated, 240);
-        FinishScrollAsync(version);
-    }
-    private async void FinishScrollAsync(long version)
-    {
-        await Task.Delay(Animated ? 520 : 1);
-        if (version != _scrollVersion || Retired || _closing) return;
-        _scrollAnimating = false; _scrollTarget = NoteScroll.HorizontalOffset;
-    }
-    private void SyncScroll()
-    {
-        _scrollSync = true; HistoryScroll.Maximum = NoteScroll.ScrollableWidth; HistoryScroll.ViewportSize = NoteScroll.ViewportWidth;
-        HistoryScroll.LargeChange = NoteScroll.ViewportWidth; HistoryScroll.Value = NoteScroll.HorizontalOffset; _scrollSync = false;
-        Navigation.Visibility = NoteScroll.ScrollableWidth > 1 ? Visibility.Visible : Visibility.Collapsed;
-    }
-    private void OnScrollChanged(object sender, ScrollChangedEventArgs e) { if (!_scrollAnimating) _scrollTarget = NoteScroll.HorizontalOffset; RenderVisible(); SyncScroll(); }
-    private void OnBoardSizeChanged(object sender, SizeChangedEventArgs e) { if (Notes is null) return; Notes.Width = Math.Max(e.NewSize.Width, 48 + _visible.Count * Pitch - (_visible.Count > 0 ? _appearance.NoteSpacing : 0)); RenderVisible(); }
-    private void OnScrollbarChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    { if (_scrollSync || NoteScroll is null) return; ++_scrollVersion; _scrollAnimating = false; _scrollTarget = e.NewValue; SmoothMotion.Move(this, ScrollPositionProperty, e.NewValue, false, 1); }
-    private void OnMouseWheel(object sender, MouseWheelEventArgs e)
-    { if (SidebarHost.Visibility == Visibility.Visible || DetailHost.Visibility == Visibility.Visible) return; ScrollTo(_scrollTarget - e.Delta * 2.5); e.Handled = true; }
-    private void OnPrevious(object sender, RoutedEventArgs e) => ScrollTo(_scrollTarget - Pitch);
-    private void OnNext(object sender, RoutedEventArgs e) => ScrollTo(_scrollTarget + Pitch);
     private void OnAll(object sender, RoutedEventArgs e) { _starredOnly = false; RebuildNotes(); ScrollTo(0); }
     private void OnStarred(object sender, RoutedEventArgs e) { _starredOnly = true; RebuildNotes(); ScrollTo(0); }
     private void OnSettings(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();

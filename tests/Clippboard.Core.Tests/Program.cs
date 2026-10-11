@@ -21,6 +21,8 @@ using Clippboard.App.Design;
 internal static class Program
 {
     private static int _assertions;
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern nint SendMessage(nint window, int message, nint wParam, nint lParam);
     private static async Task CheckBoundedReaderAsync()
     {
         var apartment = ApartmentState.Unknown;
@@ -90,6 +92,10 @@ internal static class Program
             var range = MotionMath.VisibleRange(1000, 100000, 1600, 340);
             Check(range.Last - range.First < 9 && range.First > 200, "large history virtual range bounded");
             Check(MotionMath.VisibleRange(0, 0, 1600, 340).Last == -1, "empty virtualization range");
+            Check(HorizontalWheel.Delta((nint)(-120 << 16)) == -120 && HorizontalWheel.Delta((nint)(5 << 16)) == 5, "horizontal input preserves signed and sub-tick deltas");
+            Check(HorizontalWheel.ScreenX((nint)((-240 & 0xffff) | (-120 & 0xffff) << 16)) == -240 && HorizontalWheel.ScreenY((nint)((-240 & 0xffff) | (-120 & 0xffff) << 16)) == -120, "wheel coordinates support monitors left and above primary");
+            Check(HorizontalWheel.Distance(5, 3, 1600) == 3 && HorizontalWheel.Distance(-120, 3, 1600) == -72, "small trackpad deltas scroll proportionally in both directions");
+            Check(HorizontalWheel.Distance(120, uint.MaxValue, 1600) == 1600 && HorizontalWheel.Distance(120, 0, 1600) == 0, "horizontal input respects Windows page and disabled settings");
             var springStep = MotionMath.Spring(-100, 0, 0, .15, 20);
             var springRetarget = MotionMath.Spring(springStep.Position, springStep.Velocity, -200, 0, 20);
             Check(springRetarget == springStep, "retarget keeps spring position and velocity continuous");
@@ -289,6 +295,31 @@ internal static class Program
                 Check(window.RenderedNoteCount is > 0 and < 10 && scroll.HorizontalOffset > 300000, $"all history reachable with bounded visuals (offset {scroll.HorizontalOffset}, width {scroll.ScrollableWidth}, cards {window.RenderedNoteCount})");
                 Check(Math.Abs(navigation.Value - navigation.Maximum) < 1 && navigationTrack.Thumb.ActualWidth >= 32, "minimum thumb preserves navigation to the final note");
                 scroll.ScrollToLeftEnd(); window.UpdateLayout();
+                Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                var board = (System.Windows.Controls.Grid)window.FindName("Board");
+                var point = board.PointToScreen(new Point(200, 100));
+                var position = (nint)(((int)point.X & 0xffff) | (((int)point.Y & 0xffff) << 16));
+                var handle = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                var characters = HorizontalWheel.ScrollCharacters();
+                if (characters != 0)
+                {
+                    SendMessage(handle, HorizontalWheel.Message, (nint)(5 << 16), position);
+                    Check(Math.Abs(window.ScrollOffset - HorizontalWheel.Distance(5, characters, scroll.ViewportWidth)) < .001, "native WM_MOUSEHWHEEL reaches offscreen owned window without losing fractional tick");
+                    SendMessage(handle, HorizontalWheel.Message, (nint)(-5 << 16), position);
+                    Check(window.ScrollOffset == 0, "native horizontal direction reverses to exact start");
+                    SendMessage(handle, HorizontalWheel.Message, (nint)((120 << 16) | 8), position);
+                    Check(window.ScrollOffset == 0, "Ctrl gesture does not become history scrolling");
+                }
+                window.ApplyAppearance(window.SavedSettings with { Animate = true });
+                window.DiagnosticScroll(600); Pump(Task.Delay(90));
+                Check(SystemParameters.ClientAreaAnimation ? window.ScrollOffset > 0 && scroll.HorizontalOffset == 0 : window.ScrollOffset == 600 && scroll.HorizontalOffset == 600, "scrolling uses render motion or immediate reduced-motion commit");
+                var midScroll = window.ScrollOffset;
+                window.DiagnosticScroll(200);
+                Check(SystemParameters.ClientAreaAnimation ? Math.Abs(window.ScrollOffset - midScroll) < .001 : window.ScrollOffset == 200, "rapid scroll reversal preserves animated position or applies reduced motion immediately");
+                Pump(Task.Delay(650)); window.UpdateLayout();
+                Check(Math.Abs(window.ScrollOffset - 200) < .001 && Math.Abs(scroll.HorizontalOffset - 200) < .001, "rendered and accessible scroll positions commit together at rest");
+                window.ApplyAppearance(window.SavedSettings with { Animate = false });
+                window.DiagnosticScroll(0); Pump(Task.Delay(30)); window.UpdateLayout();
                 foreach (var theme in Enum.GetValues<AppTheme>())
                 {
                     window.ApplyAppearance(new AppSettings { Theme = theme, Animate = false });

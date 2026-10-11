@@ -114,6 +114,9 @@ internal static class Program
             Check(normalized.RetentionDays == 30 && normalized.PreviewCacheMiB == 64 && normalized.NoteSpacing == 24 && normalized.Theme == AppTheme.Cloud, "settings bounds");
             await settingsStore.SaveAsync(new AppSettings { Theme = AppTheme.Midnight, RetentionDays = 7, AutoPaste = false });
             Check((await settingsStore.LoadAsync()).RetentionDays == 7 && !(await settingsStore.LoadAsync()).AutoPaste, "settings persistence");
+            Check(!(await settingsStore.LoadAsync()).LowMemoryRendering, "existing settings keep smooth hardware rendering preference");
+            await settingsStore.SaveAsync((await settingsStore.LoadAsync()) with { LowMemoryRendering = true });
+            Check((await settingsStore.LoadAsync()).LowMemoryRendering, "low-RAM rendering preference persists for next overlay session");
             await File.WriteAllTextAsync(settingsFile, "broken json");
             Check((await settingsStore.LoadAsync()).RetentionDays == 30, "settings corruption fallback");
             Check(!new AppSettings { CaptureImages = false }.Captures(ClipKind.Image), "format opt out");

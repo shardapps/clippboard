@@ -6,6 +6,7 @@
 - Render-transform scrolling, continuous interrupted motion, layout-free note reordering and immediate slider sizing previews. Keyboard, drag and reduced-motion paths remain available.
 - Reuse unchanged note visuals; cancel offscreen thumbnail work and animation clocks. Late image loads wipe encoded payloads and cannot repopulate a cleared cache.
 - A transparent rope surface capped at 720 device-independent pixels, reusing it for settings and full notes without extra resize buffers. Background clicks dismiss through window deactivation.
+- Optional lower-RAM software rendering under Storage settings, applied after Save on the next opening. Hardware rendering remains the default for smoother motion.
 - Five-minute native capture soak with rapid copy bursts, two 2048×2048 images, file references, bounded encrypted history and restart validation on isolated CI.
 
 This build does not replace the 0.4.0.0 package already under Microsoft Store review. Physical trackpads, mixed-DPI devices, third-party destinations and Store-signed installation remain validation gates.

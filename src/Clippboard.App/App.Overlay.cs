@@ -23,6 +23,7 @@ public partial class App
         using var client = new OverlayClient(pipeName);
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var initial = await client.CallAsync(new("init"));
+        if (initial.Settings?.LowMemoryRendering == true) System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         _rope = new RopeWindow(client, initial.Demo, initial.Settings) { StartupAvailable = initial.StartupAvailable };
         _rope.SettingsSaveRequested += async settings =>
         {

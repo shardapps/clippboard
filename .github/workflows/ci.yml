@@ -59,6 +59,7 @@ jobs:
       - name: Verify checksums and signature metadata
         run: ./scripts/verify-package.ps1
       - name: Isolated install, reinstall, native startup and uninstall
+        timeout-minutes: 6
         run: |
           $projectPath = (Get-Location).Path
           $baseline = Join-Path $projectPath '.cache/upgrade-baseline'
@@ -73,6 +74,16 @@ jobs:
           } finally { Set-Location -LiteralPath $projectPath }
           $installer = Join-Path $baseline 'artifacts/installer/Clippboard-Setup-0.5.0.exe'
           ./scripts/test-installer.ps1 -PreviousInstaller $installer -PreviousInstallerSHA256 (Get-FileHash -LiteralPath $installer).Hash
+      - name: Preserve isolated installer diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: clippboard-installer-diagnostics
+          path: |
+            artifacts/installer-tests/*.log
+            artifacts/installer-tests/upgrade-*.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Build and validate Microsoft Store MSIX
         run: ./scripts/store-package.ps1
       - name: Verify Store identity, contents and checksums

@@ -1,4 +1,4 @@
-param([switch]$RequireSigned)
+param([switch]$RequireSigned, [string]$PreviousInstaller, [string]$PreviousInstallerSHA256)
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Installer lifecycle checks run only on an isolated GitHub Actions Windows runner.' }
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
@@ -22,10 +22,21 @@ function Invoke-SmokeExecutable([string]$Executable, [string[]]$Arguments) {
 $setup = Join-Path $projectRoot "artifacts\installer\Clippboard-Setup-$($info.Version).exe"
 $uninstall = Join-Path $testDirectory 'unins000.exe'
 try {
+  if ($PreviousInstaller) {
+    $PreviousInstaller = [IO.Path]::GetFullPath($PreviousInstaller)
+    if ($PreviousInstallerSHA256 -notmatch '^[0-9a-fA-F]{64}$' -or (Get-FileHash -LiteralPath $PreviousInstaller).Hash -ne $PreviousInstallerSHA256) { throw 'Unexpected upgrade baseline installer.' }
+    Invoke-SmokeExecutable $PreviousInstaller @('/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', "/DIR=`"$testDirectory`"", "/LOG=`"$logs\upgrade-install.log`"")
+    & dotnet tests/Clippboard.Core.Tests/bin/Release/net10.0-windows/Clippboard.Core.Tests.dll --upgrade-fixture (Join-Path $testDirectory 'Clippboard.exe') (Join-Path $logs 'upgrade-data') create
+    if ($LASTEXITCODE -ne 0) { throw 'Previous version fixture failed.' }
+  }
   Invoke-SmokeExecutable $setup @('/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', "/DIR=`"$testDirectory`"", "/LOG=`"$logs\install.log`"")
   $installed = Join-Path $testDirectory 'Clippboard.exe'
   if (!(Test-Path -LiteralPath $installed) -or !(Test-Path -LiteralPath $uninstall) -or !(Test-Path -LiteralPath $registryKey)) { throw 'Installation did not create expected files and uninstall registration.' }
   if ((Get-FileHash -LiteralPath $installed).Hash -ne (Get-FileHash -LiteralPath 'artifacts\portable\win-x64\Clippboard.exe').Hash) { throw 'Installed binary differs from packaged binary.' }
+  if ($PreviousInstaller) {
+    & dotnet tests/Clippboard.Core.Tests/bin/Release/net10.0-windows/Clippboard.Core.Tests.dll --upgrade-fixture $installed (Join-Path $logs 'upgrade-data') verify
+    if ($LASTEXITCODE -ne 0) { throw 'Upgraded version did not preserve fixture history/settings.' }
+  }
   if ($RequireSigned -or $info.Signed) { if ((Get-AuthenticodeSignature -LiteralPath $uninstall).Status -ne 'Valid') { throw 'Embedded uninstaller is not validly signed.' } }
   # Reinstall the same version tests repair/overwrite behavior; cross-version upgrade remains separate validation.
   Invoke-SmokeExecutable $setup @('/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', "/DIR=`"$testDirectory`"", "/LOG=`"$logs\reinstall.log`"")

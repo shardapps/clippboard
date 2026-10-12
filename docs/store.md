@@ -2,7 +2,9 @@
 
 The Store account reserved **Clippboard**, Store ID `9PP8015JDJ45`, under publisher display name **ShardCoders**. This is a separate distribution path from the unsigned GitHub EXE. Uploading is not certification, public availability or a trusted signature on the standalone installer.
 
-The initial certification report for version **0.4.0.0** rejected two listing items: **10.1.3**, the search term “Windows utility”, and **10.5.1**, a privacy-policy URL that did not resolve for the reviewer. The report did not list a runtime or installation failure. The package was validated by Partner Center. Microsoft approval and Store-signed installation validation remain pending; there is no public Store release yet. Keep **Don't publish this submission until I select Publish now** enabled through resubmission.
+The initial certification report for version **0.4.0.0** rejected two listing items: **10.1.3**, the search term “Windows utility”, and **10.5.1**, a privacy-policy URL that did not resolve for the reviewer. After those corrections, Partner Center explicitly reported **passed certification / Ready to publish** on October 12, 2026. The owner selected **0.5.1.0** for the first release, so the held submission was returned to draft and its package is being replaced for a fresh review. This does not carry 0.4.0's approval over to the new binary. Store-signed installation remains pending; there is no public Store release yet. Keep **Don't publish this submission until I select Publish now** enabled.
+
+The 0.5.1.0 x64 MSIX comes from successful [run 38146161714](https://github.com/shardapps/clippboard/actions/runs/38146161714), tested source `e20a06a18bc309bc0311a57d1065077994544def` (the same source tree merged in PR #21). Its SHA-256 is `4e4993e420a5dc0a71c2737bdb71750f1ba2e82464865cf3c2f5dd3bf2a1490a`. The package remains unsigned for Store ingestion; record Partner Center's new review status separately from package validation and prior approval.
 
 ## Listing correction and policy publication
 

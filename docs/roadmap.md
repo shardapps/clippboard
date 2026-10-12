@@ -20,10 +20,12 @@
 - [ ] HTML/RTF and broader image-format preservation.
 - [x] Time-bounded clipboard reads and file-location validation, with at most one blocked OS worker per operation.
 - [x] Native synthetic capture, hotkey, accepted text paste and restart persistence on an isolated Windows runner.
-- [ ] Real capture/paste app matrix, rapid-copy stress, restart persistence.
+- [x] Isolated rapid-copy, image/file capture, storage bounds, five-minute idle and restart persistence.
+- [ ] Destination app matrix: Notepad, Paint, Explorer, browser and restricted/elevated fallback.
 - [x] Narrow-screen layout, system high-contrast palette and live reduced-motion changes covered by regressions.
 - [ ] Mixed DPI, multiple monitors, accessibility, high contrast, reduced motion, and small screens.
-- [ ] Measure idle CPU, memory, cold start, and disk growth.
+- [x] Measure isolated idle CPU, listener memory, scrolling allocations and disk bounds.
+- [ ] Cold-start distribution and broader physical-device workloads.
 - [x] Isolated EXE installation, same-version reinstall, native preview and uninstall in CI.
 - [ ] Clean-machine interactive installation, cross-version upgrade and Store-signed installation validation.
 - [x] Assigned Store package identity, checksums, provenance metadata and alpha release notes.

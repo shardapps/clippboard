@@ -59,7 +59,31 @@ jobs:
       - name: Verify checksums and signature metadata
         run: ./scripts/verify-package.ps1
       - name: Isolated install, reinstall, native startup and uninstall
-        run: ./scripts/test-installer.ps1
+        timeout-minutes: 6
+        run: |
+          $projectPath = (Get-Location).Path
+          $baseline = Join-Path $projectPath '.cache/upgrade-baseline'
+          git fetch --no-tags --depth=1 origin 051c882369cecacfb255f3b8055ded1a4942cb9b
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned upgrade source fetch failed.' }
+          git archive --format=zip -o .cache/upgrade-source.zip 051c882369cecacfb255f3b8055ded1a4942cb9b
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned upgrade source archive failed.' }
+          Expand-Archive -LiteralPath .cache/upgrade-source.zip -DestinationPath $baseline
+          try {
+            & "$baseline/scripts/dev.ps1" publish
+            & "$baseline/scripts/package.ps1" -SkipPublish
+          } finally { Set-Location -LiteralPath $projectPath }
+          $installer = Join-Path $baseline 'artifacts/installer/Clippboard-Setup-0.5.0.exe'
+          ./scripts/test-installer.ps1 -PreviousInstaller $installer -PreviousInstallerSHA256 (Get-FileHash -LiteralPath $installer).Hash
+      - name: Preserve isolated installer diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: clippboard-installer-diagnostics
+          path: |
+            artifacts/installer-tests/*.log
+            artifacts/installer-tests/upgrade-*.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Build and validate Microsoft Store MSIX
         run: ./scripts/store-package.ps1
       - name: Verify Store identity, contents and checksums
@@ -74,6 +98,7 @@ jobs:
             artifacts/SHA256SUMS.txt
             artifacts/build-info.json
             artifacts/installer-tests/installed-preview.png
+            artifacts/installer-tests/upgrade-*.json
             artifacts/overlay-lifecycle*.json
             artifacts/motion-diagnostics.json
             artifacts/session-checks/report.json

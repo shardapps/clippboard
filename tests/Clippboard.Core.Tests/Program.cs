@@ -76,6 +76,7 @@ internal static class Program
     public static async Task<int> Main(string[] args)
     {
         if (args.Length == 3 && args[0] == "--session") return await AppSessionChecks.RunAsync(args[1], args[2]);
+        if (args.Length == 4 && args[0] == "--upgrade-fixture") return await UpgradeChecks.RunAsync(args[1], args[2], args[3] == "create");
         var root = Path.Combine(Environment.GetEnvironmentVariable("TEMP") ?? Path.GetTempPath(), "Clippboard-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try

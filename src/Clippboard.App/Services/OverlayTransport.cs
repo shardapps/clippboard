@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Clippboard.Core;
@@ -19,6 +20,71 @@ internal static class OverlayTransport
 {
     internal const int RequestLimit = 16 * 1024;
     internal const int ReplyLimit = 40 * 1024 * 1024;
+    private const int ReplyVersion = 1;
+    private sealed record WireReply(OverlayReply Reply, bool ImageAttached);
+    private sealed class NoInlineImage : JsonConverter<byte[]>
+    {
+        public override byte[] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            => throw new JsonException("Images require a binary attachment.");
+        public override void Write(Utf8JsonWriter writer, byte[] value, JsonSerializerOptions options)
+            => throw new JsonException("Images require a binary attachment.");
+    }
+    private static readonly JsonSerializerOptions ReplyJson = new() { Converters = { new NoInlineImage() } };
+    internal static async Task WriteReplyAsync(Stream stream, OverlayReply reply, int limit, CancellationToken cancel)
+    {
+        var image = reply.Clip?.ImagePng;
+        var imageLength = image?.Length ?? 0;
+        if (imageLength > limit) throw new InvalidDataException("Overlay image exceeds its limit.");
+        // Keep control metadata as JSON; image bytes are already encoded PNG.
+        // Never create a Base64 string or second whole-image send buffer.
+        var metadata = JsonSerializer.SerializeToUtf8Bytes(new WireReply(image is null ? reply : reply with { Clip = reply.Clip! with { ImagePng = null } }, image is not null), ReplyJson);
+        try
+        {
+            if (metadata.Length > limit - imageLength) throw new InvalidDataException("Overlay reply exceeds its limit.");
+            var header = new byte[12];
+            BinaryPrimitives.WriteInt32LittleEndian(header, ReplyVersion);
+            BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(4), metadata.Length);
+            BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(8), imageLength);
+            await stream.WriteAsync(header, cancel); await stream.WriteAsync(metadata, cancel);
+            if (image is not null) await stream.WriteAsync(image, cancel);
+            await stream.FlushAsync(cancel);
+        }
+        finally { CryptographicOperations.ZeroMemory(metadata); }
+    }
+    internal static async Task<OverlayReply> ReadReplyAsync(Stream stream, int limit, CancellationToken cancel)
+    {
+        var header = new byte[12]; await stream.ReadExactlyAsync(header, cancel);
+        var version = BinaryPrimitives.ReadInt32LittleEndian(header);
+        var length = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(4));
+        var imageLength = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(8));
+        // Validate both lengths and their combined ceiling before allocation.
+        if (version != ReplyVersion || length <= 0 || length > limit || imageLength < 0 || imageLength > limit - length)
+            throw new InvalidDataException("Invalid overlay reply frame.");
+        var metadata = new byte[length]; byte[]? image = null;
+        try
+        {
+            await stream.ReadExactlyAsync(metadata, cancel);
+            var wire = JsonSerializer.Deserialize<WireReply>(metadata, ReplyJson) ?? throw new InvalidDataException("Empty overlay reply.");
+            if (wire.Reply?.Clip?.ImagePng is byte[] unexpected)
+            {
+                CryptographicOperations.ZeroMemory(unexpected);
+                throw new InvalidDataException("Overlay image must use the binary attachment.");
+            }
+            if (wire.Reply is null || (!wire.ImageAttached && imageLength != 0)
+                || (wire.ImageAttached && wire.Reply.Clip?.Kind != ClipKind.Image))
+                throw new InvalidDataException("Invalid overlay image attachment.");
+            if (!wire.ImageAttached) return wire.Reply;
+            image = new byte[imageLength]; await stream.ReadExactlyAsync(image, cancel);
+            var result = wire.Reply with { Clip = wire.Reply.Clip! with { ImagePng = image } };
+            image = null; // Ownership transfers to the normal payload consumer.
+            return result;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(metadata);
+            if (image is not null) CryptographicOperations.ZeroMemory(image);
+        }
+    }
     internal static async Task WriteAsync<T>(Stream stream, T value, int limit, CancellationToken cancel)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(value);
@@ -54,7 +120,7 @@ internal sealed class OverlayClient(string pipeName) : IHistoryAccess, IDisposab
             using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
             await pipe.ConnectAsync(3000, deadline.Token);
             await OverlayTransport.WriteAsync(pipe, request, OverlayTransport.RequestLimit, deadline.Token);
-            var reply = await OverlayTransport.ReadAsync<OverlayReply>(pipe, OverlayTransport.ReplyLimit, deadline.Token);
+            var reply = await OverlayTransport.ReadReplyAsync(pipe, OverlayTransport.ReplyLimit, deadline.Token);
             if (reply.Error is not null) throw new IOException(reply.Error);
             return reply;
         }
@@ -87,7 +153,7 @@ internal sealed class OverlayServer(Func<OverlayRequest, Task<OverlayReply>> han
                 try { reply = await handler(request); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or CryptographicException)
                 { reply = new(Error: "Could not complete this action. Check the original item and try again."); }
-                try { await OverlayTransport.WriteAsync(pipe, reply, OverlayTransport.ReplyLimit, deadline.Token); }
+                try { await OverlayTransport.WriteReplyAsync(pipe, reply, OverlayTransport.ReplyLimit, deadline.Token); }
                 finally { if (reply.Clip?.ImagePng is byte[] png) CryptographicOperations.ZeroMemory(png); }
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or OperationCanceledException or JsonException or UnauthorizedAccessException) { /* A disconnected or malformed client cannot stop capture. */ }

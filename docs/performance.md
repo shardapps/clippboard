@@ -1,5 +1,11 @@
 # Motion and process memory
 
+## Next iteration — binary image transfer
+
+Listener-to-overlay replies now keep bounded JSON metadata and send encoded PNG bytes as a separate binary attachment. This avoids Base64 expansion and a whole-image sender serialization array. Header version and combined lengths are checked before receiving buffers are allocated; inline Base64 is rejected before decoded-image allocation. The server wipes its source image after sending; failed/canceled receive buffers are wiped, and successful buffers transfer to the existing consumer cleanup. Requests retain their current framing, current-user pipe permissions and deadlines. History encryption/format is unchanged.
+
+An eight-send local synthetic 2 MiB attachment test, after serializer warmup and using a counting sink, allocated **22,383,248 bytes with the former JSON sender / 7,232 bytes with the binary sender**, and wrote **22,372,208 / 16,780,120 bytes**. This isolates sender allocations and wire size. It excludes receiver, encryption, rendering, disk and total-process peaks; do not market it as a corresponding percentage reduction in app RAM. The regression checks exact byte preservation, error replies, cancellation, truncated/forged/version-mismatched frames, and current-user pipe operation. Local raw report: `artifacts/binary-transfer-profile.json`.
+
 ## Next iteration — shortcut latency and retraction
 
 The visual process previously started on every invocation and waited for history before starting its entrance. The next development build can prepare only its runtime/resources while idle, without a Window, graphics surface, history payload or preview. One standby is allowed; measured private-byte cost and current available RAM govern whether it is kept. Separate start/stop thresholds prevent pressure-boundary churn. The storage settings' “Prepare faster opening” preference disables this extra process. Closing still exits the visual process; its replacement has no renderer pools. The listener starts the entrance before awaiting history, and retraction retargets its current position/velocity with the same response as entrance.

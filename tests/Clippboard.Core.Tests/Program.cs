@@ -45,6 +45,47 @@ internal static class Program
     }
     private static async Task CheckOverlayTransportAsync()
     {
+        var attachment = new byte[] { 0, 255, 1, 128, 0, 12 };
+        var imageReply = new OverlayReply(Version: 8, Clip: new Clip { Kind = ClipKind.Image, ImagePng = attachment });
+        using var binary = new MemoryStream();
+        await OverlayTransport.WriteReplyAsync(binary, imageReply, OverlayTransport.ReplyLimit, CancellationToken.None);
+        binary.Position = 0;
+        var restored = await OverlayTransport.ReadReplyAsync(binary, OverlayTransport.ReplyLimit, CancellationToken.None);
+        Check(restored.Version == 8 && restored.Clip?.Id == imageReply.Clip!.Id && restored.Clip?.ImagePng?.SequenceEqual(attachment) == true, "binary image attachment preserves metadata and exact bytes");
+        Check(attachment[1] == 255, "transport writer does not wipe its caller-owned image");
+        using var missingTail = new MemoryStream(binary.ToArray()[..^1]); var binaryRejected = false;
+        try { await OverlayTransport.ReadReplyAsync(missingTail, OverlayTransport.ReplyLimit, CancellationToken.None); } catch (EndOfStreamException) { binaryRejected = true; }
+        Check(binaryRejected, "truncated binary image cannot return partial content");
+        var forgedHeader = new byte[12];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(forgedHeader, 1);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(forgedHeader.AsSpan(4), 1);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(forgedHeader.AsSpan(8), int.MaxValue);
+        using var forgedReply = new MemoryStream(forgedHeader); binaryRejected = false;
+        try { await OverlayTransport.ReadReplyAsync(forgedReply, OverlayTransport.ReplyLimit, CancellationToken.None); } catch (InvalidDataException) { binaryRejected = true; }
+        Check(binaryRejected, "combined binary frame size checked before allocation without overflow");
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(forgedHeader, 99);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(forgedHeader.AsSpan(8), 0);
+        using var wrongVersion = new MemoryStream(forgedHeader); binaryRejected = false;
+        try { await OverlayTransport.ReadReplyAsync(wrongVersion, OverlayTransport.ReplyLimit, CancellationToken.None); } catch (InvalidDataException) { binaryRejected = true; }
+        Check(binaryRejected, "incompatible reply protocol fails explicitly");
+        using var canceled = new CancellationTokenSource(); canceled.Cancel(); binary.Position = 0; binaryRejected = false;
+        try { await OverlayTransport.ReadReplyAsync(binary, OverlayTransport.ReplyLimit, canceled.Token); } catch (OperationCanceledException) { binaryRejected = true; }
+        Check(binaryRejected, "binary reply read honors cancellation");
+        using var errorFrame = new MemoryStream();
+        await OverlayTransport.WriteReplyAsync(errorFrame, new OverlayReply(Error: "fixture error"), OverlayTransport.ReplyLimit, CancellationToken.None);
+        errorFrame.Position = 0;
+        Check((await OverlayTransport.ReadReplyAsync(errorFrame, OverlayTransport.ReplyLimit, CancellationToken.None)).Error == "fixture error", "binary reply protocol preserves errors without an image");
+        using var emptyImageFrame = new MemoryStream();
+        await OverlayTransport.WriteReplyAsync(emptyImageFrame, imageReply with { Clip = imageReply.Clip! with { ImagePng = [] } }, OverlayTransport.ReplyLimit, CancellationToken.None);
+        emptyImageFrame.Position = 0;
+        Check((await OverlayTransport.ReadReplyAsync(emptyImageFrame, OverlayTransport.ReplyLimit, CancellationToken.None)).Clip?.ImagePng is { Length: 0 }, "empty binary attachment remains distinct from missing image data");
+        var inlineMetadata = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { Reply = imageReply, ImageAttached = false });
+        using var inlineFrame = new MemoryStream(); var inlineHeader = new byte[12];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(inlineHeader, 1);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(inlineHeader.AsSpan(4), inlineMetadata.Length);
+        inlineFrame.Write(inlineHeader); inlineFrame.Write(inlineMetadata); inlineFrame.Position = 0; binaryRejected = false;
+        try { await OverlayTransport.ReadReplyAsync(inlineFrame, OverlayTransport.ReplyLimit, CancellationToken.None); } catch (System.Text.Json.JsonException) { binaryRejected = true; }
+        Check(binaryRejected, "inline Base64 image rejected before decoded image allocation");
         using var stream = new MemoryStream();
         await OverlayTransport.WriteAsync(stream, new OverlayRequest("pin", new string('a',32), true), OverlayTransport.RequestLimit, CancellationToken.None);
         stream.Position = 0;
@@ -56,10 +97,20 @@ internal static class Program
         using var truncated = new MemoryStream([8,0,0,0,1]); rejected = false;
         try { await OverlayTransport.ReadAsync<OverlayRequest>(truncated, OverlayTransport.RequestLimit, CancellationToken.None); } catch (EndOfStreamException) { rejected = true; }
         Check(rejected, "overlay rejects truncated message");
-        using var server = new OverlayServer(request => Task.FromResult(request.Command == "state" ? new OverlayReply(Version: 42) : throw new InvalidOperationException()));
+        byte[]? sentImage = null;
+        using var server = new OverlayServer(request => Task.FromResult(request.Command switch
+        {
+            "state" => new OverlayReply(Version: 42),
+            "get" => new OverlayReply(Clip: new Clip { Kind = ClipKind.Image, ImagePng = sentImage = (byte[])attachment.Clone() }),
+            _ => throw new InvalidOperationException()
+        }));
         var running = server.RunAsync();
         using var client = new OverlayClient(server.Name);
         Check((await client.CallAsync(new("state"))).Version == 42, "private current-user named pipe connects");
+        var pipeImage = await client.GetAsync(new string('a', 32));
+        Check(pipeImage?.ImagePng?.SequenceEqual(attachment) == true, "binary image crosses the real current-user pipe intact");
+        for (var i = 0; i < 100 && sentImage?.Any(x => x != 0) == true; i++) await Task.Delay(10);
+        Check(sentImage is not null && sentImage.All(x => x == 0), "server releases plaintext image ownership after sending");
         rejected = false;
         try { await client.CallAsync(new("bad")); } catch (IOException) { rejected = true; }
         Check(rejected && (await client.CallAsync(new("state"))).Version == 42, "handler failure is recoverable and pipe remains usable");
@@ -72,6 +123,53 @@ internal static class Program
         Check((await client.CallAsync(new("state"))).Version == 42, "malformed pipe client cannot stop subsequent requests");
         server.Dispose(); await running.WaitAsync(TimeSpan.FromSeconds(3));
         Check(running.IsCompletedSuccessfully, "pipe listener shuts down without orphaned workers");
+        await CheckImageTransferAllocationsAsync();
+    }
+    private sealed class CountingWriteStream : Stream
+    {
+        public long Bytes { get; private set; }
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => Bytes;
+        public override long Position { get => Bytes; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override Task FlushAsync(CancellationToken cancellationToken) { cancellationToken.ThrowIfCancellationRequested(); return Task.CompletedTask; }
+        public override void Write(byte[] buffer, int offset, int count) => Bytes += count;
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        { cancellationToken.ThrowIfCancellationRequested(); Bytes += buffer.Length; return ValueTask.CompletedTask; }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+    }
+    private static async Task CheckImageTransferAllocationsAsync()
+    {
+        var fixture = RandomNumberGenerator.GetBytes(2 * 1024 * 1024);
+        try
+        {
+            var reply = new OverlayReply(Clip: new Clip { Kind = ClipKind.Image, ImagePng = fixture });
+            using var warmup = new CountingWriteStream();
+            await OverlayTransport.WriteAsync(warmup, reply, OverlayTransport.ReplyLimit, CancellationToken.None);
+            await OverlayTransport.WriteReplyAsync(warmup, reply, OverlayTransport.ReplyLimit, CancellationToken.None);
+            using var legacy = new CountingWriteStream(); using var direct = new CountingWriteStream();
+            var before = GC.GetTotalAllocatedBytes(true);
+            for (var i = 0; i < 8; i++) await OverlayTransport.WriteAsync(legacy, reply, OverlayTransport.ReplyLimit, CancellationToken.None);
+            var legacyAllocated = GC.GetTotalAllocatedBytes(true) - before;
+            before = GC.GetTotalAllocatedBytes(true);
+            for (var i = 0; i < 8; i++) await OverlayTransport.WriteReplyAsync(direct, reply, OverlayTransport.ReplyLimit, CancellationToken.None);
+            var directAllocated = GC.GetTotalAllocatedBytes(true) - before;
+            Check(direct.Bytes < legacy.Bytes, "direct image transfer reduces wire bytes without altering the image");
+            Check(directAllocated < legacyAllocated / 2, "image transfer avoids whole-image serialization allocations");
+            Directory.CreateDirectory("artifacts");
+            await File.WriteAllTextAsync("artifacts/binary-transfer-profile.json", System.Text.Json.JsonSerializer.Serialize(new
+            {
+                Scenario = "Eight sends of one synthetic 2 MiB byte attachment after serializer warmup; counting stream excludes receiver/disk/render allocations; no forced GC",
+                LegacyAllocatedBytes = legacyAllocated, BinaryAllocatedBytes = directAllocated,
+                LegacyWireBytes = legacy.Bytes, BinaryWireBytes = direct.Bytes,
+                Limitations = "Sender-path allocation regression only, not total-process RAM or end-to-end paste latency"
+            }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        }
+        finally { CryptographicOperations.ZeroMemory(fixture); }
     }
     public static async Task<int> Main(string[] args)
     {

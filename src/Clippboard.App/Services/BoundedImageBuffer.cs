@@ -56,11 +56,31 @@ internal sealed class BoundedImageBuffer : MemoryStream
         RequireLength(destination); return base.Seek(offset, origin);
     }
     public override void Write(byte[] buffer, int offset, int count)
-    { RequireWrite(count); base.Write(buffer, offset, count); }
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+        if (offset < 0 || count < 0 || offset > buffer.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
+        RequireWrite(count);
+        if (ReferenceEquals(buffer, GetBuffer()) && Position + count > Capacity)
+        {
+            // Growing wipes the retired owned buffer; preserve an aliased
+            // encoder input until that copy completes, then wipe the scratch.
+            var copy = buffer.AsSpan(offset, count).ToArray();
+            try { base.Write(copy, 0, copy.Length); }
+            finally { CryptographicOperations.ZeroMemory(copy); }
+        }
+        else base.Write(buffer, offset, count);
+    }
     public override void Write(ReadOnlySpan<byte> buffer)
     {
         RequireWrite(buffer.Length);
         var position = (int)Position; var end = position + buffer.Length;
+        if (end > Capacity && buffer.Overlaps(GetBuffer().AsSpan()))
+        {
+            var copy = buffer.ToArray();
+            try { Write(copy, 0, copy.Length); }
+            finally { CryptographicOperations.ZeroMemory(copy); }
+            return;
+        }
         if (end > Length) base.SetLength(end);
         // MemoryStream's subclass span fallback rents a temporary array. Write
         // straight to our bounded owned storage instead of another PNG copy.

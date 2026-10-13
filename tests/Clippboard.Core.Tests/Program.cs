@@ -64,6 +64,16 @@ internal static class Program
         using var growing = new BoundedImageBuffer(512);
         growing.WriteByte(5); var oldScratch = growing.GetBuffer(); growing.Write(new byte[300]);
         Check(oldScratch.All(x => x == 0) && growing.ToArray()[0] == 5, "resized encoding buffer is wiped after its content is copied");
+        using var aliased = new BoundedImageBuffer(1024);
+        aliased.Capacity = 4; aliased.WriteByte(77); aliased.SetLength(aliased.Capacity); aliased.Position = aliased.Length;
+        var aliasOffset = (int)aliased.Position;
+        aliased.Write(aliased.GetBuffer(), 0, 1);
+        Check(aliased.ToArray()[aliasOffset] == 77, "aliased encoder input survives buffer growth before the retired buffer is wiped");
+        using var aliasedSpan = new BoundedImageBuffer(1024);
+        aliasedSpan.Capacity = 4; aliasedSpan.WriteByte(77); aliasedSpan.SetLength(aliasedSpan.Capacity); aliasedSpan.Position = aliasedSpan.Length;
+        var spanOffset = (int)aliasedSpan.Position;
+        aliasedSpan.Write(aliasedSpan.GetBuffer().AsSpan(0, 1));
+        Check(aliasedSpan.ToArray()[spanOffset] == 77, "aliased span input survives encoding reserve growth");
         growing.Position = 1; growing.Write(new byte[] { 10, 20, 30 }.AsSpan()); growing.SetLength(2);
         Check(growing.GetBuffer()[1] == 10 && growing.GetBuffer()[2] == 0 && growing.GetBuffer()[3] == 0, "truncating encoding scratch clears discarded content");
         using var canceled = new CancellationTokenSource(); canceled.Cancel(); var position = growing.Position; rejected = false;

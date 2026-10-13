@@ -1,5 +1,13 @@
 # Motion and process memory
 
+## Next iteration — shortcut latency and retraction
+
+The visual process previously started on every invocation and waited for history before starting its entrance. The next development build can prepare only its runtime/resources while idle, without a Window, graphics surface, history payload or preview. One standby is allowed; measured private-byte cost and current available RAM govern whether it is kept. Separate start/stop thresholds prevent pressure-boundary churn. The storage settings' “Prepare faster opening” preference disables this extra process. Closing still exits the visual process; its replacement has no renderer pools. The listener starts the entrance before awaiting history, and retraction retargets its current position/velocity with the same response as entrance.
+
+Local alternating synthetic 1,000-note runs measured **0.77–1.12 s cold / 0.19–0.26 s prepared** with a preconstructed control tree, but that experiment cost **41.5–41.6 MiB private / 79.2–79.4 MiB working set** while idle and was rejected. The lean runtime-only variant measured **0.81–1.02 s cold / 0.40–0.54 s prepared**, with **12.9–13.1 MiB private / 49.1–50.2 MiB working set** for standby. Working sets include shared mapped pages; do not describe private bytes as total RAM or omit the standby from combined memory accounting. The earlier eight-cold baseline ranged 0.81–2.15 s and had different warmup, so the alternating same-run comparison is preferable. First-content events include synthetic card work and are not physical presentation/hotkey latency or a universal speed guarantee.
+
+`scripts/dev.ps1 lifecycle` now alternates cold/prepared starts, verifies preparation reports no window, and checks canceling an idle standby terminates its pipe worker. Native CI still validates actual capture/hotkey/paste/restart. Installed SSD/Store launch distributions, rapid physical hotkeys and pressure profiles remain required before beta. Raw local reports are in ignored `artifacts/overlay-launch-*.json`.
+
 Run `./scripts/dev.ps1 diagnostics` (or add `-Software`) for eight synthetic 1,000-note entrance, rapid scroll, settings and close cycles. Reports are local, under ignored `artifacts/`. This diagnostic does not access the clipboard, create screenshots, force GC or trim working sets. Frame intervals are WPF rendering-event timings, not proof of physical display presentation or a guarantee of refresh-rate performance.
 
 ## October 10, 2026 — local WPF rendering tier 2

@@ -118,6 +118,11 @@ internal static class Program
             Check(!(await settingsStore.LoadAsync()).LowMemoryRendering, "existing settings keep smooth hardware rendering preference");
             await settingsStore.SaveAsync((await settingsStore.LoadAsync()) with { LowMemoryRendering = true });
             Check((await settingsStore.LoadAsync()).LowMemoryRendering, "low-RAM rendering preference persists for next overlay session");
+            await settingsStore.SaveAsync((await settingsStore.LoadAsync()) with { FastOpen = false });
+            Check(!(await settingsStore.LoadAsync()).FastOpen, "faster opening can be disabled without changing rendering preference");
+            Check(!MemoryAvailability.KeepStandby(-1, 10, false) && !MemoryAvailability.KeepStandby(0, 10, true), "unknown or exhausted memory never creates a standby overlay");
+            Check(MemoryAvailability.KeepStandby(10000, 150, true) && !MemoryAvailability.KeepStandby(10000, 150, false), "standby memory pressure thresholds have hysteresis");
+            Check(!MemoryAvailability.KeepStandby(10000, 250, true), "standby released when its measured private bytes exceed headroom");
             await File.WriteAllTextAsync(settingsFile, "broken json");
             Check((await settingsStore.LoadAsync()).RetentionDays == 30, "settings corruption fallback");
             Check(!new AppSettings { CaptureImages = false }.Captures(ClipKind.Image), "format opt out");

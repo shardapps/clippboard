@@ -66,7 +66,7 @@ internal static class AppSessionChecks
                     await Task.Run(() => listener.WaitForInputIdle(5000));
                     var fixtureHandle = new WindowInteropHelper(fixture).Handle;
                     var historyDirectory = Path.Combine(dataRoot, "history");
-                    var watch = Stopwatch.StartNew();
+                    var watch = Stopwatch.StartNew(); var visibleLatencies = new List<double>();
                     for (var cycle = 0; cycle < 3; cycle++)
                     {
                         var expected = $"Clippboard session {cycle + 1} — Unicode 🧵\nPakistan • synthetic fixture";
@@ -77,9 +77,10 @@ internal static class AppSessionChecks
                         if (NativeMethods.GetForegroundWindow() != fixtureHandle) throw new IOException("Fixture cannot acquire foreground; paste acceptance is untested.");
                         NativeMethods.AllowSetForegroundWindow((uint)listener.Id);
                         // Exercise the actual registered Windows hotkey, rather than calling ToggleRope.
-                        InputChord();
+                        var invocation = Stopwatch.StartNew(); InputChord();
                         nint overlay = 0;
                         await Until(() => (overlay = FindWindow(0, "Clippboard", visible: true)) != 0, "real overlay startup");
+                        visibleLatencies.Add(invocation.Elapsed.TotalMilliseconds);
                         await Task.Delay(1500);
                         await Task.Run(() =>
                         {
@@ -121,7 +122,7 @@ internal static class AppSessionChecks
                     {
                         await Task.Delay(10000);
                         if (listener.HasExited) throw new IOException("Listener crashed during the five-minute soak.");
-                        listener.Refresh(); samples.Add(new { Seconds = idle.Elapsed.TotalSeconds, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, Handles = listener.HandleCount });
+                        listener.Refresh(); samples.Add(new { Seconds = idle.Elapsed.TotalSeconds, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, Handles = listener.HandleCount, CombinedRuntime = SampleRuntime(executable) });
                     }
                     var idleCpu = (listener.TotalProcessorTime - cpu).TotalSeconds / idle.Elapsed.TotalSeconds * 100;
                     var warmWorkingSet = listener.WorkingSet64; var warmPrivate = listener.PrivateMemorySize64;
@@ -132,7 +133,7 @@ internal static class AppSessionChecks
                     if (Directory.GetFiles(historyDirectory, "*.clip").Length != persisted) throw new IOException("History did not persist through restart.");
                     await Task.Delay(10000); listener.Refresh();
                     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
-                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
+                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, HotkeyToVisibleWindowMs = visibleLatencies, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
                     Console.WriteLine("PASS: native capture/paste, bursts, large images, file reference, bounded history, five-minute idle without crash, and restart persistence.");
                     result.TrySetResult(0);
                 }
@@ -146,6 +147,23 @@ internal static class AppSessionChecks
             app.Run();
         });
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); return result.Task;
+    }
+    private sealed record RuntimeMemory(long WorkingSetBytes, long PrivateBytes, int Processes);
+    private static RuntimeMemory SampleRuntime(string executable)
+    {
+        long working = 0, committed = 0; var count = 0;
+        // Only the exact isolated executable, never the owner's installed app.
+        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(executable)))
+        using (process)
+        {
+            try
+            {
+                if (!string.Equals(process.MainModule?.FileName, Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase)) continue;
+                process.Refresh(); working += process.WorkingSet64; committed += process.PrivateMemorySize64; count++;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        }
+        return new(working, committed, count);
     }
     private static async Task Until(Func<bool> condition, string stage)
     {

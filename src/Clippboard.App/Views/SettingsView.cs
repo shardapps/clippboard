@@ -90,7 +90,9 @@ internal sealed class SettingsView : UserControl
             Number("Image preview cache", _draft.PreviewCacheMiB, 4, 64, "MiB", v => _draft = _draft with { PreviewCacheMiB = v });
             Toggle("Use less RAM while browsing", _draft.LowMemoryRendering, v => _draft = _draft with { LowMemoryRendering = v });
             Hint("Uses software rendering. It can use more CPU and make motion less smooth. Save, then reopen the rope to change rendering mode.");
-            Hint("Only small pointers remain in memory while hidden. Images load when needed and the preview cache clears on close. Lower limits can remove older unstarred notes.");
+            Toggle("Prepare faster opening", _draft.FastOpen, v => _draft = _draft with { FastOpen = v });
+            Hint("Prepares the overlay runtime without notes, windows or a graphics surface when RAM permits. Uses some extra idle RAM; turns off automatically under memory pressure. Save to apply.");
+            Hint("Only short history summaries remain while hidden. Images load when needed and the preview cache clears on close. Lower limits can remove older unstarred notes.");
             var clear = new Button { Content = "Clear clipboard history…", Margin = new Thickness(0, 18, 0, 0) }; var confirmed = false;
             clear.Click += async (_, _) =>
             {

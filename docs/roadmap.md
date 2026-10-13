@@ -1,5 +1,7 @@
 # Roadmap
 
+The next implementation and validation gates are tracked in [the beta checklist](beta-checklist.md). A checked foundation item does not establish that the broader beta device/application matrix has passed.
+
 ## Foundation — current alpha
 
 - [x] Organized solution and project-local SDK/caches.

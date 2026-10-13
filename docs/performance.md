@@ -1,5 +1,11 @@
 # Motion and process memory
 
+## Next iteration — bounded image-encoding scratch
+
+PNG capture now writes to a bounded owned memory stream. Logical writes, seek/length changes and reserve capacity cannot exceed the existing 16 MiB encoded-image ceiling. Valid header rewrites remain supported; a translated WIC limit error discards the item rather than retrying a known oversized encoding. Replaced, truncated and disposed scratch buffers are wiped. Span writes use the owned buffer directly, avoiding MemoryStream's subclass temporary-array fallback. The copied final PNG remains intact for encryption/storage.
+
+This bounds encoding scratch growth, not memory already allocated by a clipboard owner/WIC source, decoded bitmap surfaces or the complete capture/encryption pipeline. Existing dimension checks, one bounded STA reader and timeout remain. Native CI captures actual images and verifies persistence; regressions cover exact limits, rewrites, resize/truncate wiping, overflow, cancellation and copied-payload ownership. No new dependency or plaintext temporary file.
+
 ## Next iteration — binary image transfer
 
 Listener-to-overlay replies now keep bounded JSON metadata and send encoded PNG bytes as a separate binary attachment. This avoids Base64 expansion and a whole-image sender serialization array. Header version and combined lengths are checked before receiving buffers are allocated; inline Base64 is rejected before decoded-image allocation. The server wipes its source image after sending; failed/canceled receive buffers are wiped, and successful buffers transfer to the existing consumer cleanup. Requests retain their current framing, current-user pipe permissions and deadlines. History encryption/format is unchanged.

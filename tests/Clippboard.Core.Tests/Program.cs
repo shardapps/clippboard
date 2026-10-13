@@ -43,6 +43,36 @@ internal static class Program
         try { await stalled.ReadAsync(new()); } catch (ObjectDisposedException) { disposed = true; }
         Check(disposed, "disposed clipboard reader rejects new work");
     }
+    private static async Task CheckBoundedImageBufferAsync()
+    {
+        using var bounded = new BoundedImageBuffer(10);
+        bounded.Write([1, 2, 3, 4]);
+        var retiredBuffer = bounded.GetBuffer();
+        bounded.Seek(0, SeekOrigin.End); bounded.Write(new byte[] { 5, 6, 7, 8, 9, 10 }.AsSpan());
+        Check(bounded.Length == 10 && bounded.Capacity <= 10 && bounded.ToArray()[9] == 10, "encoded buffer accepts its exact limit without excessive reserve");
+        var rejected = false;
+        try { bounded.WriteByte(11); } catch (IOException) { rejected = true; }
+        Check(rejected && bounded.LimitExceeded && bounded.Length == 10 && bounded.Capacity <= 10, "oversized encoding fails before buffer growth or partial write");
+        bounded.Position = 2; bounded.WriteByte(42);
+        Check(bounded.ToArray()[2] == 42, "bounded stream permits encoder header rewrites");
+        rejected = false;
+        try { bounded.SetLength(11); } catch (IOException) { rejected = true; }
+        Check(rejected && bounded.Length == 10, "encoder cannot bypass the ceiling through SetLength");
+        rejected = false;
+        try { bounded.Seek(long.MaxValue, SeekOrigin.Current); } catch (IOException) { rejected = true; }
+        Check(rejected, "overflowing image seek fails safely");
+        using var growing = new BoundedImageBuffer(512);
+        growing.WriteByte(5); var oldScratch = growing.GetBuffer(); growing.Write(new byte[300]);
+        Check(oldScratch.All(x => x == 0) && growing.ToArray()[0] == 5, "resized encoding buffer is wiped after its content is copied");
+        growing.Position = 1; growing.Write(new byte[] { 10, 20, 30 }.AsSpan()); growing.SetLength(2);
+        Check(growing.GetBuffer()[1] == 10 && growing.GetBuffer()[2] == 0 && growing.GetBuffer()[3] == 0, "truncating encoding scratch clears discarded content");
+        using var canceled = new CancellationTokenSource(); canceled.Cancel(); var position = growing.Position; rejected = false;
+        try { await growing.WriteAsync(new byte[10].AsMemory(), canceled.Token); } catch (OperationCanceledException) { rejected = true; }
+        Check(rejected && growing.Position == position, "canceled scratch write leaves content unchanged");
+        var copied = bounded.ToArray(); await bounded.DisposeAsync();
+        Check(retiredBuffer.All(x => x == 0) && copied[2] == 42, "disposing scratch storage wipes it without corrupting the copied clip payload");
+        CryptographicOperations.ZeroMemory(copied);
+    }
     private static async Task CheckOverlayTransportAsync()
     {
         var attachment = new byte[] { 0, 255, 1, 128, 0, 12 };
@@ -181,6 +211,7 @@ internal static class Program
         {
             CheckFormats();
             await CheckBoundedReaderAsync();
+            await CheckBoundedImageBufferAsync();
             await CheckOverlayTransportAsync();
             await CheckFileProbeAsync(root);
             Check(MotionMath.Settle(0, true) == 0 && MotionMath.Settle(1, true) == 1, "spring rests at exact endpoints");

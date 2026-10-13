@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.1 — scrolling and memory alpha
+## 0.5.1 — public alpha · October 13, 2026
 
 - One rendering-driven scroll controller preserves velocity across trackpad updates and reversals. Gesture response follows input/render cadence; accessible offsets commit when physically settled. No per-input animation clocks or delayed completion tasks.
 - Recycle viewport note controls during scrolling, retaining correct restore/star/expand/delete actions and releasing old image sources. Visibility reconciliation runs only when the viewport range changes.
@@ -8,7 +8,7 @@
 - The tray clipboard listener uses a message-only native window without creating a WPF compositor surface or loading overlay control styles. Existing entrance, hover and panel animations are preserved.
 - Size the overlay from measured content and the current monitor before creating its native surface; reuse that surface for panels instead of allocating repeated resize buffers.
 
-The Store submission is unchanged. Synthetic profiles and isolated native Windows checks do not replace physical trackpad or broad hardware testing.
+Published on GitHub with installer, portable ZIP, checksums, provenance and licence notices. The 0.5.1.0 Microsoft Store package passed fresh certification; publication was requested on October 13. Catalog rollout and signed installation are separate checks. GitHub EXEs remain unsigned. Synthetic profiles and isolated native Windows checks do not replace physical trackpad or broad hardware testing.
 
 ## 0.5.0 — alpha development build
 

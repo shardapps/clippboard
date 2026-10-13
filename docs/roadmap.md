@@ -26,9 +26,11 @@
 - [ ] Mixed DPI, multiple monitors, accessibility, high contrast, reduced motion, and small screens.
 - [x] Measure isolated idle CPU, listener memory, scrolling allocations and disk bounds.
 - [ ] Cold-start distribution and broader physical-device workloads.
-- [x] Isolated EXE installation, same-version reinstall, native preview and uninstall in CI.
-- [ ] Clean-machine interactive installation, cross-version upgrade and Store-signed installation validation.
+- [x] Isolated EXE installation, cross-version encrypted history/preferences preservation, same-version reinstall, native preview and uninstall in CI.
+- [ ] Clean-machine interactive installation and Store-signed installation validation.
 - [x] Assigned Store package identity, checksums, provenance metadata and alpha release notes.
-- [ ] Signing, publisher identity, provenance/checksums, release notes.
+- [x] 0.5.1 Store certification under ShardCoders; initial publication requested.
+- [x] Public GitHub 0.5.1 alpha with verified checksums, provenance, release notes and licences.
+- [ ] Store catalog/acquisition verification and trusted signing for the separate EXE.
 
 Later: validated ARM64 support, optional file snapshots, app exclusions/incognito capture, richer previews. No cloud/account/AI processing is planned for version one.

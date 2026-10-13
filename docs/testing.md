@@ -1,6 +1,6 @@
 # Validation record
 
-Current release-candidate gates and their remaining limits are tracked in [the release checklist](release-checklist.md). Older entries below describe their respective builds, not the current architecture.
+Current alpha release checks and their remaining limits are tracked in [the release checklist](release-checklist.md). GitHub 0.5.1 is public; its Store package passed certification and publication was requested on October 13. Catalog rollout and Store-signed installation remain separate checks. Older entries below describe their respective builds, not the current architecture.
 
 The executable regression suite covers Unicode/binary persistence, encrypted-at-rest bytes with real Windows DPAPI, file references, dedup/pins, retention, count/disk caps, oversize/full-pin rejection, restart persistence, corruption recovery, clear including pins, and concurrent writes. Synthetic WPF data objects also check format precedence, text/file limits, PNG conversion, sensitive exclusion markers, and the native input ABI. Local checks do not touch the system clipboard. Isolated GitHub Actions runners also exercise real clipboard notifications with synthetic fixtures. Run `scripts/dev.ps1 test`.
 

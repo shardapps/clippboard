@@ -43,7 +43,7 @@ Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setup
 
 **Download 0.5.1 alpha:** [per-user installer (.exe)](https://github.com/shardapps/clippboard/releases/download/v0.5.1/Clippboard-Setup-0.5.1.exe) · [portable ZIP](https://github.com/shardapps/clippboard/releases/download/v0.5.1/Clippboard-Portable-0.5.1-win-x64.zip) · [release notes, checksums and licences](https://github.com/shardapps/clippboard/releases/tag/v0.5.1). Extract the portable ZIP and run `portable/Clippboard.exe`, or run the setup executable for installation. No separate .NET installation is needed. These EXEs are **unsigned** and can show SmartScreen's unknown-publisher warning; they are evaluation builds, not a stable signed installer.
 
-**Microsoft Store:** **0.5.1.0** passed its own certification, and publication was requested on **October 13, 2026**, under publisher **ShardCoders**, Store ID `9PP8015JDJ45`. Partner Center reports **In publishing**; public catalog availability and Store-signed installation are being verified separately. The older 0.4.0 approval was not used for this release. Store signing does not sign the GitHub EXEs. [Store distribution](docs/store.md) · [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
+**Microsoft Store:** [install Clippboard from Microsoft Store](https://apps.microsoft.com/detail/9PP8015JDJ45), published on **October 13, 2026**, under **ShardCoders**. The approved package is **0.5.1.0**, Windows 11 x64; its public listing and official Download / View in Store controls are verified, including the Pakistan catalog. Use the Store distribution for the Microsoft trust path. Store-signed installed behavior remains a separate test; Store signing does not sign the GitHub EXEs. [Store distribution](docs/store.md) · [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
 
 1. Clone this repository and open PowerShell in its folder.
 2. Run `./scripts/bootstrap.ps1` to install a private .NET 10 SDK under `.tools/` and build.
@@ -84,7 +84,7 @@ Clipboard history can contain private data. The app respects supported exclusion
 
 **Can I use it instead of Windows clipboard history?** It is a separate experimental app with image/file notes, themes, search and a different interface. Compatibility, accessibility and memory testing remain in progress; it does not replace or configure Windows clipboard history.
 
-**Is there a stable, signed installer?** There is no stable release yet. GitHub's 0.5.1 alpha installer remains unsigned. Microsoft approved the separate Store package under ShardCoders; its catalog rollout and installed behavior are being verified. [Signing setup and SmartScreen explanation](docs/signing.md). See the alpha limitations above and [validation record](docs/testing.md).
+**Is there a stable, signed installer?** There is no stable release yet. GitHub's 0.5.1 alpha installer remains unsigned. The certified Store distribution is live under ShardCoders and uses Microsoft's trust path; installed behavior is still being tested. [Signing setup and SmartScreen explanation](docs/signing.md). See the alpha limitations above and [validation record](docs/testing.md).
 
 ### Build with us
 

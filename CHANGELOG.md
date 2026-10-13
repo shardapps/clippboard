@@ -8,7 +8,7 @@
 - The tray clipboard listener uses a message-only native window without creating a WPF compositor surface or loading overlay control styles. Existing entrance, hover and panel animations are preserved.
 - Size the overlay from measured content and the current monitor before creating its native surface; reuse that surface for panels instead of allocating repeated resize buffers.
 
-Published on GitHub with installer, portable ZIP, checksums, provenance and licence notices. The 0.5.1.0 Microsoft Store package passed fresh certification; publication was requested on October 13. Catalog rollout and signed installation are separate checks. GitHub EXEs remain unsigned. Synthetic profiles and isolated native Windows checks do not replace physical trackpad or broad hardware testing.
+Published on GitHub with installer, portable ZIP, checksums, provenance and licence notices. The 0.5.1.0 Microsoft Store package passed fresh certification and its public listing is live on October 13 under ShardCoders. Store-signed installation remains a separate check. GitHub EXEs remain unsigned. Synthetic profiles and isolated native Windows checks do not replace physical trackpad or broad hardware testing.
 
 ## 0.5.0 — alpha development build
 

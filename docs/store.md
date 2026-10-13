@@ -6,6 +6,8 @@ The initial certification report for version **0.4.0.0** rejected two listing it
 
 The 0.5.1.0 x64 MSIX comes from successful [run 38146161714](https://github.com/shardapps/clippboard/actions/runs/38146161714), tested source `e20a06a18bc309bc0311a57d1065077994544def` (the same source tree merged in PR #21). Its SHA-256 is `4e4993e420a5dc0a71c2737bdb71750f1ba2e82464865cf3c2f5dd3bf2a1490a`. The package remains unsigned for Store ingestion; record Partner Center's new review status separately from package validation and prior approval.
 
+**Rollout completed:** the [public Microsoft Store listing](https://apps.microsoft.com/detail/9PP8015JDJ45) was verified on October 13, including the Pakistan catalog, with publisher **ShardCoders** and official **Download** / **View in Store** controls. The earlier In publishing and catalog-not-found observations describe the rollout before it completed. A public listing is not evidence of an installed package's signature or behavior; those checks remain tracked separately.
+
 ## Listing correction and policy publication
 
 Use the dedicated public privacy URL: **https://shardapps.github.io/clippboard/privacy/**. Its source is `site/privacy/index.html`. The site contains no JavaScript, analytics, forms or external assets, and works without a GitHub account. Keep this page aligned with the technical [privacy documentation](privacy.md).

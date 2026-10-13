@@ -29,8 +29,8 @@
 - [x] Isolated EXE installation, cross-version encrypted history/preferences preservation, same-version reinstall, native preview and uninstall in CI.
 - [ ] Clean-machine interactive installation and Store-signed installation validation.
 - [x] Assigned Store package identity, checksums, provenance metadata and alpha release notes.
-- [x] 0.5.1 Store certification under ShardCoders; initial publication requested.
+- [x] 0.5.1 Store certification and public listing under ShardCoders; official acquisition controls verified.
 - [x] Public GitHub 0.5.1 alpha with verified checksums, provenance, release notes and licences.
-- [ ] Store catalog/acquisition verification and trusted signing for the separate EXE.
+- [ ] Store-signed installed behavior and trusted signing for the separate EXE.
 
 Later: validated ARM64 support, optional file snapshots, app exclusions/incognito capture, richer previews. No cloud/account/AI processing is planned for version one.

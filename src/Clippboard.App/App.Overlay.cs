@@ -25,6 +25,17 @@ public partial class App
         var initial = await client.CallAsync(new("init"));
         if (initial.Settings?.LowMemoryRendering == true) System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         if (initial.Demo) await client.CallAsync(new("diagnostic-renderer", Id: System.Windows.Media.RenderOptions.ProcessRenderMode.ToString()));
+        if (initial.Standby)
+        {
+            // Warm the runtime/resource loader, not a hidden control tree. No
+            // Window, payload, preview or graphics surface exists while idle.
+            await client.CallAsync(new("standby-ready", Flag: Windows.Count == 0));
+            do { initial = await client.CallAsync(new("wait-open")); } while (initial.Standby && !initial.Close);
+            if (initial.Close) { Shutdown(); return; }
+            System.Windows.Media.RenderOptions.ProcessRenderMode = initial.Settings?.LowMemoryRendering == true || software
+                ? System.Windows.Interop.RenderMode.SoftwareOnly : System.Windows.Interop.RenderMode.Default;
+        }
+        if (initial.Close) { Shutdown(); return; }
         _rope = new RopeWindow(client, initial.Demo, initial.Settings) { StartupAvailable = initial.StartupAvailable };
         _rope.SettingsSaveRequested += async settings =>
         {
@@ -75,6 +86,7 @@ public partial class App
         _rope.Closed += (_, _) => { poll.Stop(); if (!_selecting) { closed.TrySetResult(); Shutdown(); } };
         if (initial.Demo)
         {
+            _rope.ContentRendered += async (_, _) => { try { await client.CallAsync(new("diagnostic-first-frame")); } catch (IOException) { } };
             _rope.Width = 1600; _rope.Height = 720; _rope.ShowActivated = false; _rope.Topmost = false;
             _rope.DiagnosticCompactSurface();
             _rope.Show(); _rope.RenderDemo(1000); _rope.UpdateLayout(); _rope.AnimateEntrance();
@@ -89,7 +101,9 @@ public partial class App
     {
         switch (request.Command)
         {
-            case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId);
+            case "wait-open": if (_overlay is not null) await _overlay.WaitForOpenAsync(); goto case "init";
+            case "standby-ready": return new();
+            case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false });
             case "list": return new(Entries: await Task.Run(() => _store!.ListAsync()));
             case "get": return new(Clip: await Task.Run(() => _store!.GetAsync(request.Id ?? "")));
             case "pin": await Task.Run(() => _store!.SetPinnedAsync(request.Id ?? "", request.Flag)); ++_historyVersion; return new();

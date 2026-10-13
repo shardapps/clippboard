@@ -28,4 +28,8 @@ internal static class MemoryAvailability
     }
     internal static int DecodeConcurrency(long available, int processors, long maxPayload)
         => (int)Math.Clamp(Math.Min(Math.Max(1, processors), available > 0 ? available / 100 / Math.Max(1, maxPayload) : 1), 1, 2);
+    internal static bool KeepStandby(long available, long measuredPrivateBytes, bool alreadyRunning)
+        // Measured cost rather than a fixed per-machine RAM allowance. Separate
+        // start/stop thresholds prevent restarting around a pressure boundary.
+        => available > 0 && measuredPrivateBytes > 0 && measuredPrivateBytes <= available / (alreadyRunning ? 50 : 75);
 }

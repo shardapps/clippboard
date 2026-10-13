@@ -23,6 +23,7 @@ public sealed record AppSettings
     public bool Animate { get; init; } = true;
     public bool PlayfulMotion { get; init; } = true;
     public bool LowMemoryRendering { get; init; }
+    public bool FastOpen { get; init; } = true;
     public bool AutoPaste { get; init; } = true;
     public bool StarredFirst { get; init; } = true;
     public bool OpenStarredOnly { get; init; }

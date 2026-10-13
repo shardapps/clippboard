@@ -139,9 +139,14 @@ public partial class RopeWindow : Window
         PrepareSurface(bounds.Height);
         Show();
         SetWindowPos(new WindowInteropHelper(this).Handle, 0, bounds.Left, bounds.Top, bounds.Width, Math.Min(bounds.Height, (int)Math.Ceiling(AvailableHeight * VisualTreeHelper.GetDpi(this).DpiScaleY)), 0x0014);
-        Activate(); UpdateLayout(); await RefreshAsync();
-        if (!IsVisible || _closing) return;
+        Activate(); UpdateLayout();
+        // Respond visually before disk/IPC history work. Empty state is held
+        // until the result arrives rather than flashing an empty-history claim.
+        EmptyState.Visibility = Visibility.Collapsed; SetStatus("Loading your notes…");
         FitSurface(); AnimateEntrance();
+        await RefreshAsync();
+        if (!IsVisible || _closing) return;
+        FitSurface();
     }
     internal void DiagnosticScroll(double offset) => ScrollTo(offset);
     internal void DiagnosticGesture(double distance) => GestureScroll(distance);
@@ -160,8 +165,10 @@ public partial class RopeWindow : Window
         if (!IsVisible || _closing) return;
         _closing = true; StopScroll(); _memoryTimer.Stop(); _searchTimer.Stop(); ++_renderVersion; CancelLoads();
         DismissSettings(); DismissDetail();
-        var duration = Animated ? 560 : 1;
-        SmoothMotion.Move(Slide, TranslateTransform.YProperty, -Math.Max(600, Panel.ActualHeight + 24), Animated, 260);
+        var duration = Animated ? 650 : 1;
+        // Retarget the current entrance position/velocity; retract with the
+        // same response as opening rather than snapping up at twice the speed.
+        SmoothMotion.Move(Slide, TranslateTransform.YProperty, -Math.Max(600, Panel.ActualHeight + 24), Animated, 650);
         await Task.Delay(duration);
         Hide(); SmoothMotion.CancelTree(this); Notes.Children.Clear(); _cards.Clear(); _cache.Clear();
         Slide.BeginAnimation(TranslateTransform.YProperty, null); Slide.Y = -600;

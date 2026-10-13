@@ -29,6 +29,9 @@ public partial class App : Application
     private Forms.NotifyIcon? _tray;
     private Icon? _trayIcon;
     private DispatcherTimer? _maintenance;
+    private DispatcherTimer? _standbyMaintenance;
+    private long _standbyPrivateBytes;
+    private bool _exiting;
     private ForegroundTracker? _foreground;
     private nint _target;
     private bool _selecting;
@@ -91,9 +94,13 @@ public partial class App : Application
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Notify("History cleanup failed. Check available disk space and permissions."); }
             };
             _maintenance.Start();
+            _standbyMaintenance = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(5) };
+            _standbyMaintenance.Tick += (_, _) => MaintainStandby();
+            _standbyMaintenance.Start();
             if (!_clipboard.HotkeyAvailable) Notify(SettingsView.ShortcutLabel(_settings.Shortcut) + " is used by another app. Open Clippboard from its tray icon.");
             if (_store.UnreadableEntries > 0) Notify($"Removed {_store.UnreadableEntries} damaged or unreadable history entries.");
             if (!e.Args.Contains("--background")) ToggleRope();
+            else _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(MaintainStandby));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.Security.Cryptography.CryptographicException or ArgumentException)
         {
@@ -120,24 +127,56 @@ public partial class App : Application
     private void ToggleRope()
     {
         if (_toggling || _selecting || _store is null) return;
-        if (_overlay is not null && !_overlay.Process.HasExited) { _closeOverlay = true; return; }
+        if (_overlay is not null && !_overlay.Process.HasExited)
+        {
+            if (_overlay.OpenRequested) { _closeOverlay = true; return; }
+            _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
+            _closeOverlay = false; _restoredSequence = 0;
+            NativeMethods.AllowSetForegroundWindow((uint)_overlay.Process.Id);
+            _overlay.RequestOpen(); return;
+        }
+        StartOverlay(open: true);
+    }
+    private void MaintainStandby()
+    {
+        if (_exiting || _toggling || _store is null || _overlay is { OpenRequested: true }) return;
+        if (_standbyPrivateBytes <= 0)
+        {
+            using var listener = Process.GetCurrentProcess(); _standbyPrivateBytes = listener.PrivateMemorySize64;
+        }
+        var running = _overlay is not null && !_overlay.Process.HasExited;
+        if (running)
+        {
+            try { _overlay!.Process.Refresh(); _standbyPrivateBytes = Math.Max(_standbyPrivateBytes, _overlay.Process.PrivateMemorySize64); }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { return; }
+        }
+        if (!_settings.FastOpen || !MemoryAvailability.KeepStandby(MemoryAvailability.AvailableBytes(), _standbyPrivateBytes, running))
+        {
+            if (running) { var standby = _overlay!; _overlay = null; if (_foreground is not null) _foreground.OverlayProcessId = 0; standby.Dispose(); }
+            return;
+        }
+        if (!running) StartOverlay(open: false);
+    }
+    private void StartOverlay(bool open)
+    {
         _toggling = true;
         try
         {
             _overlay?.Dispose(); _closeOverlay = false; _restoredSequence = 0;
-            _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
-            var session = new OverlayProcess(request => Dispatcher.InvokeAsync(() => HandleOverlayAsync(request)).Task.Unwrap());
+            if (open) _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
+            var session = new OverlayProcess(request => Dispatcher.InvokeAsync(() => HandleOverlayAsync(request)).Task.Unwrap(), standby: !open);
             _overlay = session; _foreground!.OverlayProcessId = (uint)session.Process.Id;
-            NativeMethods.AllowSetForegroundWindow((uint)session.Process.Id);
+            if (open) NativeMethods.AllowSetForegroundWindow((uint)session.Process.Id);
             session.Process.Exited += (_, _) => Dispatcher.BeginInvoke(new Action(() =>
             {
                 if (!ReferenceEquals(_overlay, session)) return;
-                var failed = session.Process.ExitCode != 0; _overlay = null; _foreground.OverlayProcessId = 0; session.Dispose();
+                var failed = session.Process.ExitCode != 0 && session.OpenRequested; _overlay = null; _foreground.OverlayProcessId = 0; session.Dispose();
                 if (failed) Notify("The rope closed unexpectedly. Your saved history is safe; open it again.");
+                if (!failed && !_exiting) Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(MaintainStandby));
             }));
             session.Process.EnableRaisingEvents = true;
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception) { Notify("Could not open history. Try again."); }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception) { if (open) Notify("Could not open history. Try again."); }
         finally { _toggling = false; }
     }
     private async void TogglePause()
@@ -192,6 +231,7 @@ public partial class App : Application
                 if (!_development && !PackageIdentity.IsPackaged && _tray.ContextMenuStrip.Items[2] is Forms.ToolStripMenuItem startup) startup.Checked = _settings.StartAtLogin;
             }
             _savingSettings = false;
+            MaintainStandby();
         }
     }
 
@@ -288,6 +328,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _exiting = true; _standbyMaintenance?.Stop();
         _overlay?.Dispose(); _maintenance?.Stop(); _clipboard?.Dispose(); _foreground?.Dispose();
         if (_tray is not null) { _tray.Visible = false; _tray.ContextMenuStrip?.Dispose(); _tray.Dispose(); }
         _trayIcon?.Dispose();

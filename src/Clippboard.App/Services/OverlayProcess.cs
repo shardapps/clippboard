@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Clippboard.App.Services;
@@ -9,23 +10,40 @@ namespace Clippboard.App.Services;
 internal sealed class OverlayProcess : IDisposable
 {
     private readonly OverlayServer _server;
+    private readonly CancellationTokenSource _lifetime = new();
+    private readonly TaskCompletionSource _activation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private bool _disposed;
+    internal bool OpenRequested { get; private set; }
     internal Process Process { get; }
     internal Task ServerTask { get; }
-    internal OverlayProcess(Func<OverlayRequest, Task<OverlayReply>> handler, bool software = false)
+    internal OverlayProcess(Func<OverlayRequest, Task<OverlayReply>> handler, bool software = false, bool standby = false)
     {
         _server = new(handler); ServerTask = _server.RunAsync();
         var launch = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
         if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) launch.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Clippboard.dll"));
         launch.ArgumentList.Add("--overlay"); launch.ArgumentList.Add(_server.Name);
+        if (standby) launch.ArgumentList.Add("--standby");
         if (software) launch.ArgumentList.Add("--software");
         try { Process = Process.Start(launch) ?? throw new IOException("Could not start the rope."); }
-        catch { _server.Dispose(); throw; }
+        catch { _server.Dispose(); _lifetime.Dispose(); throw; }
+        if (!standby) RequestOpen();
+    }
+    internal void RequestOpen() { OpenRequested = true; _activation.TrySetResult(); }
+    internal async Task WaitForOpenAsync()
+    {
+        // Long-poll only before any window is shown, so it cannot hold up active
+        // preview/paste requests. Quiet idle processes need no polling timer.
+        try { await _activation.Task.WaitAsync(TimeSpan.FromSeconds(20), _lifetime.Token); }
+        catch (TimeoutException) { }
     }
     public void Dispose()
     {
-        _server.Dispose();
+        if (_disposed) return;
+        _disposed = true;
+        _lifetime.Cancel(); _server.Dispose();
         // Only terminate the exact child created by this session, never another user's app instance.
         if (!Process.HasExited) Process.Kill();
         Process.Dispose();
+        _lifetime.Dispose();
     }
 }

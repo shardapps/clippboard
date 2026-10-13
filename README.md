@@ -13,7 +13,7 @@
 
 Built by [Shard Apps](https://github.com/shardapps). Open source, local first, and designed to stay out of your way.
 
-> **Early alpha:** the first working foundation is here. There is no stable release yet. Performance targets, broad app compatibility, installer validation, and accessibility testing are still in progress. Please use test data while evaluating it.
+> **Public alpha 0.5.1:** the first release is available on GitHub. There is no stable release yet. Automated capture, storage, upgrade and installer checks pass; physical-device, broad app compatibility and accessibility coverage remain in progress. Please use test data while evaluating it.
 
 <p align="center"><img src="docs/assets/rope-preview.png" alt="App-rendered design preview with synthetic text, file, and image notes" width="100%" /></p>
 
@@ -41,9 +41,9 @@ Built by [Shard Apps](https://github.com/shardapps). Open source, local first, a
 
 Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setups need further validation before being advertised as supported.
 
-**Unsigned alpha binaries:** open a successful [Windows build](https://github.com/shardapps/clippboard/actions/workflows/ci.yml), download the `clippboard-windows-x64-alpha` artifact, and unzip it. Run the `Clippboard-Setup-<version>.exe` in `installer/` for a per-user installation, or `portable/win-x64/Clippboard.exe` directly. GitHub may require sign-in for artifact downloads; artifacts expire after 14 days. These are evaluation builds, not stable releases.
+**Download 0.5.1 alpha:** [per-user installer (.exe)](https://github.com/shardapps/clippboard/releases/download/v0.5.1/Clippboard-Setup-0.5.1.exe) · [portable ZIP](https://github.com/shardapps/clippboard/releases/download/v0.5.1/Clippboard-Portable-0.5.1-win-x64.zip) · [release notes, checksums and licences](https://github.com/shardapps/clippboard/releases/tag/v0.5.1). Extract the portable ZIP and run `portable/Clippboard.exe`, or run the setup executable for installation. No separate .NET installation is needed. These EXEs are **unsigned** and can show SmartScreen's unknown-publisher warning; they are evaluation builds, not a stable signed installer.
 
-**Microsoft Store:** the first release target is **0.5.1.0**, Windows 11 x64, under publisher **ShardCoders**. Microsoft approved the older 0.4.0.0 submission on October 12, 2026; the owner chose 0.5.1's scrolling and memory improvements. The replacement package was validated and submitted for fresh certification on October 12. Public availability remains on manual hold until that review and signed-package validation finish. The separate GitHub EXE remains unsigned. [Store distribution](docs/store.md) · [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
+**Microsoft Store:** [install Clippboard from Microsoft Store](https://apps.microsoft.com/detail/9PP8015JDJ45), published on **October 13, 2026**, under **ShardCoders**. The approved package is **0.5.1.0**, Windows 11 x64; its public listing and official Download / View in Store controls are verified, including the Pakistan catalog. Use the Store distribution for the Microsoft trust path. Store-signed installed behavior remains a separate test; Store signing does not sign the GitHub EXEs. [Store distribution](docs/store.md) · [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
 
 1. Clone this repository and open PowerShell in its folder.
 2. Run `./scripts/bootstrap.ps1` to install a private .NET 10 SDK under `.tools/` and build.
@@ -84,7 +84,7 @@ Clipboard history can contain private data. The app respects supported exclusion
 
 **Can I use it instead of Windows clipboard history?** It is a separate experimental app with image/file notes, themes, search and a different interface. Compatibility, accessibility and memory testing remain in progress; it does not replace or configure Windows clipboard history.
 
-**Is there a stable, signed installer?** Not yet. CI produces unsigned evaluation executables and an installer. No trusted publisher identity has been configured. [Signing setup and SmartScreen explanation](docs/signing.md). See the alpha limitations above and [validation record](docs/testing.md).
+**Is there a stable, signed installer?** There is no stable release yet. GitHub's 0.5.1 alpha installer remains unsigned. The certified Store distribution is live under ShardCoders and uses Microsoft's trust path; installed behavior is still being tested. [Signing setup and SmartScreen explanation](docs/signing.md). See the alpha limitations above and [validation record](docs/testing.md).
 
 ### Build with us
 

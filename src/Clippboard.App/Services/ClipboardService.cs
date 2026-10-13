@@ -127,9 +127,11 @@ internal sealed class ClipboardService : IDisposable
             if (image is null || (long)image.PixelWidth * image.PixelHeight > 16_000_000) return null;
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(image));
-            using var buffer = new MemoryStream();
-            encoder.Save(buffer);
-            if (buffer.Length > 16 * 1024 * 1024) return null;
+            using var buffer = new BoundedImageBuffer(16 * 1024 * 1024);
+            try { encoder.Save(buffer); }
+            catch (Exception ex) when (buffer.LimitExceeded && ex is IOException or ArgumentException or COMException or InvalidOperationException or NotSupportedException)
+            { return null; } // WIC can translate the stream guard into an HRESULT.
+            if (buffer.LimitExceeded || buffer.Length > 16 * 1024 * 1024) return null;
             return new Clip { Kind = ClipKind.Image, ImagePng = buffer.ToArray() };
         }
         if (settings?.CaptureText != false && data.GetDataPresent(DataFormats.UnicodeText))

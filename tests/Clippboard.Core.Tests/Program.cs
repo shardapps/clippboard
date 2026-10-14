@@ -18,7 +18,7 @@ using Clippboard.Core;
 using Clippboard.App.Design;
 
 // A small executable test suite; assertions exercise storage invariants and real Windows DPAPI.
-internal static class Program
+internal static partial class Program
 {
     private static int _assertions;
     [DllImport("user32.dll", EntryPoint = "SendMessageW")]
@@ -142,6 +142,7 @@ internal static class Program
         {
             "state" => new OverlayReply(Version: 42),
             "get" => new OverlayReply(Clip: new Clip { Kind = ClipKind.Image, ImagePng = sentImage = (byte[])attachment.Clone() }),
+            "broken-image" => throw new NotSupportedException("Synthetic decoder failure"),
             _ => throw new InvalidOperationException()
         }));
         var running = server.RunAsync();
@@ -154,6 +155,9 @@ internal static class Program
         rejected = false;
         try { await client.CallAsync(new("bad")); } catch (IOException) { rejected = true; }
         Check(rejected && (await client.CallAsync(new("state"))).Version == 42, "handler failure is recoverable and pipe remains usable");
+        rejected = false;
+        try { await client.CallAsync(new("broken-image")); } catch (IOException) { rejected = true; }
+        Check(rejected && (await client.CallAsync(new("state"))).Version == 42, "unsupported image decoder cannot terminate the overlay server");
         var concurrent = await Task.WhenAll(Enumerable.Range(0,10).Select(_ => client.CallAsync(new("state"))));
         Check(concurrent.All(x => x.Version == 42), "concurrent overlay calls remain serialized and complete");
         using (var malicious = new System.IO.Pipes.NamedPipeClientStream(".",server.Name,System.IO.Pipes.PipeDirection.InOut,System.IO.Pipes.PipeOptions.Asynchronous | System.IO.Pipes.PipeOptions.CurrentUserOnly))
@@ -224,6 +228,7 @@ internal static class Program
             await CheckBoundedImageBufferAsync();
             await CheckOverlayTransportAsync();
             await CheckFileProbeAsync(root);
+            await CheckEncryptedPreviewsAsync(root);
             Check(MotionMath.Settle(0, true) == 0 && MotionMath.Settle(1, true) == 1, "spring rests at exact endpoints");
             Check(MotionMath.Sway(0) == 0 && MotionMath.Sway(1) == 1, "continuous sway rests at exact endpoints");
             Check(Enumerable.Range(0, 1001).Select(i => MotionMath.Sway(i / 1000.0)).Max() is > 1.2 and < 1.4, "natural note sway overshoot remains bounded");
@@ -372,6 +377,19 @@ internal static class Program
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(tall));
                 using var stream = new MemoryStream(); encoder.Save(stream);
                 var thumbnail = PreviewCache.Decode(stream.ToArray(), 360, 230);
+                var derivedBytes = PreviewCache.EncodeThumbnail(stream.ToArray());
+                var derivedImage = PreviewCache.Decode(derivedBytes, int.MaxValue, int.MaxValue);
+                Check(derivedImage.PixelWidth <= 360 && derivedImage.PixelHeight <= 230
+                    && derivedBytes.Length <= HistoryStore.MaxPreviewBytes, "encoded derived PNG respects card dimensions and bounded scratch");
+                var noisyPixels = new byte[1024 * 1024 * 4]; new Random(17).NextBytes(noisyPixels);
+                for (var p = 3; p < noisyPixels.Length; p += 4) noisyPixels[p] = 255;
+                var noisySource = BitmapSource.Create(1024, 1024, 96, 96, PixelFormats.Bgra32, null, noisyPixels, 4096);
+                var noisyEncoder = new PngBitmapEncoder(); noisyEncoder.Frames.Add(BitmapFrame.Create(noisySource));
+                using var noisyStream = new MemoryStream(); noisyEncoder.Save(noisyStream);
+                var noisyOriginal = noisyStream.ToArray(); var noisyPreview = PreviewCache.EncodeThumbnail(noisyOriginal);
+                Check(noisyPreview.Length < noisyOriginal.Length / 4, "card transfer is smaller than high-entropy original while original remains intact");
+                Console.WriteLine($"Preview PNG bytes: original={noisyOriginal.Length}, derived={noisyPreview.Length}");
+                CryptographicOperations.ZeroMemory(noisyPixels); CryptographicOperations.ZeroMemory(noisyOriginal); CryptographicOperations.ZeroMemory(noisyPreview);
                 Check(thumbnail.PixelHeight <= 230 && thumbnail.PixelWidth <= 360 && thumbnail.IsFrozen, "tall image thumbnail stays bounded");
                 var detached = DecodeForLifetimeCheck();
                 GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();

@@ -9,7 +9,8 @@ using System.Threading.Tasks;
 namespace Clippboard.Core;
 
 // Only short summaries remain in memory. Payloads are encrypted independently on disk.
-public sealed class HistoryStore(string directory, IContentProtector protector, HistoryLimits? limits = null) : IHistoryAccess
+public sealed partial class HistoryStore(string directory, IContentProtector protector, HistoryLimits? limits = null,
+    Func<byte[], byte[]>? createPreview = null) : IHistoryAccess
 {
     private HistoryLimits _limits = Validate(limits ?? new());
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -51,9 +52,13 @@ public sealed class HistoryStore(string directory, IContentProtector protector, 
                     var clip = await ReadFileAsync(file);
                     if (!string.Equals(Path.GetFileName(file), clip.Id + ".clip", StringComparison.Ordinal))
                         throw new InvalidDataException("Entry identity mismatch.");
-                    _ = FileFor(clip.Id);
-                    _items[clip.Id] = clip.Summary(size);
-                    await CacheSummaryAsync(_items[clip.Id]);
+                    try
+                    {
+                        _ = FileFor(clip.Id);
+                        _items[clip.Id] = clip.Summary(size);
+                        await CacheSummaryAsync(_items[clip.Id]);
+                    }
+                    finally { if (clip.ImagePng is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(clip.ImagePng); }
                 }
                 catch (Exception ex) when (ex is IOException or JsonException or System.Security.Cryptography.CryptographicException or ArgumentException)
                 {
@@ -65,6 +70,7 @@ public sealed class HistoryStore(string directory, IContentProtector protector, 
             }
             foreach (var metadata in Directory.EnumerateFiles(directory, "*.meta"))
                 if (!_items.ContainsKey(Path.GetFileNameWithoutExtension(metadata))) File.Delete(metadata);
+            LoadPreviews();
             Trim(DateTimeOffset.UtcNow);
         }
         finally { _gate.Release(); }
@@ -105,6 +111,7 @@ public sealed class HistoryStore(string directory, IContentProtector protector, 
             await WriteAsync(clip.Id, bytes);
             foreach (var id in evictions) Remove(id);
             _items[clip.Id] = clip.Summary(bytes.Length);
+            TrimPreviews();
             await CacheSummaryAsync(_items[clip.Id]);
             return true;
         }
@@ -129,11 +136,15 @@ public sealed class HistoryStore(string directory, IContentProtector protector, 
         {
             if (!_items.ContainsKey(id)) return;
             var clip = (await ReadFileAsync(FileFor(id))) with { Pinned = pinned };
-            var bytes = Encrypt(clip);
-            await WriteAsync(id, bytes);
-            _items[id] = clip.Summary(bytes.Length);
-            await CacheSummaryAsync(_items[id]);
-            Trim(DateTimeOffset.UtcNow);
+            try
+            {
+                var bytes = Encrypt(clip);
+                await WriteAsync(id, bytes);
+                _items[id] = clip.Summary(bytes.Length);
+                await CacheSummaryAsync(_items[id]);
+                Trim(DateTimeOffset.UtcNow);
+            }
+            finally { if (clip.ImagePng is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(clip.ImagePng); }
         }
         finally { _gate.Release(); }
     }
@@ -184,13 +195,16 @@ public sealed class HistoryStore(string directory, IContentProtector protector, 
             if (_items.Count <= _limits.MaxEntries && _items.Values.Sum(x => x.StoredBytes) <= _limits.MaxBytes) break;
             Remove(item.Id);
         }
+        TrimPreviews();
     }
 
     private void Remove(string id)
     {
         File.Delete(FileFor(id));
         File.Delete(Path.ChangeExtension(FileFor(id), ".meta"));
+        File.Delete(Path.ChangeExtension(FileFor(id), ".thumb"));
         _items.Remove(id);
+        _previewSizes.Remove(id);
     }
 
     private async Task<Clip> ReadFileAsync(string file)

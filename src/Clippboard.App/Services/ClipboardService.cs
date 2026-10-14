@@ -23,8 +23,30 @@ internal sealed class ClipboardService : IDisposable
     private bool _saving;
     private bool _disposed;
     private readonly FileAvailabilityProbe _fileProbe = new();
-    private readonly BoundedClipboardReader _reader = new(ReadCurrent);
+    private readonly BoundedClipboardReader _reader;
     public bool Paused { get; set; }
+    private bool _sessionLocked;
+    private int _sessionEpoch;
+    public bool SessionLocked
+    {
+        get => _sessionLocked;
+        set { if (_sessionLocked == value) return; _sessionLocked = value; ++_sessionEpoch; }
+    }
+    private bool CaptureBlocked => Paused || SessionLocked || Settings.IsCapturePaused;
+    private bool SourceAllowed()
+    {
+        if (Settings.ExcludedApps.Length == 0) return true;
+        var owner = NativeMethods.GetClipboardOwner();
+        if (owner == 0) return false;
+        NativeMethods.GetWindowThreadProcessId(owner, out var process);
+        try
+        {
+            using var source = System.Diagnostics.Process.GetProcessById((int)process);
+            return CapturePolicy.AllowsSource(Settings.ExcludedApps, source.ProcessName);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException or System.Security.SecurityException)
+        { return false; } // Unknown sources are skipped when exclusions are active.
+    }
     public AppSettings Settings { get; set; } = new();
     public bool HotkeyAvailable { get; private set; }
     private int _hotkeyId = 1;
@@ -36,9 +58,10 @@ internal sealed class ClipboardService : IDisposable
         if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true" && Environment.GetEnvironmentVariable("CLIPPBOARD_SESSION_DIAGNOSTICS") == "1") Console.Error.WriteLine(message);
     }
 
-    public ClipboardService(Func<Clip, Task> save, ShortcutChoice shortcut = ShortcutChoice.CtrlShiftV)
+    public ClipboardService(Func<Clip, Task> save, ShortcutChoice shortcut = ShortcutChoice.CtrlShiftV, Func<AppSettings, Clip?>? read = null)
     {
         _save = save;
+        _reader = new(read ?? ReadCurrent);
         _source = new MessageWindow(WndProc);
         if (!NativeMethods.AddClipboardFormatListener(_source.Handle)) { _source.Dispose(); throw new InvalidOperationException("Cannot listen to the Windows clipboard."); }
         _shortcut = shortcut;
@@ -52,7 +75,7 @@ internal sealed class ClipboardService : IDisposable
     {
         if (_disposed) return false;
         if (message == 0x0312 && wParam == _hotkeyId) { ToggleRequested?.Invoke(); return true; }
-        if (message == 0x031D && !Paused)
+        if (message == 0x031D && !CaptureBlocked)
         {
             SessionTrace("Clipboard update received");
             _sequence = NativeMethods.GetClipboardSequenceNumber();
@@ -65,15 +88,16 @@ internal sealed class ClipboardService : IDisposable
     {
         if (_disposed) { _retry.Stop(); return; }
         if (_saving) return;
-        if (Paused || _sequence == _ownSequence) { _retry.Stop(); return; }
+        if (CaptureBlocked || !SourceAllowed() || _sequence == _ownSequence) { _retry.Stop(); return; }
         var sequence = _sequence;
+        var sessionEpoch = _sessionEpoch;
         _saving = true;
         try
         {
             var clip = await _reader.ReadAsync(Settings);
             SessionTrace(clip is null ? "Read returned no supported clip" : "Read returned " + clip.Kind);
             _retry.Stop();
-            if (_disposed || Paused || sequence != NativeMethods.GetClipboardSequenceNumber() || clip is null)
+            if (_disposed || sessionEpoch != _sessionEpoch || CaptureBlocked || !SourceAllowed() || sequence != NativeMethods.GetClipboardSequenceNumber() || clip is null)
             {
                 if (clip?.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png);
                 return;
@@ -92,7 +116,7 @@ internal sealed class ClipboardService : IDisposable
             _retry.Stop();
             if (!_disposed) Notice?.Invoke("This clipboard item could not be saved. Try copying it again.");
         }
-        finally { _saving = false; if (_sequence != sequence && !Paused && !_disposed && !_reader.HasOutstandingRead) _retry.Start(); }
+        finally { _saving = false; if (_sequence != sequence && !CaptureBlocked && !_disposed && !_reader.HasOutstandingRead) _retry.Start(); }
     }
 
     internal static Clip? ReadCurrent(AppSettings? settings = null)
@@ -105,7 +129,7 @@ internal sealed class ClipboardService : IDisposable
     internal static Clip? ReadData(IDataObject data, Func<System.Windows.Media.Imaging.BitmapSource?> imageProvider, AppSettings? settings = null)
     {
         if (data.GetDataPresent("ExcludeClipboardContentFromMonitorProcessing", false)) return null;
-        if (settings?.CapturePaused == true) return null;
+        if (settings?.IsCapturePaused == true) return null;
         if (data.GetDataPresent("CanIncludeInClipboardHistory", false))
         {
             var flag = data.GetData("CanIncludeInClipboardHistory", false);

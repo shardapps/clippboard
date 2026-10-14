@@ -32,12 +32,19 @@ public sealed record AppSettings
     public bool CaptureImages { get; init; } = true;
     public bool CaptureFiles { get; init; } = true;
     public bool CapturePaused { get; init; }
+    public DateTimeOffset? PauseUntil { get; init; }
+    public bool ClearOnLock { get; init; }
+    public string[] ExcludedApps { get; init; } = [];
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsCapturePaused => CapturePaused || PauseUntil > DateTimeOffset.UtcNow;
     public ShortcutChoice Shortcut { get; init; } = ShortcutChoice.CtrlShiftV;
 
     public AppSettings Normalize() => this with
     {
         Theme = Enum.IsDefined(Theme) ? Theme : AppTheme.Cloud,
         Shortcut = Enum.IsDefined(Shortcut) ? Shortcut : ShortcutChoice.CtrlShiftV,
+        ExcludedApps = CapturePolicy.NormalizeExclusions(ExcludedApps),
+        PauseUntil = PauseUntil > DateTimeOffset.UtcNow ? (PauseUntil > DateTimeOffset.UtcNow.AddDays(1) ? DateTimeOffset.UtcNow.AddDays(1) : PauseUntil) : null,
         RetentionDays = Math.Clamp(RetentionDays, 1, 30),
         MaxEntries = Math.Clamp(MaxEntries, 50, 1000),
         StorageMiB = Math.Clamp(StorageMiB, 32, 512),
@@ -48,7 +55,7 @@ public sealed record AppSettings
     };
 
     public HistoryLimits HistoryLimits() => new(MaxEntries, StorageMiB * 1024L * 1024, RetentionDays);
-    public bool Captures(ClipKind kind) => !CapturePaused && kind switch
+    public bool Captures(ClipKind kind) => !IsCapturePaused && kind switch
     {
         ClipKind.Text => CaptureText,
         ClipKind.Image => CaptureImages,

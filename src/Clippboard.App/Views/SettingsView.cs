@@ -111,6 +111,26 @@ internal sealed class SettingsView : UserControl
             Toggle("Capture images", _draft.CaptureImages, v => _draft = _draft with { CaptureImages = v });
             Toggle("Capture file locations", _draft.CaptureFiles, v => _draft = _draft with { CaptureFiles = v });
             Toggle("Pause all capture", _draft.CapturePaused, v => _draft = _draft with { CapturePaused = v });
+            var pauses = new WrapPanel();
+            foreach (var minutes in new[] { 5, 15, 60 })
+            {
+                var pause = new Button { Content = $"Pause {minutes} min", Margin = new Thickness(0, 8, 4, 0) };
+                pause.Click += (_, _) => { _draft = _draft with { CapturePaused = false, PauseUntil = DateTimeOffset.UtcNow.AddMinutes(minutes) }; _notice.Text = $"Pause until {_draft.PauseUntil.Value.ToLocalTime():HH:mm} after Save."; };
+                pauses.Children.Add(pause);
+            }
+            var resume = new Button { Content = "Resume", Margin = new Thickness(0, 8, 0, 0) };
+            resume.Click += (_, _) => { _draft = _draft with { CapturePaused = false, PauseUntil = null }; ShowPage(3); _notice.Text = "Save to resume capture."; };
+            pauses.Children.Add(resume); _content.Children.Add(pauses);
+            Hint(_draft.PauseUntil is { } until ? $"Timed pause until {until.ToLocalTime():g}. Save to apply." : "Timed pauses resume automatically, including after restarting the app.");
+            Toggle("Clear saved history when Windows locks", _draft.ClearOnLock, v => _draft = _draft with { ClearOnLock = v });
+            Hint("Deletes all saved notes, including starred notes. The system clipboard is separate. Capture is suspended while locked.");
+            _content.Children.Add(new TextBlock { Text = "Excluded applications", FontSize = 14, Margin = new Thickness(0, 8, 0, 6) });
+            var exclusions = new TextBox { Text = string.Join(Environment.NewLine, _draft.ExcludedApps), AcceptsReturn = true, MaxLength = 8192,
+                MinHeight = 90, MaxHeight = 180, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            System.Windows.Automation.AutomationProperties.SetName(exclusions, "Excluded executable names, one per line");
+            exclusions.TextChanged += (_, _) => _draft = _draft with { ExcludedApps = exclusions.Text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) };
+            _content.Children.Add(exclusions);
+            Hint("Use executable names, such as chrome.exe or keepass.exe, one per line. Paths and wildcards are not supported. With exclusions enabled, unidentified clipboard owners are skipped too.");
             Hint("Items marked private by the source app are ignored. Moved or deleted files must be copied again. Unsupported formats and oversized items are skipped.");
         }
         else
@@ -138,7 +158,8 @@ internal sealed class SettingsView : UserControl
         IsEnabled = false; _save.Content = "Saving…";
         try
         {
-            var error = SaveRequested is null ? "Settings are unavailable." : await SaveRequested(_draft.Normalize());
+            var error = CapturePolicy.ValidateExclusions(_draft.ExcludedApps)
+                ?? (SaveRequested is null ? "Settings are unavailable." : await SaveRequested(_draft.Normalize()));
             _notice.Text = error ?? "Saved. Your next copy and opening use these settings.";
         }
         catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or InvalidOperationException)

@@ -16,7 +16,7 @@ internal sealed record OverlayRequest(string Command, string? Id = null, bool Fl
     string? Query = null, IReadOnlyList<string>? Ids = null);
 internal sealed record OverlayReply(string? Error = null, AppSettings? Settings = null, long Target = 0, long Version = 0, bool Close = false,
     bool StartupAvailable = true, IReadOnlyList<ClipSummary>? Entries = null, Clip? Clip = null, bool Demo = false, int ListenerProcess = 0, bool Standby = false,
-    IReadOnlyList<string>? Matches = null);
+    IReadOnlyList<string>? Matches = null, bool CaptureSuspended = false);
 
 internal static class OverlayTransport
 {

@@ -78,7 +78,7 @@ public partial class App : Application
             _settingsStore = new SettingsStore(Path.Combine(root, "settings.json"));
             _settings = await _settingsStore.LoadAsync();
             if (!_development) _settings = _settings with { StartAtLogin = !PackageIdentity.IsPackaged && StartupEnabled() };
-            _store = new HistoryStore(Path.Combine(root, "history"), new WindowsProtector(), _settings.HistoryLimits());
+            _store = new HistoryStore(Path.Combine(root, "history"), new WindowsProtector(), _settings.HistoryLimits(), PreviewCache.EncodeThumbnail);
             await Task.Run(() => _store.InitializeAsync());
 
             _clipboard = new ClipboardService(SaveAsync, _settings.Shortcut) { Settings = _settings, Paused = _settings.CapturePaused };

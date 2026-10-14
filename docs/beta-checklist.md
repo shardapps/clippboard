@@ -2,6 +2,8 @@
 
 The owner authorized implementation on October 13, 2026. Work proceeds in focused, tested PRs. This is a delivery checklist, not a claim that beta is ready. The published 0.5.1 alpha remains unchanged until a reviewed replacement release is prepared.
 
+Implementation progress: PRs #24–26 add runtime preparation for faster opening, smoother retraction, binary image replies and bounded PNG encoding scratch. The next change adds encrypted derived image previews with corruption recovery and deletion/expiry cleanup. Full-text retrieval, keyboard navigation and the remaining reuse/privacy features are still in development. The unchecked acceptance gates below include integration and device evidence, not just the presence of code.
+
 ## Responsiveness and resource use
 
 - [ ] Validate faster shortcut response, smooth retraction, rapid toggles, listener/overlay failures and cold-start fallback.

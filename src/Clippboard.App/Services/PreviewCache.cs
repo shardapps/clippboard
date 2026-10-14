@@ -39,13 +39,13 @@ internal sealed class PreviewCache(IHistoryAccess store)
         BitmapSource? image;
         try { image = await Task.Run(async () =>
         {
-            var clip = await store.GetAsync(id);
+            var png = await store.GetPreviewAsync(id);
             try
             {
                 cancellation.ThrowIfCancellationRequested();
-                return clip?.ImagePng is null ? null : Decode(clip.ImagePng, 360, 230);
+                return png is null ? null : Decode(png, 360, 230);
             }
-            finally { if (clip?.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }
+            finally { if (png is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }
         }, cancellation); }
         finally { _decodeSlots.Release(); }
         cancellation.ThrowIfCancellationRequested();
@@ -80,7 +80,16 @@ internal sealed class PreviewCache(IHistoryAccess store)
         var stride = checked(source.PixelWidth * 4);
         var pixels = new byte[checked(stride * source.PixelHeight)]; source.CopyPixels(pixels, stride, 0);
         var detached = BitmapSource.Create(source.PixelWidth, source.PixelHeight, source.DpiX, source.DpiY, PixelFormats.Bgra32, null, pixels, stride);
+        System.Security.Cryptography.CryptographicOperations.ZeroMemory(pixels);
         detached.Freeze(); return detached;
+    }
+
+    internal static byte[] EncodeThumbnail(byte[] original)
+    {
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(Decode(original, 360, 230)));
+        using var output = new BoundedImageBuffer(HistoryStore.MaxPreviewBytes);
+        encoder.Save(output); return output.ToArray();
     }
 
     public void Remove(string id)

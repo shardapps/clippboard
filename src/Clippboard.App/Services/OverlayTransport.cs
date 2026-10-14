@@ -129,6 +129,7 @@ internal sealed class OverlayClient(string pipeName) : IHistoryAccess, IDisposab
     }
     public async Task<IReadOnlyList<ClipSummary>> ListAsync() => (await CallAsync(new("list"))).Entries ?? [];
     public async Task<Clip?> GetAsync(string id) => (await CallAsync(new("get", id))).Clip;
+    public async Task<byte[]?> GetPreviewAsync(string id) => (await CallAsync(new("preview", id))).Clip?.ImagePng;
     public async Task SetPinnedAsync(string id, bool pinned) => await CallAsync(new("pin", id, pinned));
     public async Task DeleteAsync(string id) => await CallAsync(new("delete", id));
     public async Task ClearAsync() => await CallAsync(new("clear"));
@@ -151,7 +152,8 @@ internal sealed class OverlayServer(Func<OverlayRequest, Task<OverlayReply>> han
                 var request = await OverlayTransport.ReadAsync<OverlayRequest>(pipe, OverlayTransport.RequestLimit, deadline.Token);
                 OverlayReply reply;
                 try { reply = await handler(request); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or CryptographicException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or CryptographicException
+                    or NotSupportedException or FormatException or System.Runtime.InteropServices.COMException)
                 { reply = new(Error: "Could not complete this action. Check the original item and try again."); }
                 try { await OverlayTransport.WriteReplyAsync(pipe, reply, OverlayTransport.ReplyLimit, deadline.Token); }
                 finally { if (reply.Clip?.ImagePng is byte[] png) CryptographicOperations.ZeroMemory(png); }

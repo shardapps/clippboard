@@ -106,6 +106,9 @@ public partial class App
             case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false });
             case "list": return new(Entries: await Task.Run(() => _store!.ListAsync()));
             case "get": return new(Clip: await Task.Run(() => _store!.GetAsync(request.Id ?? "")));
+            case "preview":
+                var thumbnail = await Task.Run(() => _store!.GetPreviewAsync(request.Id ?? ""));
+                return new(Clip: thumbnail is null ? null : new Clip { Id = request.Id!, Kind = ClipKind.Image, ImagePng = thumbnail });
             case "pin": await Task.Run(() => _store!.SetPinnedAsync(request.Id ?? "", request.Flag)); ++_historyVersion; return new();
             case "delete": await Task.Run(() => _store!.DeleteAsync(request.Id ?? "")); ++_historyVersion; return new();
             case "clear": await Task.Run(() => _store!.ClearAsync()); ++_historyVersion; return new();

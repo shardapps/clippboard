@@ -143,6 +143,7 @@ internal static partial class Program
             "state" => new OverlayReply(Version: 42),
             "get" => new OverlayReply(Clip: new Clip { Kind = ClipKind.Image, ImagePng = sentImage = (byte[])attachment.Clone() }),
             "broken-image" => throw new NotSupportedException("Synthetic decoder failure"),
+            "search" when request.Query == "اردو 🧵" => new OverlayReply(Matches: request.Ids),
             _ => throw new InvalidOperationException()
         }));
         var running = server.RunAsync();
@@ -158,6 +159,8 @@ internal static partial class Program
         rejected = false;
         try { await client.CallAsync(new("broken-image")); } catch (IOException) { rejected = true; }
         Check(rejected && (await client.CallAsync(new("state"))).Version == 42, "unsupported image decoder cannot terminate the overlay server");
+        Check((await client.SearchBatchAsync("اردو 🧵", ["first", "second"])).SequenceEqual(["first", "second"]),
+            "search query and bounded result identities cross the real private pipe");
         var concurrent = await Task.WhenAll(Enumerable.Range(0,10).Select(_ => client.CallAsync(new("state"))));
         Check(concurrent.All(x => x.Version == 42), "concurrent overlay calls remain serialized and complete");
         using (var malicious = new System.IO.Pipes.NamedPipeClientStream(".",server.Name,System.IO.Pipes.PipeDirection.InOut,System.IO.Pipes.PipeOptions.Asynchronous | System.IO.Pipes.PipeOptions.CurrentUserOnly))
@@ -229,6 +232,7 @@ internal static partial class Program
             await CheckOverlayTransportAsync();
             await CheckFileProbeAsync(root);
             await CheckEncryptedPreviewsAsync(root);
+            await CheckFullSearchAsync(root);
             Check(MotionMath.Settle(0, true) == 0 && MotionMath.Settle(1, true) == 1, "spring rests at exact endpoints");
             Check(MotionMath.Sway(0) == 0 && MotionMath.Sway(1) == 1, "continuous sway rests at exact endpoints");
             Check(Enumerable.Range(0, 1001).Select(i => MotionMath.Sway(i / 1000.0)).Max() is > 1.2 and < 1.4, "natural note sway overshoot remains bounded");

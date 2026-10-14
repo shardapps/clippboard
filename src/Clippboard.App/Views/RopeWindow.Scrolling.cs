@@ -106,7 +106,7 @@ public partial class RopeWindow
         if (!settled) return;
         StopScroll(); CommitScroll();
     }
-    private void CommitScroll() { _committedScroll = _scrollTarget; NoteScroll.ScrollToHorizontalOffset(_scrollTarget); }
+    private void CommitScroll() { _committedScroll = _scrollTarget; NoteScroll.ScrollToHorizontalOffset(_scrollTarget); FocusSelectedNote(); }
     private void StopScroll()
     {
         if (_scrollRunning) CompositionTarget.Rendering -= OnScrollFrame;
@@ -142,6 +142,7 @@ public partial class RopeWindow
             SetCurrentValue(ScrollPositionProperty, _scrollTarget);
         }
         ApplyScrollPosition();
+        FocusSelectedNote();
     }
     private void OnBoardSizeChanged(object sender, SizeChangedEventArgs e)
     {

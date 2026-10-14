@@ -105,6 +105,8 @@ public partial class App
             case "standby-ready": return new();
             case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false });
             case "list": return new(Entries: await Task.Run(() => _store!.ListAsync()));
+            case "search": return new(Matches: await Task.Run(() => HistorySearch.MatchBatchAsync(_store!,
+                request.Query ?? throw new ArgumentException("Search query required."), request.Ids ?? throw new ArgumentException("Search IDs required."))));
             case "get": return new(Clip: await Task.Run(() => _store!.GetAsync(request.Id ?? "")));
             case "preview":
                 var thumbnail = await Task.Run(() => _store!.GetPreviewAsync(request.Id ?? ""));

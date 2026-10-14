@@ -78,7 +78,8 @@ public partial class RopeWindow : Window
         Closed += (_, _) => _memoryTimer.Stop();
         SettingsRequested += () => OpenSettings();
         ExpandRequested += async entry => await OpenDetailAsync(entry);
-        _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); _query = SearchBox.Text.Trim(); RebuildNotes(); ScrollTo(0); };
+        _searchTimer.Tick += async (_, _) => { _searchTimer.Stop(); await RunSearchAsync(); ScrollTo(0); };
+        Closed += (_, _) => { _searchLoads?.Cancel(); _searchLoads?.Dispose(); _searchLoads = null; };
         Closed += (_, _) => { Retired = true; SmoothMotion.CancelTree(this); _searchTimer.Stop(); DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _spareCards.Clear(); _bindings.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
     }
     public void ApplyAppearance(AppSettings settings)
@@ -117,7 +118,13 @@ public partial class RopeWindow : Window
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => { _appearanceRefreshPending = false; if (!Retired && !_closing) { RenderVisible(); SyncScroll(); } }));
         }
     }
-    public void SetStatus(string message) => Status.Text = message;
+    public void SetStatus(string message)
+    {
+        if (Status.Text == message) return;
+        Status.Text = message;
+        if (System.Windows.Automation.Peers.AutomationPeer.ListenerExists(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged))
+            System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(Status)?.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
+    }
     private void OnSystemAppearanceChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is not (nameof(SystemParameters.HighContrast) or nameof(SystemParameters.ClientAreaAnimation))) return;
@@ -187,7 +194,8 @@ public partial class RopeWindow : Window
         var version = ++_renderVersion;
         var entries = await Task.Run(() => _store.ListAsync());
         if (version != _renderVersion || _closing || Retired) return;
-        _entries = entries; RebuildNotes();
+        _entries = entries;
+        if (SearchBox.Text.Trim().Length > 0) await RunSearchAsync(); else RebuildNotes();
     }
     private void RebuildNotes()
     {
@@ -195,12 +203,13 @@ public partial class RopeWindow : Window
         var reusable = _cards.ToDictionary(pair => _visible[pair.Key].Id, pair => (Entry: _visible[pair.Key], Card: pair.Value));
         _cards.Clear();
         _visible = _entries.Where(x => !_starredOnly || x.Pinned)
-            .Where(x => (_kind is null || x.Kind == _kind) && (_query.Length == 0 || x.Preview.Contains(_query, StringComparison.OrdinalIgnoreCase)))
+            .Where(x => (_kind is null || x.Kind == _kind) && (_dateDays is null || x.CopiedAt >= DateTimeOffset.UtcNow.AddDays(-_dateDays.Value))
+                && (_query.Length == 0 || _searchMatches.Contains(x.Id)))
             .OrderByDescending(x => _settings.StarredFirst && x.Pinned).ThenByDescending(x => x.CopiedAt).ToList();
         AllButton.SetResourceReference(BackgroundProperty, !_starredOnly ? "SelectedSurface" : "Chrome");
         StarredButton.SetResourceReference(BackgroundProperty, _starredOnly ? "SelectedSurface" : "Chrome");
         EmptyState.Visibility = _visible.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        EmptyTitle.Text = _query.Length > 0 || _kind is not null ? "No matching notes." : _starredOnly ? "Your favourites live here." : "Room for your next idea.";
+        EmptyTitle.Text = _searchRunning ? "Searching saved text…" : _query.Length > 0 || _kind is not null || _dateDays is not null ? "No matching notes." : _starredOnly ? "Your favourites live here." : "Room for your next idea.";
         EmptyHint.Text = _query.Length > 0 || _kind is not null ? "Try a different search or choose All types." : _starredOnly ? "Star a note to find it quickly." : "Copy something. We'll hang it here.";
         Notes.Width = Math.Max(NoteScroll.ViewportWidth, 48 + _visible.Count * Pitch - (_visible.Count > 0 ? _appearance.NoteSpacing : 0));
         var range = MotionMath.VisibleRange(_visible.Count, Math.Max(0, ScrollOffset - 24), NoteScroll.ViewportWidth, Pitch);
@@ -214,8 +223,9 @@ public partial class RopeWindow : Window
         }
         foreach (var prior in reusable.Values) RetireCard(prior.Card);
         _renderedRange = (-1, -1);
-        SetStatus($"{_visible.Count} {(_starredOnly ? "starred clips" : "clips")} · {_settings.RetentionDays}-day history · Esc to tuck away");
-        RenderVisible(); SyncScroll();
+        if (_selectedId is not null && !_visible.Any(x => x.Id == _selectedId)) { _selectedId = null; _focusSelection = false; }
+        SetStatus($"{_visible.Count} {(_starredOnly ? "starred clips" : "clips")} · {(_searchRunning ? "Searching…" : "Arrows to select · Enter to paste · Shift + Enter to copy")} · Esc to tuck away");
+        RenderVisible(); UpdateSelectionVisuals(); SyncScroll();
     }
     private void RenderVisible()
     {
@@ -292,6 +302,7 @@ public partial class RopeWindow : Window
     private void BindNote(Grid card, ClipSummary entry)
     {
         var binding = _bindings[card]; binding.Entry = entry;
+        if (card.Children[1] is Border paper) paper.SetResourceReference(Border.BorderBrushProperty, entry.Id == _selectedId ? "Accent" : "Outline");
         binding.Label.Text = entry.Kind.ToString().ToUpperInvariant();
         binding.Date.Text = entry.CopiedAt.ToLocalTime().ToString("MMM d · HH:mm");
         if (binding.Select.Content is TextBlock text) { text.Text = entry.Preview; text.FontSize = _appearance.TextSize; }
@@ -332,6 +343,7 @@ public partial class RopeWindow : Window
         var attachment = new TransformGroup(); attachment.Children.Add(new RotateTransform()); attachment.Children.Add(new TranslateTransform()); attachment.Children.Add(new TranslateTransform()); attachment.Children.Add(new TranslateTransform()); wrapper.RenderTransform = attachment;
         var hover = new TranslateTransform();
         wrapper.MouseDown += OnInsideClick;
+        wrapper.GotKeyboardFocus += (_, _) => { _selectedId = Current().Id; UpdateSelectionVisuals(); };
         // A small ambient border avoids a per-card pixel-shader blur surface on every moving frame.
         wrapper.Children.Add(new Border { CornerRadius = new CornerRadius(23), Margin = new Thickness(0, 26, 0, -3), Background = new SolidColorBrush(Color.FromArgb(20, 0, 0, 0)), IsHitTestVisible = false });
         var paper = new Border { CornerRadius = new CornerRadius(22), Margin = new Thickness(0, 23, 0, 0), Padding = new Thickness(21, 25, 21, 16), BorderThickness = new Thickness(1) };
@@ -402,7 +414,7 @@ public partial class RopeWindow : Window
     private void OnStarred(object sender, RoutedEventArgs e) { _starredOnly = true; RebuildNotes(); ScrollTo(0); }
     private void OnSettings(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();
     private void OnFeedback(object sender, RoutedEventArgs e) => OpenSettings(4);
-    private void OnSearchChanged(object sender, TextChangedEventArgs e) { if (Notes is null || Retired) return; _searchTimer.Stop(); _searchTimer.Start(); }
+    private void OnSearchChanged(object sender, TextChangedEventArgs e) { if (Notes is null || Retired) return; _searchLoads?.Cancel(); _searchTimer.Stop(); _searchTimer.Start(); }
     private void OnTypeFilter(object sender, RoutedEventArgs e)
     {
         _kind = _kind switch { null => ClipKind.Text, ClipKind.Text => ClipKind.Image, ClipKind.Image => ClipKind.Files, _ => null };
@@ -417,9 +429,20 @@ public partial class RopeWindow : Window
     {
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) { SearchBox.Focus(); SearchBox.SelectAll(); e.Handled = true; return; }
         if (e.Key == Key.Escape) { e.Handled = true; if (DetailHost.Visibility == Visibility.Visible) DismissDetail(); else if (SidebarHost.Visibility == Visibility.Visible) DismissSettings(); else await CloseRopeAsync(); }
-        else if (e.OriginalSource is TextBox) return;
-        else if (SidebarHost.Visibility != Visibility.Visible && DetailHost.Visibility != Visibility.Visible && e.Key is Key.Left or Key.Right)
-        { ScrollTo(_scrollTarget + (e.Key == Key.Left ? -Pitch : Pitch)); e.Handled = true; }
+        else if (SidebarHost.Visibility == Visibility.Visible || DetailHost.Visibility == Visibility.Visible) return;
+        else if (e.OriginalSource is TextBox)
+        { if (e.Key == Key.Down && ReferenceEquals(e.OriginalSource, SearchBox)) { SelectNote(0); e.Handled = true; } }
+        else if (e.Key is Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown)
+        {
+            var current = _visible.FindIndex(x => x.Id == _selectedId);
+            var page = Math.Max(1, (int)(NoteScroll.ViewportWidth / Pitch));
+            var next = e.Key switch { Key.Home => 0, Key.End => _visible.Count - 1, Key.PageUp => current - page,
+                Key.PageDown => current + page, Key.Left => current - 1, _ => current + 1 };
+            SelectNote(next); e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && _selectedId is not null
+            && (e.OriginalSource is not Button focused || _bindings.Values.Any(x => ReferenceEquals(x.Select, focused))))
+        { e.Handled = true; var entry = _visible.FirstOrDefault(x => x.Id == _selectedId); if (entry is not null && Selected is not null) await Selected(entry); }
     }
     internal void RenderDemo(int count = 8)
     {

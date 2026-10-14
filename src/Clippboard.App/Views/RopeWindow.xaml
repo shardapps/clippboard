@@ -10,10 +10,11 @@
           <Button x:Name="AllButton" Content="All clips" Click="OnAll"/>
           <Button x:Name="StarredButton" Content="Starred" Click="OnStarred"/>
           <Grid Width="170" Margin="8,0">
-            <TextBox x:Name="SearchBox" MaxLength="100" TextChanged="OnSearchChanged" FontSize="13" Padding="10,8" ToolTip="Search saved previews · Ctrl + F" AutomationProperties.Name="Search saved previews"/>
-            <TextBlock Text="Search previews…" Foreground="{DynamicResource Muted}" IsHitTestVisible="False" Margin="11,0" VerticalAlignment="Center" FontSize="13"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text.Length, ElementName=SearchBox}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+            <TextBox x:Name="SearchBox" MaxLength="100" TextChanged="OnSearchChanged" FontSize="13" Padding="10,8" ToolTip="Search full text and file paths · Ctrl + F" AutomationProperties.Name="Search clipboard history"/>
+            <TextBlock Text="Search clips…" Foreground="{DynamicResource Muted}" IsHitTestVisible="False" Margin="11,0" VerticalAlignment="Center" FontSize="13"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text.Length, ElementName=SearchBox}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
           </Grid>
           <Button x:Name="TypeFilterButton" Content="All types" ToolTip="Filter by text, images or files" Click="OnTypeFilter"/>
+          <Button x:Name="DateFilterButton" Content="Any time" ToolTip="Filter by last 24 hours, 7 days or all retained history" Click="OnDateFilter"/>
           <Button x:Name="PauseButton" ToolTip="Pause capture" Click="OnPause" AutomationProperties.Name="Pause capture"><d:IconView Symbol="pause"/></Button>
           <Button ToolTip="Settings" Click="OnSettings" AutomationProperties.Name="Settings"><d:IconView Symbol="settings"/></Button>
           <Button ToolTip="Help &amp; feedback" Click="OnFeedback" AutomationProperties.Name="Help and feedback"><d:IconView Symbol="feedback"/></Button>
@@ -37,7 +38,7 @@
             <Button ToolTip="Next notes" Click="OnNext" AutomationProperties.Name="Scroll right"><d:IconView Symbol="right" Width="18" Height="18"/></Button>
           </StackPanel>
         </Border>
-        <Border x:Name="StatusBubble" Background="{DynamicResource Chrome}" CornerRadius="12" Padding="12,6" Margin="0,8,0,0" MaxWidth="650"><TextBlock x:Name="Status" Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center"/></Border>
+        <Border x:Name="StatusBubble" Background="{DynamicResource Chrome}" CornerRadius="12" Padding="12,6" Margin="0,8,0,0" MaxWidth="650"><TextBlock x:Name="Status" AutomationProperties.LiveSetting="Polite" Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center"/></Border>
       </StackPanel>
     </Grid>
     <Border x:Name="SidebarHost" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,76,18,18" Width="500" MaxHeight="720" Background="{DynamicResource Chrome}" CornerRadius="24" BorderBrush="{DynamicResource Outline}" BorderThickness="1" MouseDown="OnInsideClick"/>

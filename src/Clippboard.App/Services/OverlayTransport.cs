@@ -12,9 +12,11 @@ using Clippboard.Core;
 
 namespace Clippboard.App.Services;
 
-internal sealed record OverlayRequest(string Command, string? Id = null, bool Flag = false, AppSettings? Settings = null);
+internal sealed record OverlayRequest(string Command, string? Id = null, bool Flag = false, AppSettings? Settings = null,
+    string? Query = null, IReadOnlyList<string>? Ids = null);
 internal sealed record OverlayReply(string? Error = null, AppSettings? Settings = null, long Target = 0, long Version = 0, bool Close = false,
-    bool StartupAvailable = true, IReadOnlyList<ClipSummary>? Entries = null, Clip? Clip = null, bool Demo = false, int ListenerProcess = 0, bool Standby = false);
+    bool StartupAvailable = true, IReadOnlyList<ClipSummary>? Entries = null, Clip? Clip = null, bool Demo = false, int ListenerProcess = 0, bool Standby = false,
+    IReadOnlyList<string>? Matches = null);
 
 internal static class OverlayTransport
 {
@@ -111,9 +113,9 @@ internal sealed class OverlayClient(string pipeName) : IHistoryAccess, IDisposab
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
-    internal async Task<OverlayReply> CallAsync(OverlayRequest request)
+    internal async Task<OverlayReply> CallAsync(OverlayRequest request, CancellationToken cancellation = default)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token); deadline.CancelAfter(TimeSpan.FromSeconds(30));
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, cancellation); deadline.CancelAfter(TimeSpan.FromSeconds(30));
         await _gate.WaitAsync(deadline.Token);
         try
         {
@@ -124,12 +126,15 @@ internal sealed class OverlayClient(string pipeName) : IHistoryAccess, IDisposab
             if (reply.Error is not null) throw new IOException(reply.Error);
             return reply;
         }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or JsonException or InvalidDataException) { throw new IOException("The clipboard listener is unavailable. Open the rope again.", ex); }
         finally { _gate.Release(); }
     }
     public async Task<IReadOnlyList<ClipSummary>> ListAsync() => (await CallAsync(new("list"))).Entries ?? [];
     public async Task<Clip?> GetAsync(string id) => (await CallAsync(new("get", id))).Clip;
     public async Task<byte[]?> GetPreviewAsync(string id) => (await CallAsync(new("preview", id))).Clip?.ImagePng;
+    public async Task<IReadOnlyList<string>> SearchBatchAsync(string query, IReadOnlyList<string> ids, CancellationToken cancellation = default)
+        => (await CallAsync(new("search", Query: query, Ids: ids), cancellation)).Matches ?? [];
     public async Task SetPinnedAsync(string id, bool pinned) => await CallAsync(new("pin", id, pinned));
     public async Task DeleteAsync(string id) => await CallAsync(new("delete", id));
     public async Task ClearAsync() => await CallAsync(new("clear"));

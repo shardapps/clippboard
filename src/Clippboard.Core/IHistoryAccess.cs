@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace Clippboard.Core;
 
@@ -10,6 +11,8 @@ public interface IHistoryAccess
     Task<Clip?> GetAsync(string id);
     // Consumers own and clear the returned encoded image after decoding.
     async Task<byte[]?> GetPreviewAsync(string id) => (await GetAsync(id))?.ImagePng;
+    Task<IReadOnlyList<string>> SearchBatchAsync(string query, IReadOnlyList<string> ids, CancellationToken cancellation = default)
+        => HistorySearch.MatchBatchAsync(this, query, ids, cancellation);
     Task SetPinnedAsync(string id, bool pinned);
     Task DeleteAsync(string id);
     Task ClearAsync();

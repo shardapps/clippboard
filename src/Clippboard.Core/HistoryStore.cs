@@ -125,13 +125,14 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
         return true;
     }
 
-    public async Task<bool> SaveSnippetAsync(string? id, string text, string title, string[] labels)
+    public async Task<bool> SaveSnippetAsync(string? id, string text, string title, string[] labels, CancellationToken cancellation = default)
     {
         TextReuse.ValidateSnippet(text, title, labels);
-        await _gate.WaitAsync();
+        await _gate.WaitAsync(cancellation);
         Clip? existing = null;
         try
         {
+            cancellation.ThrowIfCancellationRequested();
             Trim(DateTimeOffset.UtcNow);
             if (id is not null)
             {

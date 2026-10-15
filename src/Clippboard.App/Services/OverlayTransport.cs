@@ -140,8 +140,8 @@ internal sealed class OverlayClient(string pipeName) : IHistoryAccess, IDisposab
     public async Task SetPinnedAsync(string id, bool pinned) => await CallAsync(new("pin", id, pinned));
     public async Task DeleteAsync(string id) => await CallAsync(new("delete", id));
     public async Task ClearAsync() => await CallAsync(new("clear"));
-    public async Task<bool> SaveSnippetAsync(string? id, string text, string title, string[] labels)
-        => (await CallAsync(new("save-snippet", Id: id, Text: text, Title: title, Labels: labels))).Saved;
+    public async Task<bool> SaveSnippetAsync(string? id, string text, string title, string[] labels, CancellationToken cancellation = default)
+        => (await CallAsync(new("save-snippet", Id: id, Text: text, Title: title, Labels: labels), cancellation)).Saved;
     public void Dispose() { _lifetime.Cancel(); _lifetime.Dispose(); }
 }
 

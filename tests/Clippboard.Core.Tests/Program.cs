@@ -235,6 +235,7 @@ internal static partial class Program
             await CheckFullSearchAsync(root);
             await CheckCapturePrivacyAsync(root);
             await CheckTextReuseAsync(root);
+            await CheckFileActionsAsync(root);
             Check(MotionMath.Settle(0, true) == 0 && MotionMath.Settle(1, true) == 1, "spring rests at exact endpoints");
             Check(MotionMath.Sway(0) == 0 && MotionMath.Sway(1) == 1, "continuous sway rests at exact endpoints");
             Check(Enumerable.Range(0, 1001).Select(i => MotionMath.Sway(i / 1000.0)).Max() is > 1.2 and < 1.4, "natural note sway overshoot remains bounded");

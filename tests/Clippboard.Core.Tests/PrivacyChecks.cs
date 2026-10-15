@@ -61,11 +61,14 @@ internal static partial class Program
         Check(entered.Wait(TimeSpan.FromSeconds(3)), "fixture owns storage writer before cancellation test");
         using var queuedCancellation = new CancellationTokenSource();
         var queuedClip = new Clip { Kind = ClipKind.Text, Text = "must not survive locking" };
-        var queued = busy.AddAsync(queuedClip, queuedCancellation.Token); queuedCancellation.Cancel(); release.Set();
+        var queued = busy.AddAsync(queuedClip, queuedCancellation.Token);
+        var queuedSnippet = busy.SaveSnippetAsync(null, "queued snippet", "", [], queuedCancellation.Token);
+        queuedCancellation.Cancel(); release.Set();
         await first; rejected = false;
         try { await queued; } catch (OperationCanceledException) { rejected = true; }
+        var snippetRejected = false; try { await queuedSnippet; } catch (OperationCanceledException) { snippetRejected = true; }
         await busy.ClearAsync();
-        Check(rejected && (await busy.ListAsync()).Count == 0, "capture queued behind writer is canceled before purge and cannot resurrect data");
+        Check(rejected && snippetRejected && (await busy.ListAsync()).Count == 0, "captures and snippets queued behind writer are canceled before purge and cannot resurrect data");
     }
     private sealed class BlockingProtector(ManualResetEventSlim entered, ManualResetEventSlim release) : IContentProtector
     {

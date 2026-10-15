@@ -81,6 +81,7 @@ public partial class RopeWindow : Window
         SettingsRequested += () => OpenSettings();
         ExpandRequested += async entry => await OpenDetailAsync(entry);
         Closed += (_, _) => { _editorLoads?.Cancel(); _editorLoads?.Dispose(); _editorLoads = null; };
+        Closed += (_, _) => { _fileActionsLifetime.Cancel(); _fileActionsLifetime.Dispose(); };
         _searchTimer.Tick += async (_, _) => { _searchTimer.Stop(); await RunSearchAsync(); ScrollTo(0); };
         Closed += (_, _) => { _searchLoads?.Cancel(); _searchLoads?.Dispose(); _searchLoads = null; };
         Closed += (_, _) => { Retired = true; SmoothMotion.CancelTree(this); _searchTimer.Stop(); DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _spareCards.Clear(); _bindings.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
@@ -311,6 +312,7 @@ public partial class RopeWindow : Window
         var binding = _bindings[card]; binding.Entry = entry;
         if (card.Children[1] is Border paper) paper.SetResourceReference(Border.BorderBrushProperty, entry.Id == _selectedId ? "Accent" : "Outline");
         binding.Label.Text = entry.IsSnippet ? (string.IsNullOrWhiteSpace(entry.Title) ? "SNIPPET" : entry.Title) : entry.Kind.ToString().ToUpperInvariant();
+        binding.Label.ToolTip = string.IsNullOrWhiteSpace(entry.Title) ? null : entry.Title;
         binding.Date.Text = entry.CopiedAt.ToLocalTime().ToString("MMM d · HH:mm");
         if (binding.Select.Content is TextBlock text) { text.Text = entry.Preview; text.FontSize = _appearance.TextSize; }
         else binding.Select.Content = new TextBlock { Text = entry.Preview, FontSize = _appearance.TextSize, TextWrapping = TextWrapping.Wrap, TextTrimming = TextTrimming.CharacterEllipsis, MaxHeight = 210 };
@@ -359,7 +361,7 @@ public partial class RopeWindow : Window
         wrapper.MouseLeave += (_, _) => Interaction.Move(hover, TranslateTransform.YProperty, 0, Animated, 350);
         paper.SetResourceReference(Border.BackgroundProperty, "NoteSurface"); paper.SetResourceReference(Border.BorderBrushProperty, "Outline");
         var body = new Grid(); body.RowDefinitions.Add(new() { Height = GridLength.Auto }); body.RowDefinitions.Add(new()); body.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        var label = new TextBlock { Text = entry.Kind.ToString().ToUpperInvariant(), FontSize = 11, FontWeight = FontWeights.SemiBold };
+        var label = new TextBlock { Text = entry.Kind.ToString().ToUpperInvariant(), FontSize = 11, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
         label.SetResourceReference(TextBlock.ForegroundProperty, "Muted"); body.Children.Add(label);
         var select = new Button { Padding = new Thickness(0), Margin = new Thickness(0, 14, 0, 14), HorizontalContentAlignment = HorizontalAlignment.Stretch,
             VerticalContentAlignment = VerticalAlignment.Top, ToolTip = "Restore this clip · Shift-click to copy without pasting",
@@ -430,7 +432,7 @@ public partial class RopeWindow : Window
     private async void OnOutsideClick(object sender, MouseButtonEventArgs e) => await CloseRopeAsync();
     private void OnInsideClick(object sender, MouseButtonEventArgs e) => e.Handled = true;
     private async void OnClose(object sender, RoutedEventArgs e) => await CloseRopeAsync();
-    private async void OnDeactivated(object? sender, EventArgs e) { if (!_preview) await CloseRopeAsync(); }
+    private async void OnDeactivated(object? sender, EventArgs e) { if (!_preview && !_externalDialog) await CloseRopeAsync(); }
     private void OnPause(object sender, RoutedEventArgs e) => PauseRequested?.Invoke();
     private async void OnKeyDown(object sender, KeyEventArgs e)
     {

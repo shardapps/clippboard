@@ -113,7 +113,8 @@ public partial class App
             case "get": return new(Clip: await Task.Run(() => _store!.GetAsync(request.Id ?? "")));
             case "save-snippet":
                 if (_sessionLocked || _clipboard?.SessionLocked == true) return new(Error: "Unlock and finish history cleanup before saving a snippet.");
-                var saved = await Task.Run(() => _store!.SaveSnippetAsync(request.Id, request.Text ?? throw new ArgumentException("Snippet text required."), request.Title ?? "", request.Labels ?? []));
+                var saveCancellation = _captureLease.Token;
+                var saved = await Task.Run(() => _store!.SaveSnippetAsync(request.Id, request.Text ?? throw new ArgumentException("Snippet text required."), request.Title ?? "", request.Labels ?? [], saveCancellation));
                 if (saved) ++_historyVersion;
                 return new(Saved: saved);
             case "preview":

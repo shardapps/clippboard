@@ -1,0 +1,11 @@
+# File and image actions in the next beta source
+
+Expand a file note to **Copy paths** as plain text or **Show location** in Explorer. For multiple originals, **First location** selects the first reference; the expanded note lists every path for selection/copy. Location checks use the existing bounded worker/deadline for disconnected shares. Selection uses Windows' [item-ID Shell API](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shopenfolderandselectitems) on one bounded STA, preserving spaces, commas and Unicode without parsing a command string. Repeated clicks cannot accumulate blocked workers. A moved, deleted or unavailable original is reported; file contents are never duplicated into history.
+
+Expand an image note and choose **Save PNG…**. The native dialog controls the destination and confirms overwriting. Original encoded PNG bytes are exported without resizing or changing the saved clipboard note. The request is explicit; browsing does not export files or upload anything.
+
+The save path requires a PNG extension. Writing and filesystem checks run off the UI thread. A temporary export file is created beside the chosen destination, then renamed only after the write completes. Cancellation/failure removes staging; an existing file remains intact if writing/replacement fails. Destination size/timestamp changes detected while loading/writing reject the save so another application's update is not silently overwritten. Filesystem failures still require available disk space and permissions.
+
+This explicit export creates a normal plaintext image in the folder the user chooses, including its temporary staging file during writing. It is separate from Clippboard's encrypted internal history and derived cache. Other software may sync the chosen folder. Internal browsing does not create plaintext image cache files.
+
+Synthetic checks cover original-byte preservation, staging cleanup, cancellation, locked destination replacement, invalid data/extensions, changed destinations, bounded path text, Unicode, STA affinity and stalled-Shell recovery. Native Save dialog, Explorer interaction and third-party filesystem/device coverage remain beta validation gates.

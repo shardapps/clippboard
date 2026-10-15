@@ -96,23 +96,27 @@ public partial class RopeWindow
                 System.Windows.Automation.AutomationProperties.SetName(DetailText, "Full note contents"); content = DetailText;
             }
             Grid.SetRow(content, 1); body.Children.Add(content);
-            var footer = new DockPanel { Margin = new Thickness(0, 16, 0, 0) };
+            var footer = new WrapPanel { Margin = new Thickness(0, 16, 0, 0) };
             var grip = new Thumb { Width = 28, Height = 28, Cursor = System.Windows.Input.Cursors.SizeNWSE,
                 Template = GripTemplate() };
             System.Windows.Automation.AutomationProperties.SetName(grip, "Resize expanded note");
             grip.DragDelta += (_, e) => { Interaction.Move(DetailHost, WidthProperty, Math.Clamp(DetailHost.Width + e.HorizontalChange * 2, Math.Min(360, ActualWidth - 32), ActualWidth - 32), false); Interaction.Move(DetailHost, HeightProperty, Math.Clamp(DetailHost.Height + e.VerticalChange * 2, Math.Min(260, ActualHeight - 32), ActualHeight - 32), false); };
-            DockPanel.SetDock(grip, Dock.Right); footer.Children.Add(grip);
             var larger = new Button { Content = "Larger", ToolTip = "Enlarge note" };
             larger.Click += (_, _) => { Interaction.Move(DetailHost, WidthProperty, Math.Min(ActualWidth - 32, DetailHost.Width + 160), Animated); Interaction.Move(DetailHost, HeightProperty, Math.Min(ActualHeight - 32, DetailHost.Height + 100), Animated); };
-            DockPanel.SetDock(larger, Dock.Right); footer.Children.Add(larger);
             var paste = new Button { Content = _settings.AutoPaste ? "Restore & paste" : "Copy to clipboard", Padding = new Thickness(16, 9, 16, 9) };
             paste.SetResourceReference(BackgroundProperty, "SelectedSurface"); paste.Click += async (_, _) => { if (Selected is not null) await Selected(entry); };
-            DockPanel.SetDock(paste, Dock.Left); footer.Children.Add(paste);
+            footer.Children.Add(paste);
             if (clip.Kind == ClipKind.Text)
             {
                 var edit = new Button { Content = clip.IsSnippet ? "Edit snippet" : "Edit a copy" };
-                edit.Click += async (_, _) => await OpenTextEditorAsync(entry); DockPanel.SetDock(edit, Dock.Left); footer.Children.Add(edit);
+                edit.Click += async (_, _) => await OpenTextEditorAsync(entry); footer.Children.Add(edit);
             }
+            else if (clip.Kind == ClipKind.Files) AddFileActions(footer, (string[])(clip.FilePaths ?? []).Clone());
+            else if (clip.Kind == ClipKind.Image)
+            {
+                var saveImage = FileActionButton("Save PNG…", () => SaveImageAsync(entry.Id)); footer.Children.Add(saveImage);
+            }
+            footer.Children.Add(larger); footer.Children.Add(grip);
             var hint = new TextBlock { Text = "Drag the corner to resize", FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 12, 0) }; hint.SetResourceReference(TextBlock.ForegroundProperty, "Muted"); footer.Children.Add(hint);
             Grid.SetRow(footer, 2); body.Children.Add(footer); DetailHost.Child = body; content.Focus();
         }

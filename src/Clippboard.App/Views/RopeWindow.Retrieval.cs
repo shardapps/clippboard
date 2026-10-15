@@ -114,7 +114,13 @@ public partial class RopeWindow
     {
         foreach (var card in _cards.Values)
             if (card.Children[1] is Border paper)
-                paper.SetResourceReference(Border.BorderBrushProperty, _bindings[card].Entry.Id == _selectedId ? "Accent" : "Outline");
+            {
+                var binding = _bindings[card]; var combined = _combinationIds.Contains(binding.Entry.Id);
+                paper.SetResourceReference(Border.BorderBrushProperty, binding.Entry.Id == _selectedId || combined ? "Accent" : "Outline");
+                paper.BorderThickness = new Thickness(combined ? 2 : 1);
+                if (binding.Combine is not null)
+                { binding.Combine.Content = combined ? "✓" : "+"; System.Windows.Automation.AutomationProperties.SetName(binding.Combine, combined ? "Remove text from combination" : "Select text for combination"); }
+            }
     }
 
     private void FocusSelectedNote()

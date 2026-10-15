@@ -11,6 +11,7 @@
           <Button x:Name="StarredButton" Content="Starred" Click="OnStarred"/>
           <Button x:Name="SnippetsButton" Content="Snippets" Click="OnSnippets"/>
           <Button Content="+" ToolTip="New reusable snippet" Click="OnNewSnippet" AutomationProperties.Name="New reusable snippet"/>
+          <Button x:Name="CombineButton" Content="Combine" Visibility="Collapsed" Click="OnCombine" ToolTip="Preview and combine selected text notes"/>
           <Grid Width="170" Margin="8,0">
             <TextBox x:Name="SearchBox" MaxLength="100" TextChanged="OnSearchChanged" FontSize="13" Padding="10,8" ToolTip="Search full text and file paths · Ctrl + F" AutomationProperties.Name="Search clipboard history"/>
             <TextBlock Text="Search clips…" Foreground="{DynamicResource Muted}" IsHitTestVisible="False" Margin="11,0" VerticalAlignment="Center" FontSize="13"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text.Length, ElementName=SearchBox}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
@@ -24,7 +25,7 @@
           <Button ToolTip="Tuck away · Esc" Click="OnClose" AutomationProperties.Name="Retract rope"><d:IconView Symbol="up"/></Button>
         </WrapPanel>
       </Border>
-      <Grid Grid.Row="1" x:Name="Board" SizeChanged="OnBoardSizeChanged">
+      <Grid Grid.Row="1" x:Name="Board" Focusable="True" KeyboardNavigation.IsTabStop="False" SizeChanged="OnBoardSizeChanged">
         <d:RopeVisual x:Name="Rope" Height="100" VerticalAlignment="Top" IsHitTestVisible="False"/>
         <ScrollViewer x:Name="NoteScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" ScrollChanged="OnScrollChanged" HorizontalContentAlignment="Left" VerticalContentAlignment="Top">
           <Canvas x:Name="Notes" Height="390"><Canvas.RenderTransform><TranslateTransform x:Name="NotesMotion"/></Canvas.RenderTransform></Canvas>

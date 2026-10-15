@@ -162,7 +162,9 @@ internal sealed class ClipboardService : IDisposable
         {
             var text = data.GetData(DataFormats.UnicodeText) as string;
             if (string.IsNullOrWhiteSpace(text) || text.Length > 512 * 1024) return null;
-            return new Clip { Kind = ClipKind.Text, Text = text };
+            return new Clip { Kind = ClipKind.Text, Text = text,
+                Html = settings?.CaptureFormattedText != false ? FormattedClipboard.Read(data, DataFormats.Html) : null,
+                Rtf = settings?.CaptureFormattedText != false ? FormattedClipboard.Read(data, DataFormats.Rtf) : null };
         }
         return null;
     }
@@ -173,7 +175,7 @@ internal sealed class ClipboardService : IDisposable
         var data = new DataObject();
         switch (clip.Kind)
         {
-            case ClipKind.Text: data.SetText(clip.Text ?? "", TextDataFormat.UnicodeText); break;
+            case ClipKind.Text: data = FormattedClipboard.ForText(clip); break;
             case ClipKind.Image:
                 // Preserve original dimensions, without retaining its encoded buffer.
                 data.SetImage(PreviewCache.Decode(clip.ImagePng ?? [], int.MaxValue, int.MaxValue));

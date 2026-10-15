@@ -29,6 +29,7 @@ public sealed record AppSettings
     public bool OpenStarredOnly { get; init; }
     public bool StartAtLogin { get; init; }
     public bool CaptureText { get; init; } = true;
+    public bool CaptureFormattedText { get; init; } = true;
     public bool CaptureImages { get; init; } = true;
     public bool CaptureFiles { get; init; } = true;
     public bool CapturePaused { get; init; }

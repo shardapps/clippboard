@@ -15,6 +15,10 @@ public sealed record Clip
     public DateTimeOffset CopiedAt { get; init; } = DateTimeOffset.UtcNow;
     public bool Pinned { get; init; }
     public string? Text { get; init; }
+    public string? Html { get; init; }
+    public string? Rtf { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasRichText => Kind == ClipKind.Text && (Html is not null || Rtf is not null);
     public byte[]? ImagePng { get; init; }
     public string[]? FilePaths { get; init; }
     public bool IsSnippet { get; init; }
@@ -23,6 +27,7 @@ public sealed record Clip
 
     public string Fingerprint()
     {
+        if (HasRichText) return RichTextFormats.Fingerprint(Text, Html, Rtf);
         var content = Kind switch
         {
             ClipKind.Text => Encoding.UTF8.GetBytes(Text ?? ""),
@@ -41,7 +46,7 @@ public sealed record Clip
             ClipKind.Image => "Copied image",
             ClipKind.Files => FilePreview(),
             _ => ""
-        }, fingerprint ?? Fingerprint(), storedBytes, IsSnippet, Title, (Labels ?? []).ToArray());
+        }, fingerprint ?? Fingerprint(), storedBytes, IsSnippet, Title, (Labels ?? []).ToArray(), HasRichText);
 
     private string FilePreview()
     {
@@ -51,7 +56,7 @@ public sealed record Clip
 }
 
 public sealed record ClipSummary(string Id, ClipKind Kind, DateTimeOffset CopiedAt,
-    bool Pinned, string Preview, string Fingerprint, long StoredBytes, bool IsSnippet = false, string? Title = null, string[]? Labels = null);
+    bool Pinned, string Preview, string Fingerprint, long StoredBytes, bool IsSnippet = false, string? Title = null, string[]? Labels = null, bool HasRichText = false);
 
 public sealed record HistoryLimits(int MaxEntries = 500, long MaxBytes = 256L * 1024 * 1024,
     int RetentionDays = 30, int MaxEntryBytes = 24 * 1024 * 1024);

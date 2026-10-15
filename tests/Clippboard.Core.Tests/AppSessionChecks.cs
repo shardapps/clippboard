@@ -70,7 +70,13 @@ internal static class AppSessionChecks
                     for (var cycle = 0; cycle < 3; cycle++)
                     {
                         var expected = $"Clippboard session {cycle + 1} — Unicode 🧵\nPakistan • synthetic fixture";
-                        Clipboard.SetText(expected);
+                        var formattedHtml = cycle == 0 ? Program.HtmlFixture("<pre>" + System.Net.WebUtility.HtmlEncode(expected) + "</pre>") : null;
+                        if (formattedHtml is not null)
+                        {
+                            var formatted = new DataObject(); formatted.SetText(expected, TextDataFormat.UnicodeText);
+                            formatted.SetText(formattedHtml, TextDataFormat.Html); Clipboard.SetDataObject(formatted, true);
+                        }
+                        else Clipboard.SetText(expected);
                         Console.WriteLine($"Fixture sequence {NativeMethods.GetClipboardSequenceNumber()}, Unicode format {Clipboard.ContainsText(TextDataFormat.UnicodeText)}");
                         await Until(() => Directory.GetFiles(Path.Combine(dataRoot, "history"), "*.meta").Length == cycle + 1, "real clipboard capture");
                         textbox.Clear(); fixture.Activate(); textbox.Focus(); NativeMethods.SetForegroundWindow(fixtureHandle);
@@ -90,6 +96,9 @@ internal static class AppSessionChecks
                             ((InvokePattern)note.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
                         }).WaitAsync(TimeSpan.FromSeconds(10));
                         await Until(() => textbox.Text.Replace("\r\n", "\n") == expected, "native restore, focus return and paste acceptance");
+                        if (formattedHtml is not null && (Clipboard.GetDataObject() is not { } restoredFormats
+                            || Clippboard.App.Services.FormattedClipboard.Read(restoredFormats, DataFormats.Html) != formattedHtml))
+                            throw new IOException("Native restore did not preserve the original HTML alongside Unicode fallback.");
                         await Until(() => !NativeMethods.IsWindow(overlay), "overlay destruction");
                         if (FixturePayloads(Path.Combine(dataRoot, "history")).Count() != cycle + 1) throw new IOException("Own restore created a duplicate capture.");
                     }

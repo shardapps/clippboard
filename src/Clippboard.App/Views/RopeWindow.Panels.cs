@@ -109,6 +109,15 @@ public partial class RopeWindow
             footer.Children.Add(paste);
             if (clip.Kind == ClipKind.Text)
             {
+                if (clip.HasRichText)
+                {
+                    var plainText = clip.Text ?? "";
+                    var plain = FileActionButton("Copy plain text", async () =>
+                    {
+                        if (EditedTextSelected is not null) await EditedTextSelected(plainText);
+                    });
+                    footer.Children.Add(plain);
+                }
                 var edit = new Button { Content = clip.IsSnippet ? "Edit snippet" : "Edit a copy" };
                 edit.Click += async (_, _) => await OpenTextEditorAsync(entry); footer.Children.Add(edit);
             }

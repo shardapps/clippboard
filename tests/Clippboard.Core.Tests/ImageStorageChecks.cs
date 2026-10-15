@@ -105,6 +105,16 @@ internal static partial class Program
         Check((await cacheReopened.ListAsync()).Count == 1 && cacheReopened.UnreadableEntries == 0,
             "restart cleans stale encrypted metadata staging without deleting a good image");
         await CheckStorageEncodingAllocationsAsync(root, clip);
+        var fixtureDirectory = Path.Combine(root, "pinned-baseline-format");
+        await UpgradeChecks.SeedLegacyFixtureAsync(fixtureDirectory, [clip]);
+        var fixtureBytes = protector.Unprotect(await File.ReadAllBytesAsync(Path.Combine(fixtureDirectory, clip.Id + ".clip")));
+        try
+        {
+            using var fixtureJson = JsonDocument.Parse(fixtureBytes);
+            Check(!fixtureJson.RootElement.TryGetProperty("IsSnippet", out _) && Directory.GetFiles(fixtureDirectory, "*.clip2").Length == 0,
+                "upgrade baseline fixture contains only the old reader's legacy schema and extension");
+        }
+        finally { CryptographicOperations.ZeroMemory(fixtureBytes); }
         Console.WriteLine($"Image storage bytes: legacy={legacyEncrypted.Length}, binary={rewritten.Length}");
         CryptographicOperations.ZeroMemory(png);
     }

@@ -88,7 +88,7 @@ Clipboard history can contain private data. The app respects supported exclusion
 
 ### Build with us
 
-The source is progressing toward the next beta: encrypted card-sized image previews, full-text/file-path search with date filters, and keyboard note selection/paste are being tested through focused PRs. These changes are not in the published 0.5.1 downloads. Follow the [beta checklist](docs/beta-checklist.md) and [retrieval guide](docs/retrieval.md) for implementation and validation status.
+The source is progressing toward the next beta: encrypted card-sized image previews, full-text/file-path search, date filters, keyboard navigation, app exclusions, timed pause, recoverable clear-on-lock, and previewed text actions/snippets are being tested through focused PRs. These changes are not in the published 0.5.1 downloads. Follow the [beta checklist](docs/beta-checklist.md), [retrieval guide](docs/retrieval.md) and [text-reuse guide](docs/text-reuse.md) for implementation and validation status.
 
 ```powershell
 ./scripts/dev.ps1 build    # Release build

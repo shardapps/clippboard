@@ -16,4 +16,6 @@ public interface IHistoryAccess
     Task SetPinnedAsync(string id, bool pinned);
     Task DeleteAsync(string id);
     Task ClearAsync();
+    Task<bool> SaveSnippetAsync(string? id, string text, string title, string[] labels)
+        => throw new System.NotSupportedException("Snippet editing is unavailable.");
 }

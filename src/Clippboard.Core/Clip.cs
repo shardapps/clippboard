@@ -17,6 +17,9 @@ public sealed record Clip
     public string? Text { get; init; }
     public byte[]? ImagePng { get; init; }
     public string[]? FilePaths { get; init; }
+    public bool IsSnippet { get; init; }
+    public string? Title { get; init; }
+    public string[] Labels { get; init; } = [];
 
     public string Fingerprint()
     {
@@ -27,17 +30,18 @@ public sealed record Clip
             ClipKind.Files => Encoding.UTF8.GetBytes(string.Join('\0', FilePaths ?? [])),
             _ => throw new ArgumentOutOfRangeException()
         };
-        return $"{Kind}:{Convert.ToHexString(SHA256.HashData(content))}";
+        try { return $"{(IsSnippet ? "Snippet" : Kind.ToString())}:{Convert.ToHexString(SHA256.HashData(content))}"; }
+        finally { if (Kind != ClipKind.Image) CryptographicOperations.ZeroMemory(content); }
     }
 
-    public ClipSummary Summary(long storedBytes) => new(
+    public ClipSummary Summary(long storedBytes, string? fingerprint = null) => new(
         Id, Kind, CopiedAt, Pinned, Kind switch
         {
             ClipKind.Text => (Text ?? "")[..Math.Min(Text?.Length ?? 0, 320)],
             ClipKind.Image => "Copied image",
             ClipKind.Files => FilePreview(),
             _ => ""
-        }, Fingerprint(), storedBytes);
+        }, fingerprint ?? Fingerprint(), storedBytes, IsSnippet, Title, (Labels ?? []).ToArray());
 
     private string FilePreview()
     {
@@ -47,7 +51,7 @@ public sealed record Clip
 }
 
 public sealed record ClipSummary(string Id, ClipKind Kind, DateTimeOffset CopiedAt,
-    bool Pinned, string Preview, string Fingerprint, long StoredBytes);
+    bool Pinned, string Preview, string Fingerprint, long StoredBytes, bool IsSnippet = false, string? Title = null, string[]? Labels = null);
 
 public sealed record HistoryLimits(int MaxEntries = 500, long MaxBytes = 256L * 1024 * 1024,
     int RetentionDays = 30, int MaxEntryBytes = 24 * 1024 * 1024);

@@ -90,34 +90,65 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
         try
         {
             cancellation.ThrowIfCancellationRequested();
-            Trim(DateTimeOffset.UtcNow);
-            var fingerprint = clip.Fingerprint();
-            var duplicate = _items.Values.FirstOrDefault(x => x.Fingerprint == fingerprint);
-            if (duplicate is not null) clip = clip with { Id = duplicate.Id, Pinned = duplicate.Pinned };
-            var bytes = Encrypt(clip);
-            if (bytes.Length > _limits.MaxEntryBytes) return false;
-            // Plan eviction first: a rejected addition must not remove existing history.
-            var candidates = _items.Values.Where(x => x.Id != clip.Id && !x.Pinned)
-                .OrderBy(x => x.CopiedAt).ToList();
-            var count = _items.Count - (duplicate is null ? 0 : 1) + 1;
-            var total = _items.Values.Where(x => x.Id != clip.Id).Sum(x => x.StoredBytes) + bytes.Length;
-            var evictions = new List<string>();
-            foreach (var victim in candidates)
-            {
-                if (count <= _limits.MaxEntries && total <= _limits.MaxBytes) break;
-                evictions.Add(victim.Id);
-                count--;
-                total -= victim.StoredBytes;
-            }
-            if (count > _limits.MaxEntries || total > _limits.MaxBytes) return false;
-            await WriteAsync(clip.Id, bytes);
-            foreach (var id in evictions) Remove(id);
-            _items[clip.Id] = clip.Summary(bytes.Length);
-            TrimPreviews();
-            await CacheSummaryAsync(_items[clip.Id]);
-            return true;
+            return await SaveLockedAsync(clip, !clip.IsSnippet);
         }
         finally { _gate.Release(); }
+    }
+
+    private async Task<bool> SaveLockedAsync(Clip clip, bool deduplicate)
+    {
+        Trim(DateTimeOffset.UtcNow);
+        var fingerprint = clip.Fingerprint();
+        var duplicate = deduplicate ? _items.Values.FirstOrDefault(x => x.Fingerprint == fingerprint) : null;
+        if (duplicate is not null) clip = clip with { Id = duplicate.Id, Pinned = duplicate.Pinned };
+        var bytes = Encrypt(clip);
+        if (bytes.Length > _limits.MaxEntryBytes) return false;
+        // Plan eviction first: a rejected addition must not remove existing history.
+        var candidates = _items.Values.Where(x => x.Id != clip.Id && !x.Pinned)
+            .OrderBy(x => x.CopiedAt).ToList();
+        var count = _items.Count - (_items.ContainsKey(clip.Id) ? 1 : 0) + 1;
+        var total = _items.Values.Where(x => x.Id != clip.Id).Sum(x => x.StoredBytes) + bytes.Length;
+        var evictions = new List<string>();
+        foreach (var victim in candidates)
+        {
+            if (count <= _limits.MaxEntries && total <= _limits.MaxBytes) break;
+            evictions.Add(victim.Id);
+            count--;
+            total -= victim.StoredBytes;
+        }
+        if (count > _limits.MaxEntries || total > _limits.MaxBytes) return false;
+        await WriteAsync(clip.Id, bytes);
+        foreach (var id in evictions) Remove(id);
+        _items[clip.Id] = clip.Summary(bytes.Length, fingerprint);
+        TrimPreviews();
+        await CacheSummaryAsync(_items[clip.Id]);
+        return true;
+    }
+
+    public async Task<bool> SaveSnippetAsync(string? id, string text, string title, string[] labels)
+    {
+        TextReuse.ValidateSnippet(text, title, labels);
+        await _gate.WaitAsync();
+        Clip? existing = null;
+        try
+        {
+            Trim(DateTimeOffset.UtcNow);
+            if (id is not null)
+            {
+                if (!_items.TryGetValue(id, out var summary) || !summary.IsSnippet || summary.Kind != ClipKind.Text)
+                    throw new InvalidOperationException("This snippet expired or was deleted. Save a new copy instead.");
+                existing = await ReadFileAsync(FileFor(id));
+                if (!existing.IsSnippet || existing.Kind != ClipKind.Text) throw new InvalidDataException("Invalid snippet payload.");
+            }
+            var snippet = (existing ?? new Clip { Kind = ClipKind.Text, Pinned = true }) with
+                { IsSnippet = true, Text = text, Title = title.Trim(), Labels = labels.Distinct(StringComparer.OrdinalIgnoreCase).ToArray() };
+            return await SaveLockedAsync(snippet, false);
+        }
+        finally
+        {
+            if (existing?.ImagePng is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(existing.ImagePng);
+            _gate.Release();
+        }
     }
 
     public async Task<Clip?> GetAsync(string id)
@@ -254,13 +285,22 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
                 var cached = JsonSerializer.Deserialize<StoredSummary>(plaintext);
                 if (cached?.Summary is not { } summary || summary.Id is null || summary.Preview is null || summary.Preview.Length > 320
                     || cached.ModifiedUtcTicks != info.LastWriteTimeUtc.Ticks || summary.StoredBytes != info.Length
-                    || summary.Id != Path.GetFileNameWithoutExtension(payloadFile) || !Enum.IsDefined(summary.Kind)) return null;
+                    || summary.Id != Path.GetFileNameWithoutExtension(payloadFile) || !Enum.IsDefined(summary.Kind)
+                    || summary.Title?.Length > 64 || summary.Labels?.Length > 8 || (summary.Labels?.Any(label => label is null || label.Length > 24) ?? false)
+                    || (summary.IsSnippet && summary.Kind != ClipKind.Text) || !ValidFingerprint(summary)) return null;
                 _ = FileFor(cached.Summary.Id);
                 return cached.Summary;
             }
             finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(plaintext); }
         }
         catch (Exception ex) when (ex is IOException or JsonException or System.Security.Cryptography.CryptographicException or ArgumentException) { return null; }
+    }
+
+    private static bool ValidFingerprint(ClipSummary summary)
+    {
+        var prefix = (summary.IsSnippet ? "Snippet" : summary.Kind.ToString()) + ":";
+        return summary.Fingerprint is not null && summary.Fingerprint.StartsWith(prefix, StringComparison.Ordinal)
+            && summary.Fingerprint.Length == prefix.Length + 64 && summary.Fingerprint[prefix.Length..].All(Uri.IsHexDigit);
     }
 
     private async Task CacheSummaryAsync(ClipSummary summary)

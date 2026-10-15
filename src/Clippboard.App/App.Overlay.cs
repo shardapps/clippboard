@@ -48,14 +48,13 @@ public partial class App
             try { var state = await client.CallAsync(new("pause")); if (state.Settings is not null) _rope.ApplyAppearance(state.Settings); }
             catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException) { _rope.SetStatus("Could not change capture. Try again."); }
         };
-        _rope.Selected += async summary =>
+        async Task RestoreAndPasteAsync(OverlayRequest request, bool copyOnly)
         {
             if (_selecting) return;
             _selecting = true;
             try
             {
-                var copyOnly = !_rope.SavedSettings.AutoPaste || (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
-                await client.CallAsync(new("restore", summary.Id));
+                await client.CallAsync(request);
                 if (initial.ListenerProcess != 0) NativeMethods.AllowSetForegroundWindow((uint)initial.ListenerProcess);
                 await _rope.CloseRopeAsync();
                 await client.CallAsync(new("paste", Flag: copyOnly));
@@ -63,7 +62,9 @@ public partial class App
             catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException)
             { if (!_rope.Retired) _rope.SetStatus(ex.Message); }
             finally { _selecting = false; if (_rope.Retired) { closed.TrySetResult(); Shutdown(); } }
-        };
+        }
+        _rope.Selected += summary => RestoreAndPasteAsync(new("restore", summary.Id), !_rope.SavedSettings.AutoPaste || (Keyboard.Modifiers & ModifierKeys.Shift) != 0);
+        _rope.EditedTextSelected += text => RestoreAndPasteAsync(new("restore", Text: text), true);
         var poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
         var polling = false; var version = initial.Version;
         poll.Tick += async (_, _) =>
@@ -110,6 +111,11 @@ public partial class App
             case "search": return new(Matches: await Task.Run(() => HistorySearch.MatchBatchAsync(_store!,
                 request.Query ?? throw new ArgumentException("Search query required."), request.Ids ?? throw new ArgumentException("Search IDs required."))));
             case "get": return new(Clip: await Task.Run(() => _store!.GetAsync(request.Id ?? "")));
+            case "save-snippet":
+                if (_sessionLocked || _clipboard?.SessionLocked == true) return new(Error: "Unlock and finish history cleanup before saving a snippet.");
+                var saved = await Task.Run(() => _store!.SaveSnippetAsync(request.Id, request.Text ?? throw new ArgumentException("Snippet text required."), request.Title ?? "", request.Labels ?? []));
+                if (saved) ++_historyVersion;
+                return new(Saved: saved);
             case "preview":
                 var thumbnail = await Task.Run(() => _store!.GetPreviewAsync(request.Id ?? ""));
                 return new(Clip: thumbnail is null ? null : new Clip { Id = request.Id!, Kind = ClipKind.Image, ImagePng = thumbnail });
@@ -124,7 +130,9 @@ public partial class App
                 _selecting = true;
                 try
                 {
-                    var clip = await Task.Run(() => _store!.GetAsync(request.Id ?? ""));
+                    if (request.Text?.Length > TextReuse.MaxTextLength) throw new ArgumentException("Edited text exceeds its limit.");
+                    var clip = request.Text is not null ? new Clip { Kind = ClipKind.Text, Text = request.Text }
+                        : await Task.Run(() => _store!.GetAsync(request.Id ?? ""));
                     if (clip is null) return new(Error: "This note has expired or was deleted.");
                     try { await _clipboard!.RestoreAsync(clip); _restoredSequence = NativeMethods.GetClipboardSequenceNumber(); }
                     finally { if (clip.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }

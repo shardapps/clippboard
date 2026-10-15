@@ -2,7 +2,7 @@
 
 The owner authorized implementation on October 13, 2026. Work proceeds in focused, tested PRs. This is a delivery checklist, not a claim that beta is ready. The published 0.5.1 alpha remains unchanged until a reviewed replacement release is prepared.
 
-Implementation progress: PRs #24–26 add runtime preparation for faster opening, smoother retraction, binary image replies and bounded PNG encoding scratch. PR #27 adds encrypted derived previews; PR #28 adds full-text/file-path retrieval, date filters, canceled stale results and keyboard note selection/paste. App exclusions, timed pauses and recoverable clear-on-lock are the next privacy change. Text actions, snippets, rich formats, multi-select, OCR, portable backups and the remaining profiling work are still in development. The unchecked acceptance gates below include integration and device evidence, not just the presence of code.
+Implementation progress: PRs #24–26 add runtime preparation for faster opening, smoother retraction, binary image replies and bounded PNG encoding scratch. PR #27 adds encrypted derived previews; PR #28 adds full-text/file-path retrieval, date filters, canceled stale results and keyboard note selection/paste. PR #29 adds app exclusions, timed pauses and recoverable clear-on-lock. The next change adds previewed text actions and editable snippets/labels. Rich formats, file/image actions, multi-select, OCR, portable backups and the remaining profiling work are still in development. The unchecked acceptance gates below include integration and device evidence, not just the presence of code.
 
 ## Responsiveness and resource use
 

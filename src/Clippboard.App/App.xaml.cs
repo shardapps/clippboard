@@ -82,11 +82,17 @@ public partial class App : Application
             await Task.Run(() => _store.InitializeAsync());
 
             _clipboard = new ClipboardService(SaveAsync, _settings.Shortcut) { Settings = _settings, Paused = _settings.CapturePaused };
+            try { SystemEvents.SessionSwitch += OnSessionSwitch; }
+            catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.ExternalException)
+            { _sessionWatchAvailable = false; _clipboard.Paused |= _settings.ClearOnLock; }
 
             _clipboard.ToggleRequested += ToggleRope;
             _clipboard.Notice += Notify;
             _foreground = new ForegroundTracker();
             CreateTray();
+            if (!_sessionWatchAvailable) Notify(_settings.ClearOnLock
+                ? "Windows lock monitoring is unavailable. Capture is paused; disable clear-on-lock in settings to continue."
+                : "Windows lock monitoring is unavailable in this session. Clear-on-lock cannot be enabled.");
             _maintenance = new DispatcherTimer { Interval = TimeSpan.FromMinutes(15) };
             _maintenance.Tick += async (_, _) =>
             {
@@ -95,7 +101,7 @@ public partial class App : Application
             };
             _maintenance.Start();
             _standbyMaintenance = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(5) };
-            _standbyMaintenance.Tick += (_, _) => MaintainStandby();
+            _standbyMaintenance.Tick += (_, _) => { RefreshTimedPause(); MaintainStandby(); };
             _standbyMaintenance.Start();
             if (!_clipboard.HotkeyAvailable) Notify(SettingsView.ShortcutLabel(_settings.Shortcut) + " is used by another app. Open Clippboard from its tray icon.");
             if (_store.UnreadableEntries > 0) Notify($"Removed {_store.UnreadableEntries} damaged or unreadable history entries.");
@@ -115,18 +121,20 @@ public partial class App : Application
     {
         try
         {
-            if (!_settings.Captures(clip.Kind)) return;
-            if (!await Task.Run(() => _store!.AddAsync(clip))) Notify("History is full of pinned notes, or this item exceeds the storage limit. Unpin or delete some notes.");
+            if (!_settings.Captures(clip.Kind) || _sessionLocked || (_settings.ClearOnLock && !_sessionWatchAvailable)) return;
+            var cancellation = _captureLease.Token;
+            if (!await Task.Run(() => _store!.AddAsync(clip, cancellation))) Notify("History is full of pinned notes, or this item exceeds the storage limit. Unpin or delete some notes.");
             else ++_historyVersion;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         { Notify("Could not save this clip. Check disk space and storage permissions."); }
+        catch (OperationCanceledException) { /* Session lock invalidates in-flight captures. */ }
         finally { if (clip.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }
     }
 
     private void ToggleRope()
     {
-        if (_toggling || _selecting || _store is null) return;
+        if (_toggling || _selecting || _store is null || _sessionLocked) return;
         if (_overlay is not null && !_overlay.Process.HasExited)
         {
             if (_overlay.OpenRequested) { _closeOverlay = true; return; }
@@ -139,7 +147,7 @@ public partial class App : Application
     }
     private void MaintainStandby()
     {
-        if (_exiting || _toggling || _store is null || _overlay is { OpenRequested: true }) return;
+        if (_exiting || _toggling || _store is null || _sessionLocked || _overlay is { OpenRequested: true }) return;
         if (_standbyPrivateBytes <= 0)
         {
             using var listener = Process.GetCurrentProcess(); _standbyPrivateBytes = listener.PrivateMemorySize64;
@@ -182,13 +190,16 @@ public partial class App : Application
     private async void TogglePause()
     {
         if (_clipboard is null) return;
-        var error = await SaveSettingsAsync(_settings with { CapturePaused = !_settings.CapturePaused });
-        Notify(error ?? (_settings.CapturePaused ? "Capture paused. New copies won't be saved." : "Capture resumed."));
+        if (_clipboard.SessionLocked) { Notify(await RetryLockCleanupAsync() ?? "History cleanup finished; session capture resumed."); return; }
+        var error = await SaveSettingsAsync(_settings with { CapturePaused = !_settings.IsCapturePaused, PauseUntil = null });
+        Notify(error ?? (_settings.IsCapturePaused ? "Capture paused. New copies won't be saved." : "Capture resumed."));
     }
 
     private async Task<string?> SaveSettingsAsync(AppSettings settings)
     {
         if (_savingSettings || _clipboard is null) return "A settings change is already in progress. Try again.";
+        if (CapturePolicy.ValidateExclusions(settings.ExcludedApps) is string invalid) return invalid;
+        if (settings.ClearOnLock && !_sessionWatchAvailable) return "Windows lock monitoring is unavailable. Disable clear-on-lock to save settings and resume capture.";
         _savingSettings = true;
         var previous = _settings; var next = settings.Normalize(); var persisted = false;
         if (PackageIdentity.IsPackaged) next = next with { StartAtLogin = false };
@@ -222,11 +233,11 @@ public partial class App : Application
                 if (!_development && !PackageIdentity.IsPackaged && next.StartAtLogin != previous.StartAtLogin)
                     try { SetStartup(previous.StartAtLogin); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { Notify("Check your Windows sign-in startup preference."); }
             }
-            _clipboard.Settings = _settings; _clipboard.Paused = _settings.CapturePaused;
+            _clipboard.Settings = _settings; _clipboard.Paused = _settings.CapturePaused || (_settings.ClearOnLock && !_sessionWatchAvailable);
             ++_historyVersion;
             if (_tray is not null)
             {
-                _tray.Text = _settings.CapturePaused ? "Clippboard · Capture paused" : "Clippboard · " + SettingsView.ShortcutLabel(_settings.Shortcut);
+                _tray.Text = _settings.IsCapturePaused ? "Clippboard · Capture paused" : "Clippboard · " + SettingsView.ShortcutLabel(_settings.Shortcut);
                 _tray.ContextMenuStrip!.Items[0].Text = "Open rope · " + SettingsView.ShortcutLabel(_settings.Shortcut);
                 if (!_development && !PackageIdentity.IsPackaged && _tray.ContextMenuStrip.Items[2] is Forms.ToolStripMenuItem startup) startup.Checked = _settings.StartAtLogin;
             }
@@ -329,6 +340,8 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _exiting = true; _standbyMaintenance?.Stop();
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
+        _captureLease.Cancel(); _captureLease.Dispose();
         _overlay?.Dispose(); _maintenance?.Stop(); _clipboard?.Dispose(); _foreground?.Dispose();
         if (_tray is not null) { _tray.Visible = false; _tray.ContextMenuStrip?.Dispose(); _tray.Dispose(); }
         _trayIcon?.Dispose();

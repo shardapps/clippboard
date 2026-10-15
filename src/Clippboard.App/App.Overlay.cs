@@ -37,6 +37,7 @@ public partial class App
         }
         if (initial.Close) { Shutdown(); return; }
         _rope = new RopeWindow(client, initial.Demo, initial.Settings) { StartupAvailable = initial.StartupAvailable };
+        _rope.SetPaused(initial.Settings?.IsCapturePaused == true || initial.CaptureSuspended);
         _rope.SettingsSaveRequested += async settings =>
         {
             try { return (await client.CallAsync(new("settings", Settings: settings))).Error; }
@@ -72,6 +73,7 @@ public partial class App
             try
             {
                 var state = await client.CallAsync(new("state"));
+                _rope.SetPaused(state.Settings?.IsCapturePaused == true || state.CaptureSuspended);
                 if (state.Close) await _rope.CloseRopeAsync();
                 else if (state.Version != version)
                 {
@@ -103,7 +105,7 @@ public partial class App
         {
             case "wait-open": if (_overlay is not null) await _overlay.WaitForOpenAsync(); goto case "init";
             case "standby-ready": return new();
-            case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false });
+            case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false }, CaptureSuspended: _clipboard?.SessionLocked == true || (_settings.ClearOnLock && !_sessionWatchAvailable));
             case "list": return new(Entries: await Task.Run(() => _store!.ListAsync()));
             case "search": return new(Matches: await Task.Run(() => HistorySearch.MatchBatchAsync(_store!,
                 request.Query ?? throw new ArgumentException("Search query required."), request.Ids ?? throw new ArgumentException("Search IDs required."))));
@@ -115,7 +117,8 @@ public partial class App
             case "delete": await Task.Run(() => _store!.DeleteAsync(request.Id ?? "")); ++_historyVersion; return new();
             case "clear": await Task.Run(() => _store!.ClearAsync()); ++_historyVersion; return new();
             case "settings": return new(Error: await SaveSettingsAsync(request.Settings ?? throw new ArgumentException("Settings required.")), Settings: _settings);
-            case "pause": return new(Error: await SaveSettingsAsync(_settings with { CapturePaused = !_settings.CapturePaused }), Settings: _settings);
+            case "pause": return new(Error: _clipboard?.SessionLocked == true ? await RetryLockCleanupAsync()
+                : await SaveSettingsAsync(_settings with { CapturePaused = !_settings.IsCapturePaused, PauseUntil = null }), Settings: _settings);
             case "restore":
                 if (_selecting) return new(Error: "An item is already being restored.");
                 _selecting = true;

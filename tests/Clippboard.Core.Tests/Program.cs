@@ -233,6 +233,7 @@ internal static partial class Program
             await CheckFileProbeAsync(root);
             await CheckEncryptedPreviewsAsync(root);
             await CheckFullSearchAsync(root);
+            await CheckCapturePrivacyAsync(root);
             Check(MotionMath.Settle(0, true) == 0 && MotionMath.Settle(1, true) == 1, "spring rests at exact endpoints");
             Check(MotionMath.Sway(0) == 0 && MotionMath.Sway(1) == 1, "continuous sway rests at exact endpoints");
             Check(Enumerable.Range(0, 1001).Select(i => MotionMath.Sway(i / 1000.0)).Max() is > 1.2 and < 1.4, "natural note sway overshoot remains bounded");
@@ -747,6 +748,18 @@ internal static partial class Program
                 try { Pump(service.RestoreAsync(new Clip { Kind = ClipKind.Files, FilePaths = [Path.Combine(root, "does-not-exist.txt")] })); }
                 catch (FileNotFoundException) { missingRejected = true; }
                 Check(missingRejected, "missing original does not replace clipboard");
+                service.Settings = new AppSettings { ExcludedApps = [System.Diagnostics.Process.GetCurrentProcess().ProcessName] };
+                Clipboard.SetText("excluded process fixture"); Pump(Task.Delay(350));
+                Check(captured.Count == 3, "Windows clipboard owner exclusion prevents capture");
+                service.Settings = new AppSettings { PauseUntil = DateTimeOffset.UtcNow.AddMinutes(5) };
+                Clipboard.SetText("timed pause fixture"); Pump(Task.Delay(350));
+                Check(captured.Count == 3, "Windows timed pause prevents capture");
+                service.Settings = new(); service.SessionLocked = true;
+                Clipboard.SetText("locked session fixture"); Pump(Task.Delay(350));
+                Check(captured.Count == 3, "Windows listener ignores copies while session capture is suspended");
+                service.SessionLocked = false;
+                Clipboard.SetText("resumed session fixture"); Pump(WaitForCapture(() => captured.Count == 4));
+                Check(captured.Count == 4 && captured.Last().Text == "resumed session fixture", "Windows capture resumes on a new post-unlock copy");
             }
             finally { service.Paused = true; Clipboard.Clear(); }
             service.Dispose(); service.Dispose(); Check(true, "clipboard listener disposal is idempotent");
@@ -755,6 +768,30 @@ internal static partial class Program
             catch (ObjectDisposedException) { disposedRejected = true; }
             Check(disposedRejected, "disposed listener cannot change clipboard");
         }
+        using var release = new ManualResetEventSlim();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); var calls = 0; var lateCaptured = 0; string? lastCaptured = null;
+        using var delayed = new ClipboardService(clip => { ++lateCaptured; lastCaptured = clip.Text; return Task.CompletedTask; }, read: settings =>
+        {
+            if (Interlocked.Increment(ref calls) is not 1 and not 3) return ClipboardService.ReadCurrent(settings);
+            started.TrySetResult(); if (!release.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException();
+            return new Clip { Kind = ClipKind.Text, Text = "stale before locking" };
+        });
+        try
+        {
+            Clipboard.SetText("delayed lock fixture"); Pump(started.Task.WaitAsync(TimeSpan.FromSeconds(3)));
+            delayed.SessionLocked = true; delayed.SessionLocked = false; release.Set(); Pump(Task.Delay(350));
+            Check(lateCaptured == 0, "read spanning lock and unlock cannot resurrect cleared history");
+            Clipboard.SetText("fresh after delayed unlock"); Pump(WaitForCapture(() => lateCaptured == 1));
+            Check(lateCaptured == 1, "fresh capture resumes after obsolete unlocked reader completes");
+            started = new(TaskCreationOptions.RunContinuationsAsynchronously); release.Reset();
+            Clipboard.SetText("second delayed fixture"); Pump(started.Task.WaitAsync(TimeSpan.FromSeconds(3)));
+            delayed.SessionLocked = true; delayed.SessionLocked = false;
+            Clipboard.SetText("new copy while old reader is pending"); Pump(Task.Delay(40)); release.Set();
+            Pump(WaitForCapture(() => lateCaptured == 2));
+            Check(lateCaptured == 2 && lastCaptured == "new copy while old reader is pending",
+                "post-unlock copy received during stale read is retried and preserved");
+        }
+        finally { release.Set(); delayed.Paused = true; Clipboard.Clear(); }
     }
     private static async Task WaitForCapture(Func<bool> ready)
     {

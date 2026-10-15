@@ -39,6 +39,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
             Directory.CreateDirectory(directory);
             _items.Clear();
             UnreadableEntries = 0;
+            CompletePendingClear();
             foreach (var file in Directory.EnumerateFiles(directory, "*.tmp")) File.Delete(file);
             foreach (var file in Directory.EnumerateFiles(directory, "*.clip"))
             {
@@ -83,11 +84,12 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
         finally { _gate.Release(); }
     }
 
-    public async Task<bool> AddAsync(Clip clip)
+    public async Task<bool> AddAsync(Clip clip, CancellationToken cancellation = default)
     {
-        await _gate.WaitAsync();
+        await _gate.WaitAsync(cancellation);
         try
         {
+            cancellation.ThrowIfCancellationRequested();
             Trim(DateTimeOffset.UtcNow);
             var fingerprint = clip.Fingerprint();
             var duplicate = _items.Values.FirstOrDefault(x => x.Fingerprint == fingerprint);
@@ -159,7 +161,13 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
     public async Task ClearAsync()
     {
         await _gate.WaitAsync();
-        try { foreach (var id in _items.Keys.ToArray()) Remove(id); }
+        try
+        {
+            // A crash during deletion must not silently leave part of a requested purge.
+            var pending = Path.Combine(directory, "clear.pending");
+            await File.WriteAllBytesAsync(pending, []);
+            CompletePendingClear();
+        }
         finally { _gate.Release(); }
     }
 
@@ -188,6 +196,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
 
     private void Trim(DateTimeOffset now)
     {
+        CompletePendingClear();
         foreach (var item in _items.Values.Where(x => x.CopiedAt < now.AddDays(-_limits.RetentionDays)).ToArray())
             Remove(item.Id);
         foreach (var item in _items.Values.Where(x => !x.Pinned).OrderBy(x => x.CopiedAt).ToArray())
@@ -196,6 +205,16 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
             Remove(item.Id);
         }
         TrimPreviews();
+    }
+
+    private void CompletePendingClear()
+    {
+        var pending = Path.Combine(directory, "clear.pending");
+        if (!File.Exists(pending)) return;
+        foreach (var extension in new[] { "*.clip", "*.meta", "*.thumb", "*.tmp" })
+            foreach (var file in Directory.EnumerateFiles(directory, extension)) File.Delete(file);
+        File.Delete(pending);
+        _items.Clear(); _previewSizes.Clear();
     }
 
     private void Remove(string id)

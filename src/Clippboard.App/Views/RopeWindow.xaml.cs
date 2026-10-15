@@ -48,6 +48,7 @@ public partial class RopeWindow : Window
     private ClipKind? _kind;
     private double _scrollTarget;
     private bool _appearanceRefreshPending;
+    private bool? _pausedVisual;
     public event Func<ClipSummary, Task>? Selected;
     public event Action? PauseRequested;
     public event Action? SettingsRequested;
@@ -87,7 +88,7 @@ public partial class RopeWindow : Window
         _settings = settings.Normalize();
         PreviewAppearance(_settings);
         UpdatePreviewBudget();
-        _cache.Clear(); SetPaused(_settings.CapturePaused);
+        _cache.Clear(); SetPaused(_settings.IsCapturePaused);
     }
     internal void PreviewAppearance(AppSettings draft)
     {
@@ -132,6 +133,8 @@ public partial class RopeWindow : Window
     }
     public void SetPaused(bool paused)
     {
+        if (_pausedVisual == paused) return;
+        _pausedVisual = paused;
         PauseButton.Content = new IconView { Symbol = paused ? "play" : "pause" };
         PauseButton.ToolTip = paused ? "Resume capture" : "Pause capture";
         System.Windows.Automation.AutomationProperties.SetName(PauseButton, paused ? "Resume capture" : "Pause capture");

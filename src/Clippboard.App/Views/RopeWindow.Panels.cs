@@ -125,6 +125,7 @@ public partial class RopeWindow
             else if (clip.Kind == ClipKind.Image)
             {
                 var saveImage = FileActionButton("Save PNG…", () => SaveImageAsync(entry.Id)); footer.Children.Add(saveImage);
+                var extract = FileActionButton("Extract text…", () => OpenOcrAsync(entry.Id)); footer.Children.Add(extract);
             }
             footer.Children.Add(larger); footer.Children.Add(grip);
             var hint = new TextBlock { Text = "Drag the corner to resize", FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 12, 0) }; hint.SetResourceReference(TextBlock.ForegroundProperty, "Muted"); footer.Children.Add(hint);

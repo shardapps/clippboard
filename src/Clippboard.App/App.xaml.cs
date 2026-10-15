@@ -307,6 +307,7 @@ public partial class App : Application
             await _rope.OpenTextEditorAsync(new Clip { Kind = ClipKind.Text, IsSnippet = true, Title = "A friendly follow-up", Labels = ["work", "email"],
                 Text = "Hi there,\n\nThanks for sharing this. I'll take a look and get back to you shortly.\n\nBest wishes" }.Summary(0));
         if (args.Contains("--combination")) await _rope.PreviewCombinationAsync();
+        if (args.Contains("--ocr")) await _rope.PreviewOcrAsync();
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
         _rope.UpdateLayout();
         SavePreview(output);

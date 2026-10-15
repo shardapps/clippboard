@@ -108,7 +108,7 @@ public partial class App : Application
             if (!e.Args.Contains("--background")) ToggleRope();
             else _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(MaintainStandby));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.Security.Cryptography.CryptographicException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException or InvalidOperationException or System.Security.Cryptography.CryptographicException or ArgumentException)
         {
             if (!e.Args.Contains("--overlay") && !e.Args.Contains("--lifecycle-diagnostics"))
                 MessageBox.Show("Clippboard could not start. Check storage permissions and whether another copy is running.", "Clippboard", MessageBoxButton.OK, MessageBoxImage.Error);

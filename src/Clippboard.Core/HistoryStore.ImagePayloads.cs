@@ -25,6 +25,12 @@ public sealed partial class HistoryStore
         public override void Write(Utf8JsonWriter writer, byte[] value, JsonSerializerOptions options) => throw new JsonException("Binary image metadata cannot contain inline bytes.");
     }
     private static readonly JsonSerializerOptions ImageMetadataJson = new() { Converters = { new NoInlineBytes() } };
+    private static byte[] ImageHeader(PreparedPayload payload)
+    {
+        var header = new byte[ImageHeaderBytes]; ImageMagic.CopyTo(header);
+        BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(8), payload.Metadata.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(12), payload.Image!.Length); return header;
+    }
     private PreparedPayload PreparePayload(Clip clip, string? fingerprint = null)
     {
         RichTextFormats.Validate(clip);

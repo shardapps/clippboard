@@ -43,7 +43,9 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
             _modernPayloads.Clear();
             _orderedSnapshot = null;
             UnreadableEntries = 0;
+            ++_restoreEpoch;
             CompletePendingClear();
+            CompletePendingRestore(); CleanupAbandonedRestores();
             foreach (var file in Directory.EnumerateFiles(directory, "*.tmp")) File.Delete(file);
             foreach (var file in Directory.EnumerateFiles(directory, "*.clip2").Concat(Directory.EnumerateFiles(directory, "*.clip")))
             {
@@ -77,7 +79,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
                     }
                     finally { if (clip.ImagePng is not null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(clip.ImagePng); }
                 }
-                catch (Exception ex) when (ex is IOException or JsonException or System.Security.Cryptography.CryptographicException or ArgumentException)
+                catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or System.Security.Cryptography.CryptographicException or ArgumentException)
                 {
                     // Unreadable history must not silently consume the storage budget forever.
                     UnreadableEntries++;
@@ -219,6 +221,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
         await _gate.WaitAsync();
         try
         {
+            ++_restoreEpoch;
             // A crash during deletion must not silently leave part of a requested purge.
             var pending = Path.Combine(directory, "clear.pending");
             await File.WriteAllBytesAsync(pending, []);
@@ -253,6 +256,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
     private void Trim(DateTimeOffset now)
     {
         CompletePendingClear();
+        CompletePendingRestore();
         var cutoff = now.AddDays(-_limits.RetentionDays);
         List<string>? expired = null;
         foreach (var item in _items.Values)
@@ -277,6 +281,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
         foreach (var extension in new[] { "*.clip", "*.clip2", "*.meta", "*.thumb", "*.tmp" })
             foreach (var file in Directory.EnumerateFiles(directory, extension)) File.Delete(file);
         File.Delete(pending);
+        File.Delete(Path.Combine(directory, "restore.pending"));
         _items.Clear(); _modernPayloads.Clear(); _previewSizes.Clear(); _orderedSnapshot = null;
     }
 
@@ -367,28 +372,30 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
     {
         var previous = FileFor(id);
         var file = Path.ChangeExtension(previous, bytes.Modern ? ".clip2" : ".clip");
+        await WritePreparedFileAsync(file, bytes, true, default);
+        if (previous != file)
+        {
+            try { File.Delete(previous); }
+            catch { File.Delete(file); throw; }
+        }
+        if (bytes.Modern) _modernPayloads.Add(id); else _modernPayloads.Remove(id);
+    }
+    private static async Task WritePreparedFileAsync(string file, PreparedPayload bytes, bool overwrite, CancellationToken cancellation)
+    {
         var temporary = file + ".tmp";
         try
         {
-            if (bytes.Image is null) await File.WriteAllBytesAsync(temporary, bytes.Metadata);
+            if (bytes.Image is null) await File.WriteAllBytesAsync(temporary, bytes.Metadata, cancellation);
             else
             {
                 await using (var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 16384, FileOptions.Asynchronous))
                 {
-                    var header = new byte[ImageHeaderBytes]; ImageMagic.CopyTo(header);
-                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(8), bytes.Metadata.Length);
-                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(12), bytes.Image.Length);
-                    await output.WriteAsync(header); await output.WriteAsync(bytes.Metadata); await output.WriteAsync(bytes.Image);
-                    await output.FlushAsync();
+                    var header = ImageHeader(bytes);
+                    await output.WriteAsync(header, cancellation); await output.WriteAsync(bytes.Metadata, cancellation); await output.WriteAsync(bytes.Image, cancellation);
+                    await output.FlushAsync(cancellation);
                 }
             }
-            File.Move(temporary, file, true);
-            if (previous != file)
-            {
-                try { File.Delete(previous); }
-                catch { File.Delete(file); throw; } // Keep the original authoritative if migration cannot finish.
-            }
-            if (bytes.Modern) _modernPayloads.Add(id); else _modernPayloads.Remove(id);
+            cancellation.ThrowIfCancellationRequested(); File.Move(temporary, file, overwrite);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }

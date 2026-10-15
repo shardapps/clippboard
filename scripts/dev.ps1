@@ -1,11 +1,14 @@
 param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','format')][string]$Task = 'build',
   [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
-  [switch]$Settings, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly)
+  [switch]$Settings, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [switch]$Ocr, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly, [switch]$BuildDiagnostics)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
 $env:DOTNET_CLI_HOME = Join-Path $projectRoot '.cache\dotnet'
 $env:NUGET_PACKAGES = Join-Path $projectRoot '.cache\nuget'
+# NuGet's mmap extraction can fail on streamed/virtual drives. Ordinary file
+# extraction keeps package signature verification and works inside this workspace.
+if (!$env:NUGET_PACKAGE_EXTRACTION_USE_MMAP) { $env:NUGET_PACKAGE_EXTRACTION_USE_MMAP = '0' }
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'
 $env:CLIPPBOARD_DEV_DATA = Join-Path $projectRoot '.data'
@@ -26,7 +29,7 @@ switch ($Task) {
     if ($Software) { $diagnosticArgs += '--software' }
     & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- @diagnosticArgs
   }
-  'build' { & $dotnetPath build Clippboard.slnx -c Release -m:1 -p:UseAppHost=false }
+  'build' { $verbosity = if ($BuildDiagnostics) { 'diagnostic' } else { 'minimal' }; & $dotnetPath build Clippboard.slnx -c Release -m:1 -p:UseAppHost=false -verbosity:$verbosity }
   'test' { & $dotnetPath run --project tests/Clippboard.Core.Tests -c Release -p:UseAppHost=false }
   'run' { & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- --dev }
   'format' { & $dotnetPath format Clippboard.slnx --verify-no-changes }
@@ -37,6 +40,7 @@ switch ($Task) {
     if ($Detail) { $previewArgs += '--detail' }
     if ($Snippet) { $previewArgs += '--snippet' }
     if ($Combine) { $previewArgs += '--combination' }
+    if ($Ocr) { $previewArgs += '--ocr' }
     if ($Measure) { $previewArgs += @('--measure', (Join-Path $projectRoot 'artifacts/performance.json')) }
     & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- @previewArgs
   }

@@ -26,14 +26,7 @@ internal sealed class LabelPickerView : UserControl
         _list.SetResourceReference(BackgroundProperty, "Chrome"); _list.SetResourceReference(ForegroundProperty, "Foreground");
         ScrollViewer.SetHorizontalScrollBarVisibility(_list, ScrollBarVisibility.Disabled); ScrollViewer.SetVerticalScrollBarVisibility(_list, ScrollBarVisibility.Auto);
         VirtualizingPanel.SetIsVirtualizing(_list, true); VirtualizingPanel.SetVirtualizationMode(_list, VirtualizationMode.Recycling);
-        var style = new Style(typeof(ListBoxItem)); style.Setters.Add(new Setter(PaddingProperty, new Thickness(12, 9, 12, 9)));
-        style.Setters.Add(new Setter(ForegroundProperty, new System.Windows.DynamicResourceExtension("Foreground")));
-        var border = new FrameworkElementFactory(typeof(Border)); border.SetValue(Border.CornerRadiusProperty, new CornerRadius(9));
-        border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(BackgroundProperty)); border.SetValue(Border.PaddingProperty, new TemplateBindingExtension(PaddingProperty));
-        border.AppendChild(new FrameworkElementFactory(typeof(ContentPresenter))); var template = new ControlTemplate(typeof(ListBoxItem)) { VisualTree = border };
-        var selectedTrigger = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true }; selectedTrigger.Setters.Add(new Setter(BackgroundProperty, new DynamicResourceExtension("SelectedSurface"))); template.Triggers.Add(selectedTrigger);
-        var hover = new Trigger { Property = IsMouseOverProperty, Value = true }; hover.Setters.Add(new Setter(BackgroundProperty, new DynamicResourceExtension("SelectedSurface"))); template.Triggers.Add(hover);
-        style.Setters.Add(new Setter(TemplateProperty, template)); _list.ItemContainerStyle = style;
+        _list.ItemContainerStyle = ChoiceItemStyle();
         _list.ItemsSource = labels; _list.SelectedItem = selected;
         System.Windows.Automation.AutomationProperties.SetName(_list, "Saved labels; press Enter to apply selection");
         _list.PreviewKeyDown += (_, e) => { if (e.Key == Key.Enter && _list.SelectedItem is string label) { Chosen?.Invoke(label); e.Handled = true; } };
@@ -42,6 +35,21 @@ internal sealed class LabelPickerView : UserControl
         _search.TextChanged += (_, _) => _list.ItemsSource = labels.Where(label => HistorySearch.Contains(label, _search.Text.Trim())).ToArray();
         _search.PreviewKeyDown += (_, e) => { if (e.Key == Key.Down && _list.Items.Count > 0) { _list.SelectedIndex = 0; _list.Focus(); e.Handled = true; } };
         Grid.SetRow(_list, 3); root.Children.Add(_list); Content = root;
+    }
+    internal static Style ChoiceItemStyle()
+    {
+        var style = new Style(typeof(ListBoxItem)); style.Setters.Add(new Setter(PaddingProperty, new Thickness(12, 9, 12, 9)));
+        style.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(1)));
+        style.Setters.Add(new Setter(BorderBrushProperty, System.Windows.Media.Brushes.Transparent));
+        style.Setters.Add(new Setter(ForegroundProperty, new System.Windows.DynamicResourceExtension("Foreground")));
+        var border = new FrameworkElementFactory(typeof(Border)); border.SetValue(Border.CornerRadiusProperty, new CornerRadius(9));
+        border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(BackgroundProperty)); border.SetValue(Border.PaddingProperty, new TemplateBindingExtension(PaddingProperty));
+        border.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(BorderBrushProperty)); border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(BorderThicknessProperty));
+        border.AppendChild(new FrameworkElementFactory(typeof(ContentPresenter))); var template = new ControlTemplate(typeof(ListBoxItem)) { VisualTree = border };
+        var selectedTrigger = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true }; selectedTrigger.Setters.Add(new Setter(BackgroundProperty, new DynamicResourceExtension("SelectedSurface"))); template.Triggers.Add(selectedTrigger);
+        selectedTrigger.Setters.Add(new Setter(BorderBrushProperty, new DynamicResourceExtension("Accent")));
+        var hover = new Trigger { Property = IsMouseOverProperty, Value = true }; hover.Setters.Add(new Setter(BackgroundProperty, new DynamicResourceExtension("SelectedSurface"))); template.Triggers.Add(hover);
+        style.Setters.Add(new Setter(TemplateProperty, template)); return style;
     }
     internal void FocusSearch() => _search.Focus();
 }

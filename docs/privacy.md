@@ -8,6 +8,8 @@ Regular builds use `%LOCALAPPDATA%\ShardApps\Clippboard\history`. `--dev` uses i
 
 Each entry is encrypted with DPAPI `CurrentUser` before atomic file replacement. There is no plaintext history index or content log. Short summaries stay in process memory; restore necessarily decrypts payloads and places them on the system clipboard.
 
+Next-beta image storage encrypts metadata and PNG in separate DPAPI blocks, with a small plaintext format/length header. It avoids Base64 image serialization while preserving older encrypted JSON reads. Payload text, paths and image bytes remain encrypted. See [image storage](image-storage.md) for format bounds and migration limits.
+
 | Limit | Default |
 | --- | --- |
 | Lifetime, including stars | Configurable 1–30 days |

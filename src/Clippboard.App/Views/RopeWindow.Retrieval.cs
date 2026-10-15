@@ -17,6 +17,13 @@ public partial class RopeWindow
     private bool _searchRunning, _focusSelection, _focusScheduled;
     private int? _dateDays;
     private string? _selectedId;
+    private sealed record SearchStamp(string Fingerprint, string? Title, string[] Labels, bool Found)
+    {
+        internal bool Matches(ClipSummary entry) => Fingerprint == entry.Fingerprint && Title == entry.Title
+            && Labels.SequenceEqual(entry.Labels ?? [], StringComparer.Ordinal);
+    }
+    private readonly Dictionary<string, SearchStamp> _searchCache = new();
+    private string _cacheQuery = "";
     internal string? SelectedNoteId => _selectedId;
 
     internal async Task SearchNowAsync(string query)
@@ -32,13 +39,25 @@ public partial class RopeWindow
         var cancellation = load.Token;
         var query = _query = SearchBox.Text.Trim();
         var failed = false;
-        _searchMatches = _entries.Where(x => HistorySearch.Contains(x.Preview, query)).Select(x => x.Id).ToHashSet();
+        if (query != _cacheQuery) { _searchCache.Clear(); _cacheQuery = query; }
+        var entries = _entries.ToDictionary(x => x.Id);
+        foreach (var id in _searchCache.Keys.Where(id => !entries.ContainsKey(id)).ToArray()) _searchCache.Remove(id);
+        _searchMatches = [];
+        foreach (var entry in _entries)
+        {
+            if (_searchCache.TryGetValue(entry.Id, out var cached) && cached.Matches(entry))
+            { if (cached.Found) _searchMatches.Add(entry.Id); continue; }
+            _searchCache.Remove(entry.Id);
+            if (HistorySearch.Contains(entry.Preview, query) || HistorySearch.Contains(entry.Title, query)
+                || (entry.Labels?.Any(label => HistorySearch.Contains(label, query)) ?? false))
+            { _searchMatches.Add(entry.Id); _searchCache[entry.Id] = new(entry.Fingerprint, entry.Title, (entry.Labels ?? []).ToArray(), true); }
+        }
         _searchRunning = query.Length > 0 && !_preview;
         RebuildNotes();
         try
         {
             if (!_searchRunning) return;
-            var candidates = _entries.Where(x => x.Kind != ClipKind.Image && !_searchMatches.Contains(x.Id)).Select(x => x.Id).ToArray();
+            var candidates = _entries.Where(x => x.Kind != ClipKind.Image && !_searchCache.ContainsKey(x.Id)).Select(x => x.Id).ToArray();
             for (var offset = 0; offset < candidates.Length; offset += HistorySearch.BatchSize)
             {
                 cancellation.ThrowIfCancellationRequested();
@@ -46,6 +65,12 @@ public partial class RopeWindow
                 var matches = await Task.Run(() => _store.SearchBatchAsync(query, batch, cancellation), cancellation);
                 cancellation.ThrowIfCancellationRequested();
                 if (Retired || _closing || !ReferenceEquals(_searchLoads, load)) return;
+                var found = matches.ToHashSet();
+                foreach (var id in batch)
+                {
+                    var entry = entries[id];
+                    _searchCache[id] = new(entry.Fingerprint, entry.Title, (entry.Labels ?? []).ToArray(), found.Contains(id));
+                }
                 if (matches.Count > 0) { _searchMatches.UnionWith(matches); RebuildNotes(); }
                 // Yield the serialized pipe to urgent state/restore/preview calls.
                 await Task.Yield();

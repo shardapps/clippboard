@@ -91,7 +91,7 @@ internal static class AppSessionChecks
                         }).WaitAsync(TimeSpan.FromSeconds(10));
                         await Until(() => textbox.Text.Replace("\r\n", "\n") == expected, "native restore, focus return and paste acceptance");
                         await Until(() => !NativeMethods.IsWindow(overlay), "overlay destruction");
-                        if (Directory.GetFiles(Path.Combine(dataRoot, "history"), "*.clip").Length != cycle + 1) throw new IOException("Own restore created a duplicate capture.");
+                        if (FixturePayloads(Path.Combine(dataRoot, "history")).Count() != cycle + 1) throw new IOException("Own restore created a duplicate capture.");
                     }
                     // Fast changes are coalesced by Windows/the reader; require
                     // the final item, not an invented guarantee of every transient.
@@ -115,7 +115,7 @@ internal static class AppSessionChecks
                     await SetClipboardAsync(() => Clipboard.SetText(finalText)); await Task.Delay(2000);
                     var summaries = ReadFixtureSummaries(historyDirectory);
                     var persisted = summaries.Count;
-                    var diskBytes = Directory.EnumerateFiles(historyDirectory, "*.clip").Sum(path => new FileInfo(path).Length);
+                    var diskBytes = FixturePayloads(historyDirectory).Sum(path => new FileInfo(path).Length);
                     if (persisted > 500 || diskBytes > 256L * 1024 * 1024 || summaries.Count(x => x.Kind == ClipKind.Image) != 2) throw new IOException("Native burst violated history bounds or lost an image.");
                     var samples = new List<object>(); var cpu = listener.TotalProcessorTime; var idle = Stopwatch.StartNew();
                     for (var sample = 0; sample < 30; sample++)
@@ -130,7 +130,7 @@ internal static class AppSessionChecks
                     listener = StartListener();
                     await Until(() => FindOwnedMessageWindow(listener.Id, "Clippboard listener") != 0, "listener restart");
                     await listenerReady!.WaitAsync(TimeSpan.FromSeconds(15));
-                    if (Directory.GetFiles(historyDirectory, "*.clip").Length != persisted) throw new IOException("History did not persist through restart.");
+                    if (FixturePayloads(historyDirectory).Count() != persisted) throw new IOException("History did not persist through restart.");
                     await Task.Delay(10000); listener.Refresh();
                     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
                     await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, HotkeyToVisibleWindowMs = visibleLatencies, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
@@ -179,6 +179,8 @@ internal static class AppSessionChecks
             catch (ExternalException) when (deadline.Elapsed < TimeSpan.FromSeconds(5)) { await Task.Delay(30); }
         }
     }
+    private static IEnumerable<string> FixturePayloads(string directory) => Directory.EnumerateFiles(directory)
+        .Where(path => Path.GetExtension(path) is ".clip" or ".clip2");
     private static IReadOnlyList<ClipSummary> ReadFixtureSummaries(string directory)
     {
         var results = new List<ClipSummary>();

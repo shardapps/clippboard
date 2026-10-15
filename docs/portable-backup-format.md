@@ -1,0 +1,27 @@
+# Portable backup format and restore foundation
+
+This describes the next-beta storage implementation, not a feature in published 0.5.1. The application UI and transfer-job integration follow separately.
+
+Backups contain text, optional original HTML/RTF, images, snippets/labels, stars, original timestamps and **file locations only**. No referenced file contents, Windows startup configuration or automatic cloud sync are included. The password is required on another PC; Windows DPAPI history keys are never exported. There is no password recovery.
+
+## Version 1 envelope
+
+All integer fields are little-endian unless specified. The 36-byte public header contains `CLIPBAK1` (8 bytes), the fixed PBKDF2-HMAC-SHA256 work factor 600,000 (4), a random salt (16) and random nonce prefix (8). Other versions/work factors are rejected before derivation. The password's UTF-8 bytes derive a 32-byte AES key. Password bytes are limited to 12–1024; this length rule does not replace choosing a strong passphrase. Passwords receive no Unicode normalization.
+
+Each frame contains a 4-byte length, ciphertext of that length and a 16-byte AES-GCM tag. The nonce is the header's 8-byte prefix followed by a zero-based 32-bit **big-endian** frame counter. Associated data is the entire header, then the counter (4 bytes, little-endian) and length (4 bytes, little-endian). Non-terminal frames are 65,536 bytes, except for an optional final shorter data frame. An authenticated empty frame must terminate the archive. Reordering, truncation, changed headers/tags and appended data are rejected. At most 512 MiB of plaintext and 8,193 data/terminal frames are permitted. A shorter data frame must be followed by the terminator, bounding work on hostile tiny-frame input.
+
+Encrypted plaintext starts with a 4-byte note count (0–1000). Each note has a 4-byte metadata length, UTF-8 JSON `Clip` metadata with `ImagePng: null`, a 4-byte raw image length, and raw PNG bytes when applicable. Metadata plus image bytes are bounded to 24 MiB per record; images to 16 MiB and 16 million declared pixels. Inline Base64 image fields are rejected. Identities are unique 32-digit hexadecimal values; enum values, timestamps, text/label bounds, rich formats and absolute file references are checked before staging. Destination storage limits can be stricter.
+
+Encryption uses the platform's AES-GCM and PBKDF2 implementations. The work factor follows [OWASP's PBKDF2-HMAC-SHA256 guidance](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html); authenticated encryption follows the [platform AES-GCM contract](https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.aesgcm). This is not an independent cryptographic audit or a claim of password strength.
+
+## Bounded memory and recovery
+
+Export reads one history payload at a time, verifies it still matches its starting summary and writes through 64-KiB encryption chunks. Images remain raw binary; the app never assembles a whole plaintext archive. Owned image, metadata, key and chunk buffers are wiped after use. Managed text strings cannot be reliably wiped and remain subject to ordinary runtime collection.
+
+Import authenticates the **entire** archive before live history changes. Earlier authenticated records are staged under the history directory using local DPAPI encryption; callback consumers must not commit records before the reader successfully returns. Preview state retains short summaries, not original images or full text. Encrypted staging is bounded by the initially available history budget and cleaned on cancellation/disposal/startup. Concurrent changes are rechecked at commit. Staging can temporarily coexist with live history; callers should pause capture during transfer to avoid competing for disk quota. Filesystem cleanup can be delayed if permissions or locks prevent deletion; staging remains encrypted.
+
+Merge skips matching existing content, preserves existing notes and assigns a fresh identity to conflicting source IDs. It never evicts history to make an import fit. Expired records are skipped using destination retention, including starred records. Original timestamps are preserved. Capacity/identity changes between inspection and commit reject the commit or skip new duplicates. Clearing history invalidates older restore previews. Previews expire after ten minutes.
+
+Before moving new encrypted records into history, commit verifies staging against hashes of the originally prepared ciphertext, then atomically writes a DPAPI-protected `restore.pending` journal containing the staging basename and each new target's identity, name, size and SHA-256 ciphertext hash. Interrupted commits roll back only matching newly introduced ciphertext on the next store operation/startup. A successful commit removes the journal only after all moves finish. Invalid journals or changed destination ciphertext fail closed; unrelated history is preserved. Cleanup validates staging names and rejects directory links, and never recursively follows unexpected subdirectories. A pending clear supersedes restore recovery.
+
+Automated coverage includes independent envelope fixtures, source-format round trips, wrong passwords, tampering/reordering/truncation, hostile lengths/identities, merge collisions, retention, capacity changes, clear invalidation, cancellation and simulated interrupted commit recovery. Real disk-full and Store-installed transfer behavior remain separate beta gates.

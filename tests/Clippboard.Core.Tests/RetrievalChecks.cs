@@ -42,10 +42,11 @@ internal static partial class Program
 
     private sealed class RetrievalHistory : IHistoryAccess
     {
-        internal readonly Clip Item = new() { Kind = ClipKind.Text, Text = new string('x', 2000) + " oldneedle" };
+        internal Clip Item = new() { Kind = ClipKind.Text, Text = new string('x', 2000) + " oldneedle" };
         internal readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _reads;
+        internal int Reads => Volatile.Read(ref _reads);
         public Task<IReadOnlyList<ClipSummary>> ListAsync() => Task.FromResult<IReadOnlyList<ClipSummary>>([Item.Summary(0)]);
         public async Task<Clip?> GetAsync(string id)
         {
@@ -77,6 +78,14 @@ internal static partial class Program
                 Check(window.VisibleNoteCount == 0, "late canceled search cannot replace current results");
                 Pump(window.SearchNowAsync("oldneedle"));
                 Check(window.VisibleNoteCount == 1, "full-text match appears in rope even when absent from summary");
+                var reads = history.Reads; Pump(window.SearchNowAsync("oldneedle"));
+                Check(history.Reads == reads, "unchanged positive search reuses bounded metadata result without reading full payload again");
+                Pump(window.SearchNowAsync("work")); reads = history.Reads; Pump(window.RefreshAsync());
+                Check(history.Reads == reads && window.VisibleNoteCount == 0, "unchanged negative search also avoids repeated decrypt/scan");
+                history.Item = history.Item with { Labels = ["work"] }; Pump(window.RefreshAsync());
+                Check(window.VisibleNoteCount == 1, "changed label invalidates result even when body fingerprint stays unchanged");
+                history.Item = history.Item with { Labels = ["personal"] }; Pump(window.RefreshAsync());
+                Check(window.VisibleNoteCount == 0, "removed label cannot leave stale positive search match");
                 window.Close();
 
                 window = new RopeWindow(history, preview: true, settings: new AppSettings { Animate = false })

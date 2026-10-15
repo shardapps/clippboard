@@ -15,6 +15,8 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
     private HistoryLimits _limits = Validate(limits ?? new());
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<string, ClipSummary> _items = new();
+    private readonly HashSet<string> _modernPayloads = new();
+    private IReadOnlyList<ClipSummary>? _orderedSnapshot;
     public int UnreadableEntries { get; private set; }
 
     private sealed record StoredSummary(ClipSummary Summary, long ModifiedUtcTicks);
@@ -28,7 +30,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
     private string FileFor(string id)
     {
         if (id.Length != 32 || !id.All(Uri.IsHexDigit)) throw new InvalidDataException("Invalid clip ID.");
-        return Path.Combine(directory, id + ".clip");
+        return Path.Combine(directory, id + (_modernPayloads.Contains(id) ? ".clip2" : ".clip"));
     }
 
     public async Task InitializeAsync()
@@ -38,23 +40,37 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
         {
             Directory.CreateDirectory(directory);
             _items.Clear();
+            _modernPayloads.Clear();
+            _orderedSnapshot = null;
             UnreadableEntries = 0;
             CompletePendingClear();
             foreach (var file in Directory.EnumerateFiles(directory, "*.tmp")) File.Delete(file);
-            foreach (var file in Directory.EnumerateFiles(directory, "*.clip"))
+            foreach (var file in Directory.EnumerateFiles(directory, "*.clip2").Concat(Directory.EnumerateFiles(directory, "*.clip")))
             {
+                var id = Path.GetFileNameWithoutExtension(file);
+                if (_items.ContainsKey(id))
+                {
+                    // A crash can leave the legacy half of a completed migration.
+                    try { File.Delete(file); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+                    continue;
+                }
                 try
                 {
                     var size = new FileInfo(file).Length;
                     if (size > _limits.MaxEntryBytes) throw new InvalidDataException("Entry is too large.");
                     var info = new FileInfo(file);
                     var cached = await ReadSummaryAsync(file, info);
-                    if (cached is not null) { _items[cached.Id] = cached; continue; }
+                    if (cached is not null)
+                    {
+                        if (Path.GetExtension(file) == ".clip2") _modernPayloads.Add(cached.Id);
+                        _items[cached.Id] = cached; continue;
+                    }
                     var clip = await ReadFileAsync(file);
-                    if (!string.Equals(Path.GetFileName(file), clip.Id + ".clip", StringComparison.Ordinal))
-                        throw new InvalidDataException("Entry identity mismatch.");
                     try
                     {
+                        if (!string.Equals(Path.GetFileNameWithoutExtension(file), clip.Id, StringComparison.Ordinal))
+                            throw new InvalidDataException("Entry identity mismatch.");
+                        if (Path.GetExtension(file) == ".clip2") _modernPayloads.Add(clip.Id);
                         _ = FileFor(clip.Id);
                         _items[clip.Id] = clip.Summary(size);
                         await CacheSummaryAsync(_items[clip.Id]);
@@ -67,6 +83,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
                     UnreadableEntries++;
                     File.Delete(file);
                     File.Delete(Path.ChangeExtension(file, ".meta"));
+                    _modernPayloads.Remove(id); _items.Remove(id); _orderedSnapshot = null;
                 }
             }
             foreach (var metadata in Directory.EnumerateFiles(directory, "*.meta"))
@@ -80,7 +97,11 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
     public async Task<IReadOnlyList<ClipSummary>> ListAsync()
     {
         await _gate.WaitAsync();
-        try { Trim(DateTimeOffset.UtcNow); return _items.Values.OrderByDescending(x => x.Pinned).ThenByDescending(x => x.CopiedAt).ToArray(); }
+        try
+        {
+            Trim(DateTimeOffset.UtcNow);
+            return _orderedSnapshot ??= Array.AsReadOnly(_items.Values.OrderByDescending(x => x.Pinned).ThenByDescending(x => x.CopiedAt).ToArray());
+        }
         finally { _gate.Release(); }
     }
 
@@ -101,7 +122,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
         var fingerprint = clip.Fingerprint();
         var duplicate = deduplicate ? _items.Values.FirstOrDefault(x => x.Fingerprint == fingerprint) : null;
         if (duplicate is not null) clip = clip with { Id = duplicate.Id, Pinned = duplicate.Pinned };
-        var bytes = Encrypt(clip);
+        var bytes = PreparePayload(clip, fingerprint);
         if (bytes.Length > _limits.MaxEntryBytes) return false;
         // Plan eviction first: a rejected addition must not remove existing history.
         var candidates = _items.Values.Where(x => x.Id != clip.Id && !x.Pinned)
@@ -120,6 +141,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
         await WriteAsync(clip.Id, bytes);
         foreach (var id in evictions) Remove(id);
         _items[clip.Id] = clip.Summary(bytes.Length, fingerprint);
+        _orderedSnapshot = null;
         TrimPreviews();
         await CacheSummaryAsync(_items[clip.Id]);
         return true;
@@ -172,9 +194,10 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
             var clip = (await ReadFileAsync(FileFor(id))) with { Pinned = pinned };
             try
             {
-                var bytes = Encrypt(clip);
+                var fingerprint = clip.Fingerprint();
+                var bytes = PreparePayload(clip, fingerprint);
                 await WriteAsync(id, bytes);
-                _items[id] = clip.Summary(bytes.Length);
+                _items[id] = clip.Summary(bytes.Length, fingerprint); _orderedSnapshot = null;
                 await CacheSummaryAsync(_items[id]);
                 Trim(DateTimeOffset.UtcNow);
             }
@@ -229,12 +252,19 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
     private void Trim(DateTimeOffset now)
     {
         CompletePendingClear();
-        foreach (var item in _items.Values.Where(x => x.CopiedAt < now.AddDays(-_limits.RetentionDays)).ToArray())
-            Remove(item.Id);
-        foreach (var item in _items.Values.Where(x => !x.Pinned).OrderBy(x => x.CopiedAt).ToArray())
+        var cutoff = now.AddDays(-_limits.RetentionDays);
+        List<string>? expired = null;
+        foreach (var item in _items.Values)
+            if (item.CopiedAt < cutoff) (expired ??= new()).Add(item.Id);
+        if (expired is not null) foreach (var id in expired) Remove(id);
+        var total = _items.Values.Sum(x => x.StoredBytes);
+        if (_items.Count > _limits.MaxEntries || total > _limits.MaxBytes)
         {
-            if (_items.Count <= _limits.MaxEntries && _items.Values.Sum(x => x.StoredBytes) <= _limits.MaxBytes) break;
-            Remove(item.Id);
+            foreach (var item in _items.Values.Where(x => !x.Pinned).OrderBy(x => x.CopiedAt).ToArray())
+            {
+                if (_items.Count <= _limits.MaxEntries && total <= _limits.MaxBytes) break;
+                total -= item.StoredBytes; Remove(item.Id);
+            }
         }
         TrimPreviews();
     }
@@ -243,33 +273,39 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
     {
         var pending = Path.Combine(directory, "clear.pending");
         if (!File.Exists(pending)) return;
-        foreach (var extension in new[] { "*.clip", "*.meta", "*.thumb", "*.tmp" })
+        foreach (var extension in new[] { "*.clip", "*.clip2", "*.meta", "*.thumb", "*.tmp" })
             foreach (var file in Directory.EnumerateFiles(directory, extension)) File.Delete(file);
         File.Delete(pending);
-        _items.Clear(); _previewSizes.Clear();
+        _items.Clear(); _modernPayloads.Clear(); _previewSizes.Clear(); _orderedSnapshot = null;
     }
 
     private void Remove(string id)
     {
         File.Delete(FileFor(id));
+        File.Delete(Path.Combine(directory, id + (_modernPayloads.Contains(id) ? ".clip" : ".clip2")));
         File.Delete(Path.ChangeExtension(FileFor(id), ".meta"));
         File.Delete(Path.ChangeExtension(FileFor(id), ".thumb"));
         _items.Remove(id);
+        _modernPayloads.Remove(id);
+        _orderedSnapshot = null;
         _previewSizes.Remove(id);
     }
 
     private async Task<Clip> ReadFileAsync(string file)
     {
-        if (new FileInfo(file).Length > _limits.MaxEntryBytes) throw new InvalidDataException("Entry is too large.");
-        var bytes = await File.ReadAllBytesAsync(file);
+        await using var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 16384, FileOptions.Asynchronous);
+        if (input.Length > _limits.MaxEntryBytes) throw new InvalidDataException("Entry is too large.");
+        var image = await TryReadImageAsync(input);
+        if (image is not null) return image;
+        var bytes = new byte[(int)input.Length]; await input.ReadExactlyAsync(bytes);
         var plaintext = protector.Unprotect(bytes);
         try { return JsonSerializer.Deserialize<Clip>(plaintext) ?? throw new InvalidDataException("Empty entry."); }
         finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(plaintext); }
     }
 
-    private byte[] Encrypt<T>(T value)
+    private byte[] Encrypt<T>(T value, JsonSerializerOptions? options = null)
     {
-        var plaintext = JsonSerializer.SerializeToUtf8Bytes(value);
+        var plaintext = JsonSerializer.SerializeToUtf8Bytes(value, options);
         try { return protector.Protect(plaintext); }
         finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(plaintext); }
     }
@@ -314,18 +350,40 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
             await File.WriteAllBytesAsync(temporary, Encrypt(new StoredSummary(summary, new FileInfo(file).LastWriteTimeUtc.Ticks)));
             File.Move(temporary, metadata, true);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* Payload remains authoritative; rebuild the optional summary on restart. */ }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException) { /* Payload remains authoritative; rebuild the optional summary on restart. */ }
+        finally
+        {
+            try { File.Delete(temporary); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* Retry encrypted cache cleanup on startup. */ }
+        }
     }
 
-    private async Task WriteAsync(string id, byte[] bytes)
+    private async Task WriteAsync(string id, PreparedPayload bytes)
     {
-        var file = FileFor(id);
+        var previous = FileFor(id);
+        var file = Path.ChangeExtension(previous, bytes.Modern ? ".clip2" : ".clip");
         var temporary = file + ".tmp";
         try
         {
-            await File.WriteAllBytesAsync(temporary, bytes);
+            if (bytes.Image is null) await File.WriteAllBytesAsync(temporary, bytes.Metadata);
+            else
+            {
+                await using (var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 16384, FileOptions.Asynchronous))
+                {
+                    var header = new byte[ImageHeaderBytes]; ImageMagic.CopyTo(header);
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(8), bytes.Metadata.Length);
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(12), bytes.Image.Length);
+                    await output.WriteAsync(header); await output.WriteAsync(bytes.Metadata); await output.WriteAsync(bytes.Image);
+                    await output.FlushAsync();
+                }
+            }
             File.Move(temporary, file, true);
+            if (previous != file)
+            {
+                try { File.Delete(previous); }
+                catch { File.Delete(file); throw; } // Keep the original authoritative if migration cannot finish.
+            }
+            if (bytes.Modern) _modernPayloads.Add(id); else _modernPayloads.Remove(id);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }

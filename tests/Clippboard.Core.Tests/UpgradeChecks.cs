@@ -28,7 +28,10 @@ internal static class UpgradeChecks
             Clip[] clips = [new() { Kind = ClipKind.Text, Text = "Upgrade fixture — اردو — 😀", Pinned = true },
                 new() { Kind = ClipKind.Files, FilePaths = [original] },
                 new() { Kind = ClipKind.Image, ImagePng = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=") }];
-            foreach (var clip in clips) if (!await store.AddAsync(clip)) throw new IOException("Fixture capture rejected.");
+            // The executable launched first is the pinned old baseline. Seed its
+            // schema, not the current writer's enhanced image/snippet format.
+            await SeedLegacyFixtureAsync(history, clips);
+            await store.InitializeAsync();
             var files = Directory.GetFiles(history).Select(Path.GetFileName).Order().ToArray();
             await File.WriteAllTextAsync(snapshotFile, JsonSerializer.Serialize(new Snapshot(clips.Select(x => x.Id).ToArray(), files!, files.Select(x => Hash(Path.Combine(history, x!))).ToArray(), Hash(settings))));
         }
@@ -57,5 +60,17 @@ internal static class UpgradeChecks
         await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(directory)!, create ? "upgrade-before.json" : "upgrade-after.json"), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine("PASS: installed listener preserves encrypted text/image/file fixtures, star and preferences across version upgrade.");
         return 0;
+    }
+    internal static async Task SeedLegacyFixtureAsync(string history, System.Collections.Generic.IReadOnlyList<Clip> clips)
+    {
+        Directory.CreateDirectory(history);
+        foreach (var clip in clips)
+        {
+            if (clip.Id.Length != 32 || !clip.Id.All(Uri.IsHexDigit)) throw new ArgumentException("Invalid fixture identity.");
+            var legacy = new { clip.Id, clip.Kind, clip.CopiedAt, clip.Pinned, clip.Text, clip.ImagePng, clip.FilePaths };
+            var plaintext = JsonSerializer.SerializeToUtf8Bytes(legacy);
+            try { await File.WriteAllBytesAsync(Path.Combine(history, clip.Id + ".clip"), new WindowsProtector().Protect(plaintext)); }
+            finally { CryptographicOperations.ZeroMemory(plaintext); }
+        }
     }
 }

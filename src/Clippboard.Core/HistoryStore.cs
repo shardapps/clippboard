@@ -118,6 +118,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
 
     private async Task<bool> SaveLockedAsync(Clip clip, bool deduplicate)
     {
+        RichTextFormats.Validate(clip);
         Trim(DateTimeOffset.UtcNow);
         var fingerprint = clip.Fingerprint();
         var duplicate = deduplicate ? _items.Values.FirstOrDefault(x => x.Fingerprint == fingerprint) : null;
@@ -164,7 +165,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
                 if (!existing.IsSnippet || existing.Kind != ClipKind.Text) throw new InvalidDataException("Invalid snippet payload.");
             }
             var snippet = (existing ?? new Clip { Kind = ClipKind.Text, Pinned = true }) with
-                { IsSnippet = true, Text = text, Title = title.Trim(), Labels = labels.Distinct(StringComparer.OrdinalIgnoreCase).ToArray() };
+                { IsSnippet = true, Text = text, Html = null, Rtf = null, Title = title.Trim(), Labels = labels.Distinct(StringComparer.OrdinalIgnoreCase).ToArray() };
             return await SaveLockedAsync(snippet, false);
         }
         finally
@@ -299,7 +300,11 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
         if (image is not null) return image;
         var bytes = new byte[(int)input.Length]; await input.ReadExactlyAsync(bytes);
         var plaintext = protector.Unprotect(bytes);
-        try { return JsonSerializer.Deserialize<Clip>(plaintext) ?? throw new InvalidDataException("Empty entry."); }
+        try
+        {
+            var clip = JsonSerializer.Deserialize<Clip>(plaintext) ?? throw new InvalidDataException("Empty entry.");
+            RichTextFormats.Validate(clip); return clip;
+        }
         finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(plaintext); }
     }
 
@@ -324,7 +329,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
                     || cached.ModifiedUtcTicks != info.LastWriteTimeUtc.Ticks || summary.StoredBytes != info.Length
                     || summary.Id != Path.GetFileNameWithoutExtension(payloadFile) || !Enum.IsDefined(summary.Kind)
                     || summary.Title?.Length > 64 || summary.Labels?.Length > 8 || (summary.Labels?.Any(label => label is null || label.Length > 24) ?? false)
-                    || (summary.IsSnippet && summary.Kind != ClipKind.Text) || !ValidFingerprint(summary)) return null;
+                    || (summary.IsSnippet && summary.Kind != ClipKind.Text) || (summary.HasRichText && (summary.Kind != ClipKind.Text || summary.IsSnippet)) || !ValidFingerprint(summary)) return null;
                 _ = FileFor(cached.Summary.Id);
                 return cached.Summary;
             }
@@ -335,7 +340,7 @@ public sealed partial class HistoryStore(string directory, IContentProtector pro
 
     private static bool ValidFingerprint(ClipSummary summary)
     {
-        var prefix = (summary.IsSnippet ? "Snippet" : summary.Kind.ToString()) + ":";
+        var prefix = (summary.HasRichText ? "TextRich" : summary.IsSnippet ? "Snippet" : summary.Kind.ToString()) + ":";
         return summary.Fingerprint is not null && summary.Fingerprint.StartsWith(prefix, StringComparison.Ordinal)
             && summary.Fingerprint.Length == prefix.Length + 64 && summary.Fingerprint[prefix.Length..].All(Uri.IsHexDigit);
     }

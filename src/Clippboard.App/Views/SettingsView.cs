@@ -108,6 +108,8 @@ internal sealed class SettingsView : UserControl
         {
             Heading("Choose what to collect", "Capture runs only while Clippboard is running. You can pause at any time.");
             Toggle("Capture text", _draft.CaptureText, v => _draft = _draft with { CaptureText = v });
+            Toggle("Keep HTML and RTF formatting", _draft.CaptureFormattedText, v => _draft = _draft with { CaptureFormattedText = v });
+            Hint("Preserves bounded original formatting alongside plain text. Previews stay plain; paste destinations decide how to interpret source formatting. Edits and snippets use plain text.");
             Toggle("Capture images", _draft.CaptureImages, v => _draft = _draft with { CaptureImages = v });
             Toggle("Capture file locations", _draft.CaptureFiles, v => _draft = _draft with { CaptureFiles = v });
             Toggle("Pause all capture", _draft.CapturePaused, v => _draft = _draft with { CapturePaused = v });

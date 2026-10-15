@@ -318,7 +318,7 @@ public partial class RopeWindow : Window
         var binding = _bindings[card]; binding.Entry = entry;
         if (card.Children[1] is Border paper)
         { var combined = _combinationIds.Contains(entry.Id); paper.SetResourceReference(Border.BorderBrushProperty, entry.Id == _selectedId || combined ? "Accent" : "Outline"); paper.BorderThickness = new Thickness(combined ? 2 : 1); }
-        binding.Label.Text = entry.IsSnippet ? (string.IsNullOrWhiteSpace(entry.Title) ? "SNIPPET" : entry.Title) : entry.Kind.ToString().ToUpperInvariant();
+        binding.Label.Text = entry.IsSnippet ? (string.IsNullOrWhiteSpace(entry.Title) ? "SNIPPET" : entry.Title) : entry.HasRichText ? "TEXT · FORMATTED" : entry.Kind.ToString().ToUpperInvariant();
         binding.Label.ToolTip = string.IsNullOrWhiteSpace(entry.Title) ? null : entry.Title;
         binding.Date.Text = entry.CopiedAt.ToLocalTime().ToString("MMM d · HH:mm");
         if (binding.Select.Content is TextBlock text) { text.Text = entry.Preview; text.FontSize = _appearance.TextSize; }

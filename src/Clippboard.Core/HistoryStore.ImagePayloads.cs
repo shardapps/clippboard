@@ -27,8 +27,9 @@ public sealed partial class HistoryStore
     private static readonly JsonSerializerOptions ImageMetadataJson = new() { Converters = { new NoInlineBytes() } };
     private PreparedPayload PreparePayload(Clip clip, string? fingerprint = null)
     {
+        RichTextFormats.Validate(clip);
         if (clip.Kind != ClipKind.Image || clip.ImagePng is null)
-            return new(Encrypt(clip), Modern: clip.IsSnippet || clip.Title is not null || (clip.Labels?.Length ?? 0) > 0);
+            return new(Encrypt(clip), Modern: clip.HasRichText || clip.IsSnippet || clip.Title is not null || (clip.Labels?.Length ?? 0) > 0);
         if (clip.ImagePng.Length > 16 * 1024 * 1024) throw new InvalidDataException("Image exceeds its encoded limit.");
         var metadata = Encrypt(new StoredImage(clip with { ImagePng = null }, fingerprint ?? clip.Fingerprint()), ImageMetadataJson);
         if (metadata.Length > ImageMetadataLimit) throw new InvalidDataException("Image metadata exceeds its limit.");

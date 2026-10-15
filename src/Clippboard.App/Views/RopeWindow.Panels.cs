@@ -57,6 +57,7 @@ public partial class RopeWindow
     }
     private void DismissDetail()
     {
+        _editorLoads?.Cancel(); _editorLoads?.Dispose(); _editorLoads = null;
         _detailLoads?.Cancel(); _detailLoads?.Dispose(); _detailLoads = null;
         HidePanel(DetailHost); DetailText = null;
     }
@@ -107,6 +108,11 @@ public partial class RopeWindow
             var paste = new Button { Content = _settings.AutoPaste ? "Restore & paste" : "Copy to clipboard", Padding = new Thickness(16, 9, 16, 9) };
             paste.SetResourceReference(BackgroundProperty, "SelectedSurface"); paste.Click += async (_, _) => { if (Selected is not null) await Selected(entry); };
             DockPanel.SetDock(paste, Dock.Left); footer.Children.Add(paste);
+            if (clip.Kind == ClipKind.Text)
+            {
+                var edit = new Button { Content = clip.IsSnippet ? "Edit snippet" : "Edit a copy" };
+                edit.Click += async (_, _) => await OpenTextEditorAsync(entry); DockPanel.SetDock(edit, Dock.Left); footer.Children.Add(edit);
+            }
             var hint = new TextBlock { Text = "Drag the corner to resize", FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 12, 0) }; hint.SetResourceReference(TextBlock.ForegroundProperty, "Muted"); footer.Children.Add(hint);
             Grid.SetRow(footer, 2); body.Children.Add(footer); DetailHost.Child = body; content.Focus();
         }

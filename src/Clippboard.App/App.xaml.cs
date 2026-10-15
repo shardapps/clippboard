@@ -303,6 +303,9 @@ public partial class App : Application
             var clip = new Clip { Kind = ClipKind.Text, Text = "A little more room to think.\n\n" + string.Join("\n\n", Enumerable.Repeat("Open the whole note. Read at your own pace. Resize it, select a passage, then restore it when you need it.", 12)) };
             await _rope.PreviewDetailAsync(clip);
         }
+        if (args.Contains("--snippet"))
+            await _rope.OpenTextEditorAsync(new Clip { Kind = ClipKind.Text, IsSnippet = true, Title = "A friendly follow-up", Labels = ["work", "email"],
+                Text = "Hi there,\n\nThanks for sharing this. I'll take a look and get back to you shortly.\n\nBest wishes" }.Summary(0));
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
         _rope.UpdateLayout();
         SavePreview(output);

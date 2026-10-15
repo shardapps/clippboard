@@ -1,6 +1,6 @@
 param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','format')][string]$Task = 'build',
   [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
-  [switch]$Settings, [switch]$Detail, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly)
+  [switch]$Settings, [switch]$Detail, [switch]$Snippet, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
@@ -35,6 +35,7 @@ switch ($Task) {
     $previewArgs = @('--preview', (Join-Path $projectRoot $PreviewPath), '--theme', $Theme)
     if ($Settings) { $previewArgs += '--settings' }
     if ($Detail) { $previewArgs += '--detail' }
+    if ($Snippet) { $previewArgs += '--snippet' }
     if ($Measure) { $previewArgs += @('--measure', (Join-Path $projectRoot 'artifacts/performance.json')) }
     & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- @previewArgs
   }

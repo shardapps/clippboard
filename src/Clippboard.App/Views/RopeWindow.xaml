@@ -9,12 +9,15 @@
           <Border Width="1" Background="{DynamicResource Outline}" Margin="7,7"/>
           <Button x:Name="AllButton" Content="All clips" Click="OnAll"/>
           <Button x:Name="StarredButton" Content="Starred" Click="OnStarred"/>
+          <Button x:Name="SnippetsButton" Content="Snippets" Click="OnSnippets"/>
+          <Button Content="+" ToolTip="New reusable snippet" Click="OnNewSnippet" AutomationProperties.Name="New reusable snippet"/>
           <Grid Width="170" Margin="8,0">
             <TextBox x:Name="SearchBox" MaxLength="100" TextChanged="OnSearchChanged" FontSize="13" Padding="10,8" ToolTip="Search full text and file paths · Ctrl + F" AutomationProperties.Name="Search clipboard history"/>
             <TextBlock Text="Search clips…" Foreground="{DynamicResource Muted}" IsHitTestVisible="False" Margin="11,0" VerticalAlignment="Center" FontSize="13"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text.Length, ElementName=SearchBox}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
           </Grid>
           <Button x:Name="TypeFilterButton" Content="All types" ToolTip="Filter by text, images or files" Click="OnTypeFilter"/>
           <Button x:Name="DateFilterButton" Content="Any time" ToolTip="Filter by last 24 hours, 7 days or all retained history" Click="OnDateFilter"/>
+          <Button x:Name="LabelFilterButton" Content="All labels" ToolTip="Filter saved labels" Click="OnLabelFilter"/>
           <Button x:Name="PauseButton" ToolTip="Pause capture" Click="OnPause" AutomationProperties.Name="Pause capture"><d:IconView Symbol="pause"/></Button>
           <Button ToolTip="Settings" Click="OnSettings" AutomationProperties.Name="Settings"><d:IconView Symbol="settings"/></Button>
           <Button ToolTip="Help &amp; feedback" Click="OnFeedback" AutomationProperties.Name="Help and feedback"><d:IconView Symbol="feedback"/></Button>

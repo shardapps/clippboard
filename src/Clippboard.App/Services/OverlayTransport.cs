@@ -13,14 +13,16 @@ using Clippboard.Core;
 namespace Clippboard.App.Services;
 
 internal sealed record OverlayRequest(string Command, string? Id = null, bool Flag = false, AppSettings? Settings = null,
-    string? Query = null, IReadOnlyList<string>? Ids = null);
+    string? Query = null, IReadOnlyList<string>? Ids = null, string? Text = null, string? Title = null, string[]? Labels = null);
 internal sealed record OverlayReply(string? Error = null, AppSettings? Settings = null, long Target = 0, long Version = 0, bool Close = false,
     bool StartupAvailable = true, IReadOnlyList<ClipSummary>? Entries = null, Clip? Clip = null, bool Demo = false, int ListenerProcess = 0, bool Standby = false,
-    IReadOnlyList<string>? Matches = null, bool CaptureSuspended = false);
+    IReadOnlyList<string>? Matches = null, bool CaptureSuspended = false, bool Saved = false);
 
 internal static class OverlayTransport
 {
-    internal const int RequestLimit = 16 * 1024;
+    // A Unicode text edit can expand to six JSON bytes per UTF-16 code unit.
+    // Text commands additionally enforce the original 512-KiB character bound.
+    internal const int RequestLimit = 4 * 1024 * 1024;
     internal const int ReplyLimit = 40 * 1024 * 1024;
     private const int ReplyVersion = 1;
     private sealed record WireReply(OverlayReply Reply, bool ImageAttached);
@@ -138,6 +140,8 @@ internal sealed class OverlayClient(string pipeName) : IHistoryAccess, IDisposab
     public async Task SetPinnedAsync(string id, bool pinned) => await CallAsync(new("pin", id, pinned));
     public async Task DeleteAsync(string id) => await CallAsync(new("delete", id));
     public async Task ClearAsync() => await CallAsync(new("clear"));
+    public async Task<bool> SaveSnippetAsync(string? id, string text, string title, string[] labels)
+        => (await CallAsync(new("save-snippet", Id: id, Text: text, Title: title, Labels: labels))).Saved;
     public void Dispose() { _lifetime.Cancel(); _lifetime.Dispose(); }
 }
 

@@ -28,7 +28,7 @@ public static class HistorySearch
             {
                 cancellation.ThrowIfCancellationRequested();
                 if (clip is null) continue;
-                var matches = clip.Kind switch
+                var matches = Contains(clip.Title, query) || Array.Exists(clip.Labels ?? [], label => Contains(label, query)) || clip.Kind switch
                 {
                     ClipKind.Text => Contains(clip.Text, query),
                     ClipKind.Files => Array.Exists(clip.FilePaths ?? [], path => Contains(path, query)),

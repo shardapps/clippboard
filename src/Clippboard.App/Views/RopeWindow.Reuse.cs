@@ -19,11 +19,14 @@ public partial class RopeWindow
     private void OnLabelFilter(object sender, RoutedEventArgs e)
     {
         var labels = _entries.SelectMany(x => x.Labels ?? []).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.InvariantCulture).ToArray();
-        var index = Array.FindIndex(labels, x => string.Equals(x, _label, StringComparison.OrdinalIgnoreCase));
-        _label = index + 1 < labels.Length ? labels[index + 1] : null;
-        LabelFilterButton.Content = _label ?? "All labels"; RebuildNotes(); ScrollTo(0);
+        DismissDetail(); DismissSettings();
+        var picker = new LabelPickerView(labels, _label);
+        picker.Dismissed += DismissSettings;
+        picker.Chosen += label => { _label = label; LabelFilterButton.Content = label ?? "All labels"; RebuildNotes(); ScrollTo(0); DismissSettings(); };
+        SidebarHost.Width = Math.Min(480, Math.Max(220, ActualWidth - 36)); SidebarHost.MaxHeight = Math.Max(180, AvailableHeight - 100);
+        SidebarHost.Child = picker; SidebarHost.Visibility = Visibility.Visible; Reveal(SidebarHost, 26); picker.FocusSearch();
     }
-    internal async Task OpenTextEditorAsync(ClipSummary? entry)
+    internal async Task OpenTextEditorAsync(ClipSummary? entry, string? initialText = null)
     {
         if (Retired || _closing) return;
         DismissSettings(); DismissDetail();
@@ -34,7 +37,7 @@ public partial class RopeWindow
         Clip? clip = null;
         try
         {
-            clip = entry is null ? new Clip { Kind = ClipKind.Text }
+            clip = entry is null ? new Clip { Kind = ClipKind.Text, Text = initialText }
                 : _preview ? new Clip { Id = entry.Id, Kind = ClipKind.Text, Text = entry.Preview, IsSnippet = entry.IsSnippet, Title = entry.Title, Labels = entry.Labels ?? [] }
                 : await Task.Run(() => _store.GetAsync(entry.Id), cancellation);
             cancellation.ThrowIfCancellationRequested();

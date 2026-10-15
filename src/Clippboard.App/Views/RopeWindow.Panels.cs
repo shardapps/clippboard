@@ -57,6 +57,7 @@ public partial class RopeWindow
     }
     private void DismissDetail()
     {
+        _combineLoad?.Cancel(); _combineLoad?.Dispose(); _combineLoad = null;
         _editorLoads?.Cancel(); _editorLoads?.Dispose(); _editorLoads = null;
         _detailLoads?.Cancel(); _detailLoads?.Dispose(); _detailLoads = null;
         HidePanel(DetailHost); DetailText = null;

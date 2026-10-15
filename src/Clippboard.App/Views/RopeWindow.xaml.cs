@@ -33,6 +33,7 @@ public partial class RopeWindow : Window
     private sealed record NoteBinding(TextBlock Label, TextBlock Date, Button Select, Button Star)
     {
         internal ClipSummary Entry { get; set; } = null!;
+        internal Button? Combine { get; set; }
     }
     private readonly Dictionary<Grid, NoteBinding> _bindings = new();
     private readonly Stack<Grid> _spareCards = new();
@@ -85,6 +86,7 @@ public partial class RopeWindow : Window
         _searchTimer.Tick += async (_, _) => { _searchTimer.Stop(); await RunSearchAsync(); ScrollTo(0); };
         Closed += (_, _) => { _searchLoads?.Cancel(); _searchLoads?.Dispose(); _searchLoads = null; };
         Closed += (_, _) => { _searchCache.Clear(); _searchMatches.Clear(); };
+        Closed += (_, _) => { _combinationIds.Clear(); _combineLoad?.Cancel(); _combineLoad?.Dispose(); _combineLoad = null; };
         Closed += (_, _) => { Retired = true; SmoothMotion.CancelTree(this); _searchTimer.Stop(); DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _spareCards.Clear(); _bindings.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
     }
     public void ApplyAppearance(AppSettings settings)
@@ -202,6 +204,8 @@ public partial class RopeWindow : Window
         var entries = await Task.Run(() => _store.ListAsync());
         if (version != _renderVersion || _closing || Retired) return;
         _entries = entries;
+        if (_combinationIds.Count > 0) { var available = _entries.Select(x => x.Id).ToHashSet(); _combinationIds.RemoveAll(id => !available.Contains(id)); }
+        UpdateCombinationButton();
         if (SearchBox.Text.Trim().Length > 0) await RunSearchAsync(); else RebuildNotes();
     }
     private void RebuildNotes()
@@ -292,6 +296,7 @@ public partial class RopeWindow : Window
     }
     private void ResetCard(Grid card)
     {
+        if (card.IsKeyboardFocusWithin) { if (!_focusSelection) _selectedId = null; Board.Focus(); }
         if (_thumbnailLoads.Remove(card, out var source)) { source.Cancel(); source.Dispose(); }
         SmoothMotion.CancelTree(card);
         if (card.Tag is Button button && button.Content is Image image) image.Source = null;
@@ -311,7 +316,8 @@ public partial class RopeWindow : Window
     private void BindNote(Grid card, ClipSummary entry)
     {
         var binding = _bindings[card]; binding.Entry = entry;
-        if (card.Children[1] is Border paper) paper.SetResourceReference(Border.BorderBrushProperty, entry.Id == _selectedId ? "Accent" : "Outline");
+        if (card.Children[1] is Border paper)
+        { var combined = _combinationIds.Contains(entry.Id); paper.SetResourceReference(Border.BorderBrushProperty, entry.Id == _selectedId || combined ? "Accent" : "Outline"); paper.BorderThickness = new Thickness(combined ? 2 : 1); }
         binding.Label.Text = entry.IsSnippet ? (string.IsNullOrWhiteSpace(entry.Title) ? "SNIPPET" : entry.Title) : entry.Kind.ToString().ToUpperInvariant();
         binding.Label.ToolTip = string.IsNullOrWhiteSpace(entry.Title) ? null : entry.Title;
         binding.Date.Text = entry.CopiedAt.ToLocalTime().ToString("MMM d · HH:mm");
@@ -324,6 +330,12 @@ public partial class RopeWindow : Window
         binding.Star.ToolTip = name;
         System.Windows.Automation.AutomationProperties.SetName(binding.Star, name);
         card.Width = _appearance.NoteWidth;
+        if (binding.Combine is not null)
+        {
+            binding.Combine.Visibility = entry.Kind == ClipKind.Text ? Visibility.Visible : Visibility.Collapsed;
+            binding.Combine.Content = _combinationIds.Contains(entry.Id) ? "✓" : "+";
+            System.Windows.Automation.AutomationProperties.SetName(binding.Combine, _combinationIds.Contains(entry.Id) ? "Remove text from combination" : "Select text for combination");
+        }
     }
     private void StartThumbnail(ClipSummary entry, Grid card)
     {
@@ -365,17 +377,19 @@ public partial class RopeWindow : Window
         var label = new TextBlock { Text = entry.Kind.ToString().ToUpperInvariant(), FontSize = 11, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
         label.SetResourceReference(TextBlock.ForegroundProperty, "Muted"); body.Children.Add(label);
         var select = new Button { Padding = new Thickness(0), Margin = new Thickness(0, 14, 0, 14), HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            VerticalContentAlignment = VerticalAlignment.Top, ToolTip = "Restore this clip · Shift-click to copy without pasting",
+            VerticalContentAlignment = VerticalAlignment.Top, ToolTip = "Restore · Shift-click to copy · Ctrl-click to select for combination",
             Content = new TextBlock { Text = entry.Preview, FontSize = _appearance.TextSize, TextWrapping = TextWrapping.Wrap, TextTrimming = TextTrimming.CharacterEllipsis, MaxHeight = 210 } };
         System.Windows.Automation.AutomationProperties.SetName(select, $"Restore {entry.Kind}: {entry.Preview}");
-        select.Click += async (_, _) => { if (Selected is not null) await Selected(Current()); };
+        select.Click += async (_, _) => { if ((Keyboard.Modifiers & ModifierKeys.Control) != 0) ToggleCombination(Current()); else if (Selected is not null) await Selected(Current()); };
         Grid.SetRow(select, 1); body.Children.Add(select); wrapper.Tag = select;
         var footer = new Grid(); footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        var date = new TextBlock { Text = entry.CopiedAt.ToLocalTime().ToString("MMM d · HH:mm"), FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center };
+        var date = new TextBlock { Text = entry.CopiedAt.ToLocalTime().ToString("MMM d · HH:mm"), FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         date.SetResourceReference(TextBlock.ForegroundProperty, "Muted"); footer.Children.Add(date);
         var actions = new StackPanel { Orientation = Orientation.Horizontal }; Grid.SetColumn(actions, 1); footer.Children.Add(actions);
         var star = IconButton(entry.Pinned ? "star" : "star-outline", entry.Pinned ? "Unstar clip" : "Star clip");
         _bindings.Add(wrapper, new NoteBinding(label, date, select, star) { Entry = entry });
+        var combine = new Button { Content = "+", ToolTip = "Select text for combination · Ctrl-click or Ctrl+Space", Padding = new Thickness(7), Margin = new Thickness(0), MinWidth = 32, MinHeight = 34 };
+        _bindings[wrapper].Combine = combine; combine.Click += (_, _) => ToggleCombination(Current()); actions.Children.Add(combine);
         if (entry.Pinned) ((IconView)star.Content).SetResourceReference(IconView.InkProperty, "StarColor");
         star.Click += async (_, _) => await ChangeNoteAsync(Current(), false); actions.Children.Add(star);
         var expand = IconButton("expand", "Expand and resize note"); expand.Click += (_, _) => ExpandRequested?.Invoke(Current()); actions.Children.Add(expand);
@@ -437,21 +451,25 @@ public partial class RopeWindow : Window
     private void OnPause(object sender, RoutedEventArgs e) => PauseRequested?.Invoke();
     private async void OnKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) { SearchBox.Focus(); SearchBox.SelectAll(); e.Handled = true; return; }
+        if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+        { if (SidebarHost.Visibility != Visibility.Visible && DetailHost.Visibility != Visibility.Visible) { SearchBox.Focus(); SearchBox.SelectAll(); } e.Handled = true; return; }
         if (e.Key == Key.Escape) { e.Handled = true; if (DetailHost.Visibility == Visibility.Visible) DismissDetail(); else if (SidebarHost.Visibility == Visibility.Visible) DismissSettings(); else await CloseRopeAsync(); }
         else if (SidebarHost.Visibility == Visibility.Visible || DetailHost.Visibility == Visibility.Visible) return;
         else if (e.OriginalSource is TextBox)
         { if (e.Key == Key.Down && ReferenceEquals(e.OriginalSource, SearchBox)) { SelectNote(0); e.Handled = true; } }
+        else if (e.Key == Key.Space && Keyboard.Modifiers == ModifierKeys.Control && _selectedId is not null)
+        { var entry = _visible.FirstOrDefault(x => x.Id == _selectedId); if (entry is not null) ToggleCombination(entry); e.Handled = true; }
         else if (e.Key is Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown)
         {
             var current = _visible.FindIndex(x => x.Id == _selectedId);
+            var anchor = Math.Clamp((int)Math.Ceiling((ScrollOffset - 24) / Pitch), 0, Math.Max(0, _visible.Count - 1));
             var page = Math.Max(1, (int)(NoteScroll.ViewportWidth / Pitch));
-            var next = e.Key switch { Key.Home => 0, Key.End => _visible.Count - 1, Key.PageUp => current - page,
-                Key.PageDown => current + page, Key.Left => current - 1, _ => current + 1 };
+            var next = e.Key switch { Key.Home => 0, Key.End => _visible.Count - 1, Key.PageUp => (current < 0 ? anchor : current) - page,
+                Key.PageDown => (current < 0 ? anchor : current) + page, Key.Left => current < 0 ? anchor : current - 1, _ => current < 0 ? anchor : current + 1 };
             SelectNote(next); e.Handled = true;
         }
         else if (e.Key == Key.Enter && _selectedId is not null
-            && (e.OriginalSource is not Button focused || _bindings.Values.Any(x => ReferenceEquals(x.Select, focused))))
+            && (_focusSelection || (e.OriginalSource is Button focused && _bindings.Values.Any(x => ReferenceEquals(x.Select, focused)))))
         { e.Handled = true; var entry = _visible.FirstOrDefault(x => x.Id == _selectedId); if (entry is not null && Selected is not null) await Selected(entry); }
     }
     internal void RenderDemo(int count = 8)

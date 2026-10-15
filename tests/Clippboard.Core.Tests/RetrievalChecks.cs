@@ -109,6 +109,11 @@ internal static partial class Program
                     { RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent };
                 toolbar.RaiseEvent(toolbarEnter);
                 Check(!toolbarEnter.Handled && restored == 0, "Enter on toolbar preserves its native button action");
+                var navigation = (System.Windows.Controls.Primitives.ScrollBar)window.FindName("HistoryScroll");
+                var navigationEnter = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source!, 0, System.Windows.Input.Key.Enter)
+                    { RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent };
+                navigation.RaiseEvent(navigationEnter);
+                Check(!navigationEnter.Handled && restored == 0, "Enter on navigation cannot paste a previously selected offscreen note");
                 var note = Descendants<Button>(window).First(button => System.Windows.Automation.AutomationProperties.GetName(button).StartsWith("Restore "));
                 var noteEnter = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source!, 0, System.Windows.Input.Key.Enter)
                     { RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent };

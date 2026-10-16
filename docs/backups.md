@@ -2,7 +2,7 @@
 
 Published 0.5.1 does not include this feature. In development builds, open **Settings → Storage → Encrypted backup…** or **Restore backup…**.
 
-Export creates a `.clippboard` file in the location you choose. Enter and confirm a strong 12–256-character passphrase; there is no password recovery. The app encrypts records incrementally, rereads and verifies the complete encrypted file, then replaces the selected destination. A changed or locked destination is preserved. Export status contains counts, not clipboard text, passwords or paths.
+Export creates a `.clippboard` file in the location you choose. Enter and confirm a strong 12–256-character passphrase; there is no password recovery. The app encrypts records incrementally, rereads and verifies the complete encrypted file, then replaces the selected destination. A destination found changed or locked during the checks is preserved. Revision checks use size/time metadata; another program can still race the final atomic replacement after the app releases its content guard. Use a new filename when external writers may be active. Export status contains counts, not clipboard text, passwords or paths.
 
 Import first verifies the password and entire archive and prepares encrypted local staging. Review the counts of new, matching and expired notes, then explicitly choose **Restore**. It never overwrites an existing note or evicts history to fit an import. Source ID conflicts become separate copies. File notes contain their original locations, not independent copies of those files. Timestamps and stars survive transfer; notes still expire using their original ages and your current 1–30-day retention setting, including stars.
 

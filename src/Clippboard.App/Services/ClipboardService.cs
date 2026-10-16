@@ -128,7 +128,7 @@ internal sealed class ClipboardService : IDisposable
     }
 
     // Separate conversion from OS access so format/limit checks can use synthetic data.
-    internal static Clip? ReadData(IDataObject data, Func<System.Windows.Media.Imaging.BitmapSource?> imageProvider, AppSettings? settings = null)
+    internal static Clip? ReadData(IDataObject data, Func<System.Windows.Media.Imaging.BitmapSource?> imageProvider, AppSettings? settings = null, long? availableBytes = null)
     {
         if (data.GetDataPresent("ExcludeClipboardContentFromMonitorProcessing", false)) return null;
         if (settings?.IsCapturePaused == true) return null;
@@ -150,14 +150,16 @@ internal sealed class ClipboardService : IDisposable
         if (settings?.CaptureImages != false && data.GetDataPresent(DataFormats.Bitmap))
         {
             var image = imageProvider();
-            if (image is null || (long)image.PixelWidth * image.PixelHeight > 16_000_000) return null;
+            if (image is null || (long)image.PixelWidth * image.PixelHeight > ImageLimits.MaxPixels) return null;
+            var pixels = (long)image.PixelWidth * image.PixelHeight;
+            if (!MemoryAvailability.ImageFits(pixels, pixels, 0, availableBytes ?? MemoryAvailability.AvailableBytes())) return null;
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(image));
-            using var buffer = new BoundedImageBuffer(16 * 1024 * 1024);
+            using var buffer = new BoundedImageBuffer(ImageLimits.MaxEncodedBytes);
             try { encoder.Save(buffer); }
             catch (Exception ex) when (buffer.LimitExceeded && ex is IOException or ArgumentException or COMException or InvalidOperationException or NotSupportedException)
             { return null; } // WIC can translate the stream guard into an HRESULT.
-            if (buffer.LimitExceeded || buffer.Length > 16 * 1024 * 1024) return null;
+            if (buffer.LimitExceeded || buffer.Length > ImageLimits.MaxEncodedBytes) return null;
             return new Clip { Kind = ClipKind.Image, ImagePng = buffer.ToArray() };
         }
         if (settings?.CaptureText != false && data.GetDataPresent(DataFormats.UnicodeText))

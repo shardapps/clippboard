@@ -13,7 +13,7 @@ public sealed partial class HistoryStore
     private static ReadOnlySpan<byte> ImageMagic => "CLIPIMG2"u8;
     private const int ImageHeaderBytes = 16;
     private const int ImageMetadataLimit = 64 * 1024;
-    private const int ImageCipherLimit = 16 * 1024 * 1024 + ImageMetadataLimit;
+    private const int ImageCipherLimit = ImageLimits.MaxEncodedBytes + ImageMetadataLimit;
     private sealed record StoredImage(Clip Metadata, string Fingerprint);
     private sealed record PreparedPayload(byte[] Metadata, byte[]? Image = null, bool Modern = false)
     {
@@ -36,7 +36,7 @@ public sealed partial class HistoryStore
         RichTextFormats.Validate(clip);
         if (clip.Kind != ClipKind.Image || clip.ImagePng is null)
             return new(Encrypt(clip), Modern: clip.HasRichText || clip.IsSnippet || clip.Title is not null || (clip.Labels?.Length ?? 0) > 0);
-        if (clip.ImagePng.Length > 16 * 1024 * 1024) throw new InvalidDataException("Image exceeds its encoded limit.");
+        if (clip.ImagePng.Length > ImageLimits.MaxEncodedBytes) throw new InvalidDataException("Image exceeds its encoded limit.");
         var metadata = Encrypt(new StoredImage(clip with { ImagePng = null }, fingerprint ?? clip.Fingerprint()), ImageMetadataJson);
         if (metadata.Length > ImageMetadataLimit) throw new InvalidDataException("Image metadata exceeds its limit.");
         // Protect the existing encoded PNG directly. No Base64 string, JSON
@@ -66,7 +66,7 @@ public sealed partial class HistoryStore
         byte[]? image = protector.Unprotect(encryptedImage);
         try
         {
-            if (image.Length > 16 * 1024 * 1024) throw new InvalidDataException("Decoded image exceeds its encoded limit.");
+            if (image.Length > ImageLimits.MaxEncodedBytes) throw new InvalidDataException("Decoded image exceeds its encoded limit.");
             var clip = stored.Metadata with { ImagePng = image };
             if (!string.Equals(clip.Fingerprint(), stored.Fingerprint, StringComparison.Ordinal)) throw new InvalidDataException("Image content does not match its metadata.");
             image = null; return clip;

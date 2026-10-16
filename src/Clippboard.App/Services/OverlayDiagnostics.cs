@@ -39,11 +39,11 @@ internal static class OverlayDiagnostics
                 overlay.Process.Refresh(); preparedPrivate = overlay.Process.PrivateMemorySize64; preparedWorkingSet = overlay.Process.WorkingSet64;
                 watch.Restart(); overlay.RequestOpen();
             }
-            long peak = 0; long combined = 0;
+            long peak = 0; long combined = 0; long privatePeak = 0; long combinedPrivate = 0;
             while (!overlay.Process.HasExited)
             {
                 if (watch.Elapsed > TimeSpan.FromSeconds(20)) throw new IOException("Overlay diagnostic exceeded its deadline.");
-                try { overlay.Process.Refresh(); peak = Math.Max(peak, overlay.Process.WorkingSet64); current.Refresh(); combined = Math.Max(combined, overlay.Process.WorkingSet64 + current.WorkingSet64); }
+                try { overlay.Process.Refresh(); peak = Math.Max(peak, overlay.Process.WorkingSet64); privatePeak = Math.Max(privatePeak, overlay.Process.PrivateMemorySize64); current.Refresh(); combined = Math.Max(combined, overlay.Process.WorkingSet64 + current.WorkingSet64); combinedPrivate = Math.Max(combinedPrivate, overlay.Process.PrivateMemorySize64 + current.PrivateMemorySize64); }
                 catch (InvalidOperationException) when (overlay.Process.HasExited) { }
                 await Task.Delay(100);
             }
@@ -51,7 +51,7 @@ internal static class OverlayDiagnostics
             if (firstFrameMs is null) throw new IOException("Overlay did not report its first rendered content.");
             if (renderer != (software ? "SoftwareOnly" : "Default")) throw new IOException("Overlay rendering preference did not apply.");
             await Task.Delay(350);
-            cycles.Add(new { Cycle = cycle + 1, RenderingMode = renderer, PreferencePath = preferencePath, Prepared = standby, PreparationMs = prepareMs, PreparedPrivateBytes = preparedPrivate, PreparedWorkingSetBytes = preparedWorkingSet, FirstContentRenderedMs = firstFrameMs, ChildPeakWorkingSetBytes = peak, CombinedPeakWorkingSetBytes = combined, Seconds = watch.Elapsed.TotalSeconds, Closed = Sample() });
+            cycles.Add(new { Cycle = cycle + 1, RenderingMode = renderer, PreferencePath = preferencePath, Prepared = standby, PreparationMs = prepareMs, PreparedPrivateBytes = preparedPrivate, PreparedWorkingSetBytes = preparedWorkingSet, FirstContentRenderedMs = firstFrameMs, ChildPeakWorkingSetBytes = peak, CombinedPeakWorkingSetBytes = combined, ChildPeakPrivateBytes = privatePeak, CombinedPeakPrivateBytes = combinedPrivate, Seconds = watch.Elapsed.TotalSeconds, Closed = Sample() });
         }
         // Pressure release must cancel a waiting server, not leave an idle
         // long-poll worker behind. This scenario never creates a window.

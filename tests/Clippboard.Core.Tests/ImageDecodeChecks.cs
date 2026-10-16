@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Clippboard.App.Services;
+using Clippboard.App.Platform;
 
 internal static partial class Program
 {
@@ -19,6 +20,15 @@ internal static partial class Program
     private static void CheckNativeImageCopy()
     {
         var png = SyntheticDecodePng(1024, out var pixels);
+        var denied = false;
+        try { _ = PreviewCache.Decode(png, 1024, 1024, availableBytes: 0); } catch (ImageMemoryException) { denied = true; }
+        Check(denied && png.Any(value => value != 0), "known exhausted headroom rejects decode before full raster allocation without damaging the original");
+        Check(MemoryAvailability.Headroom(1000, 200) == 200 && MemoryAvailability.Headroom(200, 1000) == 200
+            && MemoryAvailability.Headroom(ulong.MaxValue, ulong.MaxValue) == long.MaxValue, "memory policy uses the smaller physical or commit headroom without overflow");
+        Check(!MemoryAvailability.ImageFits(16_000_000, 16_000_000, 16 * 1024 * 1024, 512L * 1024 * 1024)
+            && MemoryAvailability.ImageFits(16_000_000, 16_000_000, 16 * 1024 * 1024, 1024L * 1024 * 1024), "large-image admission adapts to current headroom instead of machine capacity labels");
+        Check(!MemoryAvailability.ImageFits(long.MaxValue, 1, 1, long.MaxValue) && !MemoryAvailability.ImageFits(1, 0, 1, long.MaxValue)
+            && MemoryAvailability.ImageFits(1024, 1024, 1024, -1), "image estimates reject invalid dimensions and retain bounded operation when the memory query is unavailable");
         _ = PreviewCache.Decode(png, 1024, 1024);
         var before = GC.GetTotalAllocatedBytes(true); BitmapSource? decoded = null;
         for (var index = 0; index < 8; index++) decoded = PreviewCache.Decode(png, 1024, 1024);

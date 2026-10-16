@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using Clippboard.Core;
 
 namespace Clippboard.App.Platform;
 
@@ -17,7 +18,17 @@ internal static class MemoryAvailability
     internal static long AvailableBytes()
     {
         var status = new Status { Length = (uint)Marshal.SizeOf<Status>() };
-        return GlobalMemoryStatusEx(ref status) ? (long)Math.Min(status.AvailablePhysical, (ulong)long.MaxValue) : -1;
+        return GlobalMemoryStatusEx(ref status) ? Headroom(status.AvailablePhysical, status.AvailablePageFile) : -1;
+    }
+    internal static long Headroom(ulong physical, ulong commit) => (long)Math.Min(Math.Min(physical, commit), (ulong)long.MaxValue);
+    internal static bool ImageFits(long sourcePixels, long outputPixels, long encodedBytes, long available)
+    {
+        if (sourcePixels is <= 0 or > ImageLimits.MaxPixels || outputPixels is <= 0 or > ImageLimits.MaxPixels
+            || encodedBytes is < 0 or > ImageLimits.MaxEncodedBytes) return false;
+        // Conservatively account for source raster plus two output buffers and
+        // encoded input, leaving most headroom to Windows and concurrent work.
+        var estimate = sourcePixels * 4 + outputPixels * 8 + encodedBytes;
+        return available < 0 || estimate <= available / 4;
     }
     internal static long PreviewBudget(long userLimit, int viewportCards, long bytesPerPreview, long available)
     {

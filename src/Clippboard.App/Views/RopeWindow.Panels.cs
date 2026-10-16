@@ -144,7 +144,7 @@ public partial class RopeWindow
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException or UnauthorizedAccessException or NotSupportedException or ArgumentException or System.Security.Cryptography.CryptographicException)
-        { if (!cancellation.IsCancellationRequested) { DetailHost.Child = new TextBlock { Text = "This note could not be opened. Try copying the original again.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24), FontSize = 18 }; } }
+        { if (!cancellation.IsCancellationRequested) { DetailHost.Child = new TextBlock { Text = ex is ImageMemoryException ? ex.Message : "This note could not be opened. Try copying the original again.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24), FontSize = 18 }; } }
         finally { if (loaded?.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }
     }
     private static ControlTemplate GripTemplate()

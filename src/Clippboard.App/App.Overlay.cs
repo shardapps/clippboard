@@ -191,6 +191,7 @@ public partial class App
                     finally { if (clip.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }
                     return new();
                 }
+                catch (ImageMemoryException ex) { return new(Error: ex.Message); }
                 catch (FileNotFoundException) { return new(Error: "An original file is unavailable. Copy the file again."); }
                 catch (FileAvailabilityException ex) { return new(Error: ex.Message); }
                 catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Runtime.InteropServices.COMException or FormatException or System.Security.Cryptography.CryptographicException)

@@ -5,3 +5,6 @@
 *.yml text eol=lf
 *.ps1 text eol=crlf
 *.svg text eol=lf
+
+# Preserve upstream notice bytes and their original whitespace.
+assets/licenses/*.txt -text -whitespace

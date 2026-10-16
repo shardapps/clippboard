@@ -91,6 +91,8 @@ jobs:
           $app = 'src/Clippboard.App/bin/Release/net10.0-windows10.0.22000.0/Clippboard.dll'
           dotnet $app --diagnostics artifacts/motion-diagnostics.json --scroll-only
           if ($LASTEXITCODE -ne 0) { throw 'Scroll profile failed.' }
+          dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-runtime-only.json --runtime-only-preparation
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime-only control lifecycle failed.' }
           dotnet $app --metadata-diagnostics artifacts/metadata-diagnostics.json
           if ($LASTEXITCODE -ne 0) { throw 'Metadata profile failed.' }
           dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-hardware.json

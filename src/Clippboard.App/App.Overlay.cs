@@ -19,7 +19,7 @@ public partial class App
     private bool _closeOverlay;
     private long _visibilityRevision;
     private uint _restoredSequence;
-    private async Task RunOverlayAsync(string pipeName, bool software)
+    private async Task RunOverlayAsync(string pipeName, bool software, bool runtimeOnlyPreparation = false)
     {
         if (software) System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         using var client = new OverlayClient(pipeName);
@@ -29,16 +29,18 @@ public partial class App
         if (initial.Demo) await client.CallAsync(new("diagnostic-renderer", Id: System.Windows.Media.RenderOptions.ProcessRenderMode.ToString()));
         if (initial.Standby)
         {
-            // Warm the runtime/resource loader, not a hidden control tree. No
-            // Window, payload, preview or graphics surface exists while idle.
-            await client.CallAsync(new("standby-ready", Flag: Windows.Count == 0));
+            // Build the empty controls before activation, without
+            // creating an HWND, reading history or decoding a preview.
+            if (!runtimeOnlyPreparation) _rope = new RopeWindow(client, initial.Demo, initial.Settings) { StartupAvailable = initial.StartupAvailable };
+            await client.CallAsync(new("standby-ready", Flag: _rope is null ? Windows.Count == 0 : !_rope.IsVisible && new System.Windows.Interop.WindowInteropHelper(_rope).Handle == 0));
             do { initial = await client.CallAsync(new("wait-open")); } while (initial.Standby && !initial.Close);
             if (initial.Close) { Shutdown(); return; }
             System.Windows.Media.RenderOptions.ProcessRenderMode = initial.Settings?.LowMemoryRendering == true || software
                 ? System.Windows.Interop.RenderMode.SoftwareOnly : System.Windows.Interop.RenderMode.Default;
         }
         if (initial.Close) { Shutdown(); return; }
-        _rope = new RopeWindow(client, initial.Demo, initial.Settings) { StartupAvailable = initial.StartupAvailable };
+        _rope ??= new RopeWindow(client, initial.Demo, initial.Settings) { StartupAvailable = initial.StartupAvailable };
+        if (initial.Settings is not null && _rope.SavedSettings != initial.Settings) _rope.ApplyAppearance(initial.Settings);
         _rope.SetPaused(initial.Settings?.IsCapturePaused == true || initial.CaptureSuspended);
         _rope.SettingsSaveRequested += async settings =>
         {

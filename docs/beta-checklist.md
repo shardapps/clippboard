@@ -4,7 +4,7 @@ The owner authorized this work on October 13, 2026. The source is being prepared
 
 ## Implemented with automated checks
 
-- [x] Runtime preparation without hidden controls, matching retraction timing, direct native shortcut signals and reversible rapid toggles (#24–26, #39).
+- [x] Adaptive empty-control preparation without a native surface or history reads, matching retraction timing, direct native shortcut signals and reversible rapid toggles (#24–26, #39).
 - [x] Binary image IPC, bounded encoding scratch and binary original-image storage (#25–26, #32).
 - [x] Encrypted derived thumbnails, detached native image copies, adaptive cache/worker/image admission using physical and commit headroom (#27, #40, #43).
 - [x] Cached read-only metadata, unchanged-visual/search-result reuse and a bounded 1,000-summary allocation comparison (#32; performance report).

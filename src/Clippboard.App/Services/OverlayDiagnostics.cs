@@ -11,7 +11,7 @@ namespace Clippboard.App.Services;
 
 internal static class OverlayDiagnostics
 {
-    internal static async Task RunAsync(string output, bool software)
+    internal static async Task RunAsync(string output, bool software, bool runtimeOnlyPreparation = false)
     {
         using var current = Process.GetCurrentProcess();
         object Sample() { current.Refresh(); return new { WorkingSetBytes = current.WorkingSet64, PrivateBytes = current.PrivateMemorySize64, ManagedBytes = GC.GetTotalMemory(false), Handles = current.HandleCount }; }
@@ -30,7 +30,7 @@ internal static class OverlayDiagnostics
                 if (request.Command == "standby-ready") ready.TrySetResult(request.Flag);
                 if (request.Command == "wait-open") await child!.WaitForOpenAsync();
                 return new OverlayReply(Settings: new AppSettings { LowMemoryRendering = preferencePath }, StartupAvailable: false, Demo: true, Standby: standby && child?.OpenRequested != true);
-            }, software && !preferencePath, standby);
+            }, software && !preferencePath, standby, runtimeOnlyPreparation);
             double? prepareMs = null; long? preparedPrivate = null; long? preparedWorkingSet = null;
             if (standby)
             {
@@ -62,15 +62,15 @@ internal static class OverlayDiagnostics
             if (request.Command == "standby-ready") idleReady.TrySetResult(request.Flag);
             if (request.Command == "wait-open") await pending!.WaitForOpenAsync();
             return new OverlayReply(Standby: true);
-        }, standby: true))
+        }, standby: true, runtimeOnlyPreparation: runtimeOnlyPreparation))
         {
-            if (!await idleReady.Task.WaitAsync(TimeSpan.FromSeconds(15))) throw new IOException("Idle worker created a window.");
+            if (!await idleReady.Task.WaitAsync(TimeSpan.FromSeconds(15))) throw new IOException("Idle worker created a native surface.");
             var server = standby.ServerTask;
             standby.Dispose();
             await server.WaitAsync(TimeSpan.FromSeconds(3));
         }
         var cpu = current.TotalProcessorTime; var idle = Stopwatch.StartNew(); await Task.Delay(10000); current.Refresh();
-        var report = new { Scenario = "Eight disposable overlay processes, alternating cold/prepared launch; synthetic 1000 notes, scroll and settings; no clipboard, forced GC or working-set trim. Prepared startup has no native surface. First-content event is not physical presentation latency.", SoftwareRendering = software,
+        var report = new { Scenario = "Eight disposable overlay processes, alternating cold/prepared launch; synthetic 1000 notes, scroll and settings; no clipboard, forced GC or working-set trim. Prepared startup has no native surface. First-content event is not physical presentation latency.", SoftwareRendering = software, RuntimeOnlyPreparation = runtimeOnlyPreparation,
             Runtime = Environment.Version.ToString(), Before = before, Cycles = cycles, StandbyReleasePassed = true, Idle = Sample(), IdleCpuPercentOneCore = Math.Round((current.TotalProcessorTime - cpu).TotalSeconds / idle.Elapsed.TotalSeconds * 100, 3) };
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
         await File.WriteAllTextAsync(output, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));

@@ -478,6 +478,15 @@ internal static partial class Program
                 SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
                 var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Clippboard;component/Design/Controls.xaml", UriKind.Relative) });
+                var idleHistory = new DeferredHistory();
+                var idleWindow = new RopeWindow(idleHistory, settings: new AppSettings { Animate = false });
+                try
+                {
+                    Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                    Check(!idleWindow.IsVisible && !idleWindow.IsLoaded && new System.Windows.Interop.WindowInteropHelper(idleWindow).Handle == 0, "preparing empty overlay controls creates no native surface");
+                    Check(idleHistory.ListCalls == 0 && idleHistory.Calls == 0 && idleWindow.CachedImageBytes == 0 && idleWindow.RenderedNoteCount == 0, "idle controls read no history and retain no notes or image previews");
+                }
+                finally { idleWindow.Close(); }
                 window = new RopeWindow(new HistoryStore(Path.Combine(root, "visuals"), new TestWindowsProtector()), preview: true, settings: new AppSettings { Animate = false })
                 { Width = 1600, Height = 800, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };
                 window.Show(); window.UpdateLayout(); window.RenderDemo(1000); window.UpdateLayout();
@@ -913,7 +922,8 @@ internal static partial class Program
         internal readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal readonly TaskCompletionSource<Clip?> Result = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal int Calls;
-        public Task<System.Collections.Generic.IReadOnlyList<ClipSummary>> ListAsync() => Task.FromResult<System.Collections.Generic.IReadOnlyList<ClipSummary>>([]);
+        internal int ListCalls;
+        public Task<System.Collections.Generic.IReadOnlyList<ClipSummary>> ListAsync() { Interlocked.Increment(ref ListCalls); return Task.FromResult<System.Collections.Generic.IReadOnlyList<ClipSummary>>([]); }
         public Task<Clip?> GetAsync(string id) { Interlocked.Increment(ref Calls); Started.TrySetResult(); return Result.Task; }
         public Task SetPinnedAsync(string id, bool pinned) => Task.CompletedTask;
         public Task DeleteAsync(string id) => Task.CompletedTask;

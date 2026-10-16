@@ -19,13 +19,14 @@ internal sealed class OverlayProcess : IDisposable
     internal Process Process { get; }
     internal Task ServerTask { get; }
     internal CancellationToken Cancellation => _lifetime.Token;
-    internal OverlayProcess(Func<OverlayRequest, Task<OverlayReply>> handler, bool software = false, bool standby = false)
+    internal OverlayProcess(Func<OverlayRequest, Task<OverlayReply>> handler, bool software = false, bool standby = false, bool runtimeOnlyPreparation = false)
     {
         _server = new(handler); ServerTask = _server.RunAsync();
         var launch = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
         if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) launch.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Clippboard.dll"));
         launch.ArgumentList.Add("--overlay"); launch.ArgumentList.Add(_server.Name);
         if (standby) launch.ArgumentList.Add("--standby");
+        if (runtimeOnlyPreparation) launch.ArgumentList.Add("--runtime-only-preparation");
         if (software) launch.ArgumentList.Add("--software");
         try { Process = Process.Start(launch) ?? throw new IOException("Could not start the rope."); }
         catch { _server.Dispose(); _lifetime.Dispose(); throw; }

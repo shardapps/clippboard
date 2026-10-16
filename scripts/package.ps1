@@ -15,9 +15,10 @@ if (!$CompilerPath) {
   else { $CompilerPath = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe' }
 }
 if (!(Test-Path -LiteralPath $CompilerPath)) { throw 'Install Inno Setup 6 or pass -CompilerPath to its ISCC.exe.' }
-$buildProperties = [xml][IO.File]::ReadAllText((Join-Path $projectRoot 'Directory.Build.props'))
-$appVersion = $buildProperties.Project.PropertyGroup.Version
-$compilerArgs = @("/DAppVersion=$appVersion")
+. "$PSScriptRoot/version.ps1"
+$versions = Get-ClippboardBuildVersion $projectRoot
+$appVersion = $versions.Source
+$compilerArgs = @("/DAppVersion=$appVersion", "/DFileVersion=$($versions.File)")
 if ($CertificateThumbprint) {
   & "$PSScriptRoot\sign.ps1" -Path 'artifacts\portable\win-x64\Clippboard.exe' -CertificateThumbprint $CertificateThumbprint -SignToolPath $SignToolPath
   # Inno signs both setup and its embedded uninstaller, never just the outer EXE.

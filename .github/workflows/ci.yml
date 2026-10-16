@@ -20,9 +20,9 @@ env:
   NUGET_PACKAGES: ${{ github.workspace }}\.cache\nuget
 
 jobs:
-  build:
+  compile:
     runs-on: windows-2025
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,7 +33,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
           cache: true
-          cache-dependency-path: '**/packages.lock.json'
+          cache-dependency-path: '**/packages*.lock.json'
       - name: Restore locked dependencies
         run: dotnet restore Clippboard.slnx --locked-mode
       - name: Audit direct and transitive NuGet dependencies
@@ -44,52 +44,215 @@ jobs:
         run: ./scripts/dev.ps1 test
       - name: Signing and packaging failure guards
         run: ./scripts/test-packaging-guards.ps1
-      - name: Sustained precision scrolling and reversal profile
-        run: ./scripts/dev.ps1 diagnostics -ScrollOnly
-      - name: Overlay process lifecycle with hardware and software rendering
-        shell: pwsh
-        run: |
-          ./scripts/dev.ps1 lifecycle
-          Move-Item -LiteralPath artifacts/overlay-lifecycle.json -Destination artifacts/overlay-lifecycle-hardware.json
-          ./scripts/dev.ps1 lifecycle -Software
       - name: Publish portable executable
         run: ./scripts/dev.ps1 publish
-      - name: Native listener, hotkey, overlay, accepted paste and restart
-        run: dotnet tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/Clippboard.Core.Tests.dll --session artifacts/portable/win-x64/Clippboard.exe artifacts/session-checks/report.json
       - name: Build per-user installer
         run: ./scripts/package.ps1 -SkipPublish
       - name: Verify checksums and signature metadata
         run: ./scripts/verify-package.ps1
-      - name: Fetch checksum-pinned published upgrade baseline
+      - name: Preserve exact validation binaries
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: validation-input
+          path: |
+            src/Clippboard.App/bin/Release/net10.0-windows10.0.22000.0/*.dll
+            src/Clippboard.App/bin/Release/net10.0-windows10.0.22000.0/*.json
+            src/Clippboard.App/bin/Release/net10.0-windows10.0.22000.0/licenses/**
+            tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/*.dll
+            tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/*.json
+            tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/licenses/**
+            artifacts/portable/win-x64/**
+            artifacts/installer/*.exe
+            artifacts/build-info.json
+            artifacts/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 3
+
+  motion:
+    needs: compile
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download exact validation binaries
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: validation-input
+      - name: Scroll and lifecycle profiles from exact compiled binaries
+        timeout-minutes: 5
+        run: |
+          $app = 'src/Clippboard.App/bin/Release/net10.0-windows10.0.22000.0/Clippboard.dll'
+          dotnet $app --diagnostics artifacts/motion-diagnostics.json --scroll-only
+          if ($LASTEXITCODE -ne 0) { throw 'Scroll profile failed.' }
+          dotnet $app --metadata-diagnostics artifacts/metadata-diagnostics.json
+          if ($LASTEXITCODE -ne 0) { throw 'Metadata profile failed.' }
+          dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-hardware.json
+          if ($LASTEXITCODE -ne 0) { throw 'Default renderer lifecycle failed.' }
+          dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-software.json --software
+          if ($LASTEXITCODE -ne 0) { throw 'Software renderer lifecycle failed.' }
+      - name: Preserve reports even on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: validation-reports-${{ github.job }}
+          path: |
+            artifacts/installer-tests/**
+            artifacts/overlay-lifecycle*.json
+            artifacts/motion-diagnostics.json
+            artifacts/metadata-diagnostics.json
+            artifacts/session-checks/report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  native:
+    needs: compile
+    runs-on: windows-2025
+    timeout-minutes: 9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download exact validation binaries
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: validation-input
+      - name: Native listener, hotkey, overlay, accepted paste and restart
+        timeout-minutes: 7
+        run: dotnet tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/Clippboard.Core.Tests.dll --session artifacts/portable/win-x64/Clippboard.exe artifacts/session-checks/report.json
+      - name: Preserve reports even on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: validation-reports-${{ github.job }}
+          path: |
+            artifacts/installer-tests/**
+            artifacts/overlay-lifecycle*.json
+            artifacts/motion-diagnostics.json
+            artifacts/metadata-diagnostics.json
+            artifacts/session-checks/report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  installer:
+    needs: compile
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download exact validation binaries
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: validation-input
+      - name: Fetch published 0.5.1 upgrade baseline
         timeout-minutes: 3
         run: |
           New-Item -ItemType Directory -Force .cache/upgrade-baseline | Out-Null
           $installer = Join-Path (Get-Location) '.cache/upgrade-baseline/Clippboard-Setup-0.5.1.exe'
           Invoke-WebRequest -Uri 'https://github.com/shardapps/clippboard/releases/download/v0.5.1/Clippboard-Setup-0.5.1.exe' -OutFile $installer -TimeoutSec 90 -MaximumRetryCount 1 -RetryIntervalSec 3
           if ((Get-FileHash -LiteralPath $installer).Hash -ne 'a1cc196d5eac7443f47f5b4ff98ab83f703aad1d187cede930be9521546960aa') { throw 'Published upgrade baseline checksum mismatch.' }
-      - name: Isolated upgrade, reinstall, native startup and uninstall
+      - name: Isolated upgrade, reinstall, native preview and uninstall
         timeout-minutes: 4
-        run: ./scripts/test-installer.ps1 -PreviousInstaller '.cache/upgrade-baseline/Clippboard-Setup-0.5.1.exe' -PreviousInstallerSHA256 'a1cc196d5eac7443f47f5b4ff98ab83f703aad1d187cede930be9521546960aa'
-      - name: Preserve isolated installer diagnostics
+        run: |
+          ./scripts/test-installer.ps1 -PreviousInstaller '.cache/upgrade-baseline/Clippboard-Setup-0.5.1.exe' -PreviousInstallerSHA256 'a1cc196d5eac7443f47f5b4ff98ab83f703aad1d187cede930be9521546960aa'
+      - name: Preserve reports even on failure
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: clippboard-installer-diagnostics
+          name: validation-reports-${{ github.job }}
           path: |
-            artifacts/installer-tests/*.log
-            artifacts/installer-tests/upgrade-*.json
+            artifacts/installer-tests/**
+            artifacts/overlay-lifecycle*.json
+            artifacts/motion-diagnostics.json
+            artifacts/metadata-diagnostics.json
+            artifacts/session-checks/report.json
           if-no-files-found: warn
           retention-days: 14
+
+  store:
+    needs: compile
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/packages*.lock.json'
       - name: Build and validate Microsoft Store MSIX
         run: ./scripts/store-package.ps1
       - name: Verify Store identity, contents and checksums
         run: ./scripts/verify-store-package.ps1
+      - name: Preserve verified Store candidate
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: validation-store
+          path: |
+            artifacts/store/**/*.msix
+            artifacts/store/**/package-info.json
+            artifacts/store/**/stage/app/Clippboard.exe
+          if-no-files-found: error
+          retention-days: 3
+
+  # Stable required check; skipped or cancelled prerequisites must fail.
+  build:
+    if: always()
+    needs: [compile, motion, native, installer, store]
+    runs-on: windows-2025
+    timeout-minutes: 5
+    steps:
+      - name: Require every validation stage
+        env:
+          STAGES: ${{ toJSON(needs) }}
+        run: |
+          $stages = $env:STAGES | ConvertFrom-Json -AsHashtable
+          foreach ($stage in $stages.GetEnumerator()) {
+            if ($stage.Value.result -ne 'success') { throw "Required stage $($stage.Key): $($stage.Value.result)" }
+          }
+      - name: Download exact validation binaries
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: validation-input
+      - name: Download reports
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: validation-reports-*
+          path: artifacts
+          merge-multiple: true
+      - name: Download Store candidate
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: validation-store
+          path: artifacts/store
       - name: Upload testing builds
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: clippboard-windows-x64-alpha
+          name: clippboard-windows-x64-beta
           path: |
-            artifacts/portable/win-x64/Clippboard.exe
+            artifacts/portable/win-x64/**
             artifacts/installer/*.exe
             artifacts/SHA256SUMS.txt
             artifacts/build-info.json
@@ -97,13 +260,14 @@ jobs:
             artifacts/installer-tests/upgrade-*.json
             artifacts/overlay-lifecycle*.json
             artifacts/motion-diagnostics.json
+            artifacts/metadata-diagnostics.json
             artifacts/session-checks/report.json
           if-no-files-found: error
           retention-days: 14
       - name: Upload small native host for virtual-drive development
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: clippboard-msix-host-x64-alpha
+          name: clippboard-msix-host-x64-beta
           path: |
             artifacts/store/**/stage/app/Clippboard.exe
             artifacts/store/**/package-info.json
@@ -112,7 +276,7 @@ jobs:
       - name: Upload Store submission package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: clippboard-store-x64-alpha
+          name: clippboard-store-x64-beta
           path: |
             artifacts/store/**/*.msix
             artifacts/store/**/package-info.json

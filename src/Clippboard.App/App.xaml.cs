@@ -54,6 +54,8 @@ public partial class App : Application
             if (lifecycleIndex >= 0) { if (lifecycleIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await OverlayDiagnostics.RunAsync(e.Args[lifecycleIndex + 1], e.Args.Contains("--software")); Shutdown(); return; }
             var decodeIndex = Array.IndexOf(e.Args, "--decode-diagnostics");
             if (decodeIndex >= 0) { if (decodeIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await PerformanceDiagnostics.RunDecodeAsync(e.Args[decodeIndex + 1]); Shutdown(); return; }
+            var metadataIndex = Array.IndexOf(e.Args, "--metadata-diagnostics");
+            if (metadataIndex >= 0) { if (metadataIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await PerformanceDiagnostics.RunMetadataAsync(e.Args[metadataIndex + 1]); Shutdown(); return; }
             var overlayIndex = Array.IndexOf(e.Args, "--overlay");
             if (overlayIndex >= 0) { if (overlayIndex + 1 >= e.Args.Length) throw new ArgumentException("Overlay session required."); await RunOverlayAsync(e.Args[overlayIndex + 1], e.Args.Contains("--software")); return; }
             _development = e.Args.Contains("--dev");

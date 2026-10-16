@@ -7,7 +7,8 @@ namespace Clippboard.App.Services;
 
 internal static class Feedback
 {
-    internal static string Version => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "development";
+    internal static string Version => Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
+        ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "development";
     internal static string SupportInfo() => $"Clippboard {Version}\nWindows {Environment.OSVersion.Version}\nArchitecture: {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}\n.NET {Environment.Version}\nNo clipboard contents, file paths or device identifiers included.";
     internal static Uri Link(string action) => new(action switch
     {

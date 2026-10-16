@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0-beta.1 — validation candidate (not released)
+
+- Search full text and file paths; filter by date, kind or stars; organize with labels, combine selected text and save editable snippets.
+- Preview text transformations, preserve bounded HTML/RTF, use file-location/path and PNG-save actions, and extract editable text with on-demand Windows OCR.
+- Password-encrypted backup export, inspection and recoverable merge restore; explicit review/copy of diagnostics; app exclusions, timed pause and optional clear-on-lock.
+- Direct native shortcut signaling and reversible close/open motion; session-bound restore cancellation and drained pipe shutdown.
+- Detach image decodes directly into native bitmap memory, avoiding a full managed pixel copy. Adapt image admission, preview retention and worker counts to physical memory and process commit headroom.
+- Preserve grapheme boundaries in new note previews. Service the self-contained runtime to .NET 10.0.13 and distribute verified third-party notices.
+- Separate normal, bundled and Store NuGet lock graphs; split CI into bounded compile, motion, native session, installer upgrade and Store verification stages. Candidate artifacts require all stages to pass.
+
+The public 0.5.1 alpha is unchanged. Windows 11 x64 remains the supported target. This candidate still needs the [beta acceptance checks](docs/beta-checklist.md), installed-device shortcut/trackpad measurements and fresh Store review. Software rendering trades lower sampled graphics-process memory for higher CPU and slower frame callbacks on the measured host; it remains optional. Fresh WPF surface initialization still has measurable startup cost. GitHub EXEs remain unsigned; the ingestion MSIX is for Store certification only.
+
 ## 0.5.1 — public alpha · October 13, 2026
 
 - One rendering-driven scroll controller preserves velocity across trackpad updates and reversals. Gesture response follows input/render cadence; accessible offsets commit when physically settled. No per-input animation clocks or delayed completion tasks.

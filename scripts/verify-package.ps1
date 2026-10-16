@@ -4,7 +4,7 @@ $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 Set-Location -LiteralPath $projectRoot
 $info = Get-Content -Raw -LiteralPath 'artifacts\build-info.json' | ConvertFrom-Json
 if ($RequireSigned -and !$info.Signed) { throw 'Public signed validation cannot accept an unsigned build.' }
-$properties = [xml](Get-Content -Raw -LiteralPath 'Directory.Build.props')
+$properties = [xml][IO.File]::ReadAllText((Join-Path $projectRoot 'Directory.Build.props'))
 if ($info.Version -ne $properties.Project.PropertyGroup.Version) { throw 'Package version does not match the source version.' }
 $expected = @('artifacts/portable/win-x64/Clippboard.exe', "artifacts/installer/Clippboard-Setup-$($info.Version).exe")
 if ($info.Artifacts.Count -ne 2) { throw 'Expected portable and setup artifacts.' }
@@ -26,4 +26,5 @@ foreach ($path in $expected) {
     if ($signature.Status -ne 'Valid' -or !$signature.TimeStamperCertificate -or $signature.SignerCertificate.Subject -ne $entry[0].Publisher) { throw "Invalid or untimestamped signature: $path" }
   } elseif ($signature.Status -ne 'NotSigned' -or $entry[0].Publisher) { throw 'Unsigned evaluation metadata does not match the binary.' }
 }
+& "$PSScriptRoot/verify-notices.ps1"
 Write-Output "Verified $($info.Version): hashes and signature metadata match. Signed=$($info.Signed)"

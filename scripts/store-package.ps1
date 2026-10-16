@@ -13,7 +13,7 @@ if (!$SdkDirectory) {
 }
 $makeappx = Join-Path $SdkDirectory 'makeappx.exe'
 if (!(Test-Path -LiteralPath $makeappx)) { throw 'Windows SDK MakeAppx is required.' }
-$buildProperties = [xml](Get-Content -Raw -LiteralPath 'Directory.Build.props')
+$buildProperties = [xml][IO.File]::ReadAllText((Join-Path $projectRoot 'Directory.Build.props'))
 $version = $buildProperties.Project.PropertyGroup.Version
 $stage = Join-Path $projectRoot "artifacts\store\$version\stage"
 $output = Join-Path $projectRoot "artifacts\store\$version\Clippboard-$version-x64.msix"
@@ -27,9 +27,11 @@ if (!$SkipPublish) {
   if ($LASTEXITCODE -ne 0) { throw 'Store publish failed.' }
 } else {
   Copy-Item -LiteralPath 'artifacts\portable\win-x64\Clippboard.exe' -Destination (Join-Path $stage 'app\Clippboard.exe')
+  Copy-Item -LiteralPath 'artifacts\portable\win-x64\licenses' -Destination (Join-Path $stage 'app\licenses') -Recurse
 }
+& "$PSScriptRoot/verify-notices.ps1" -Root (Join-Path $stage 'app')
 & "$PSScriptRoot\brand.ps1" -StoreAssetDirectory (Join-Path $stage 'Assets')
-[xml]$manifest = Get-Content -Raw -LiteralPath 'installer\store\AppxManifest.xml'
+[xml]$manifest = [IO.File]::ReadAllText((Join-Path $projectRoot 'installer/store/AppxManifest.xml'))
 $manifest.Package.Identity.Version = "$version.0"
 $manifest.Save((Join-Path $stage 'AppxManifest.xml'))
 & $makeappx pack /d $stage /p $output /o

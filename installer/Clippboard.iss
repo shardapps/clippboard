@@ -35,6 +35,7 @@ SignToolRetryCount=2
 [Files]
 Source: "..\artifacts\portable\win-x64\Clippboard.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"
+Source: "..\artifacts\portable\win-x64\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Clippboard"; Filename: "{app}\Clippboard.exe"

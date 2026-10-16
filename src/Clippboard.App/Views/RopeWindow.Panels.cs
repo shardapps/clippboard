@@ -50,6 +50,7 @@ public partial class RopeWindow
         view.AppearancePreview += PreviewAppearance;
         view.Dismissed += DismissSettings;
         view.TransferRequested += OpenBackup;
+        view.NoticesRequested += OpenNotices;
         view.SaveRequested += async settings =>
         {
             var error = _preview ? null : SettingsSaveRequested is null ? "Settings are unavailable." : await SettingsSaveRequested(settings);

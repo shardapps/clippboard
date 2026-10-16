@@ -302,6 +302,7 @@ public partial class App : Application
         _rope.Show(); _rope.RenderDemo(measureIndex >= 0 ? 1000 : 8);
         if (args.Contains("--settings")) _rope.OpenSettings();
         if (args.Contains("--help-preview")) _rope.OpenSettings(4);
+        if (args.Contains("--notices")) _rope.OpenNotices();
         if (args.Contains("--detail"))
         {
             var clip = new Clip { Kind = ClipKind.Text, Text = "A little more room to think.\n\n" + string.Join("\n\n", Enumerable.Repeat("Open the whole note. Read at your own pace. Resize it, select a passage, then restore it when you need it.", 12)) };

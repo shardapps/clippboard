@@ -2,7 +2,6 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
-    <WindowsSdkPackageVersion>10.0.22000.57</WindowsSdkPackageVersion>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Clippboard</AssemblyName>
@@ -11,5 +10,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Clippboard.Core/Clippboard.Core.csproj" />
+    <Content Include="../../assets/licenses/*" Link="licenses/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="../../LICENSE" Link="licenses/LICENSE-CLIPPBOARD.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <EmbeddedResource Include="../../assets/licenses/*" LogicalName="Clippboard.Licenses.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../LICENSE" LogicalName="Clippboard.Licenses.LICENSE-CLIPPBOARD.txt" />
   </ItemGroup>
 </Project>

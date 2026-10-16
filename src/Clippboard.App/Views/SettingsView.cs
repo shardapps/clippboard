@@ -23,6 +23,7 @@ internal sealed class SettingsView : UserControl
     public event Action? Dismissed;
     public event Func<Task>? ClearRequested;
     public event Action<bool>? TransferRequested;
+    public event Action? NoticesRequested;
     internal AppSettings Draft => _draft;
 
     public SettingsView(AppSettings settings, bool startupAvailable)
@@ -152,6 +153,8 @@ internal sealed class SettingsView : UserControl
                 button.Click += (_, _) => { if (!Clippboard.App.Services.Feedback.Open(action)) _notice.Text = "Could not open your browser. Visit github.com/shardapps/clippboard/issues."; };
                 _content.Children.Add(button);
             }
+            var licenses = new Button { Content = "Licenses & notices", Margin = new Thickness(0, 5, 0, 5), HorizontalContentAlignment = HorizontalAlignment.Left };
+            licenses.Click += (_, _) => NoticesRequested?.Invoke(); _content.Children.Add(licenses);
             Hint("Please use sample clipboard data and remove personal details from screenshots. Security findings belong in the repository's private security reporting.");
             _content.Children.Add(new DiagnosticsView(
                 cancellation => DiagnosticsRequested?.Invoke(cancellation) ?? Task.FromResult(Clippboard.App.Services.Feedback.SupportInfo() + "\nResource counters are unavailable in synthetic previews."),

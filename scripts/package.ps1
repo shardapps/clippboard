@@ -15,7 +15,7 @@ if (!$CompilerPath) {
   else { $CompilerPath = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe' }
 }
 if (!(Test-Path -LiteralPath $CompilerPath)) { throw 'Install Inno Setup 6 or pass -CompilerPath to its ISCC.exe.' }
-$buildProperties = [xml](Get-Content -Raw -LiteralPath 'Directory.Build.props')
+$buildProperties = [xml][IO.File]::ReadAllText((Join-Path $projectRoot 'Directory.Build.props'))
 $appVersion = $buildProperties.Project.PropertyGroup.Version
 $compilerArgs = @("/DAppVersion=$appVersion")
 if ($CertificateThumbprint) {

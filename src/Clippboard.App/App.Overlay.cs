@@ -56,6 +56,7 @@ public partial class App
             _selecting = true;
             try
             {
+                _rope.SetStatus("Preparing this note…");
                 await client.CallAsync(request);
                 if (initial.ListenerProcess != 0) NativeMethods.AllowSetForegroundWindow((uint)initial.ListenerProcess);
                 await _rope.CloseRopeAsync();
@@ -181,11 +182,12 @@ public partial class App
                 _selecting = true;
                 try
                 {
+                    using var restoreLifetime = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(_captureLease.Token, _overlay?.Cancellation ?? System.Threading.CancellationToken.None);
                     if (request.Text?.Length > TextReuse.MaxTextLength) throw new ArgumentException("Edited text exceeds its limit.");
                     var clip = request.Text is not null ? new Clip { Kind = ClipKind.Text, Text = request.Text }
                         : await Task.Run(() => _store!.GetAsync(request.Id ?? ""));
                     if (clip is null) return new(Error: "This note has expired or was deleted.");
-                    try { await _clipboard!.RestoreAsync(clip); _restoredSequence = NativeMethods.GetClipboardSequenceNumber(); }
+                    try { await _clipboard!.RestoreAsync(clip, restoreLifetime.Token); _restoredSequence = NativeMethods.GetClipboardSequenceNumber(); }
                     finally { if (clip.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }
                     return new();
                 }

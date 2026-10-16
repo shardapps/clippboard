@@ -147,6 +147,7 @@ internal static partial class Program
             _ => throw new InvalidOperationException()
         }));
         var running = server.RunAsync();
+        Check(ReferenceEquals(running, server.RunAsync()), "starting the same pipe server twice reuses its single worker");
         using var client = new OverlayClient(server.Name);
         Check((await client.CallAsync(new("state"))).Version == 42, "private current-user named pipe connects");
         var pipeImage = await client.GetAsync(new string('a', 32));
@@ -169,7 +170,11 @@ internal static partial class Program
         }
         Check((await client.CallAsync(new("state"))).Version == 42, "malformed pipe client cannot stop subsequent requests");
         server.Dispose(); await running.WaitAsync(TimeSpan.FromSeconds(3));
-        Check(running.IsCompletedSuccessfully, "pipe listener shuts down without orphaned workers");
+        await server.Shutdown.WaitAsync(TimeSpan.FromSeconds(3)); server.Dispose();
+        Check(running.IsCompletedSuccessfully && server.Shutdown.IsCompletedSuccessfully, "pipe shutdown drains its worker and cancellation callbacks before disposing ownership");
+        rejected = false;
+        try { _ = server.RunAsync(); } catch (ObjectDisposedException) { rejected = true; }
+        Check(rejected, "disposed pipe server cannot silently start another worker");
         await CheckImageTransferAllocationsAsync();
     }
     private sealed class CountingWriteStream : Stream
@@ -800,6 +805,11 @@ internal static partial class Program
                 try { Pump(interruptedRestore); } catch (InvalidOperationException) { lockRejected = true; }
                 Check(lockRejected && NativeMethods.GetClipboardSequenceNumber() == precedingSequence, "lock during image decoding prevents delayed clipboard restoration");
                 service.SessionLocked = false;
+                using var restoreCancellation = new CancellationTokenSource();
+                var canceledImage = service.RestoreAsync(largeClip, restoreCancellation.Token); restoreCancellation.Cancel();
+                var restoreCanceled = false;
+                try { Pump(canceledImage); } catch (OperationCanceledException) { restoreCanceled = true; }
+                Check(restoreCanceled && NativeMethods.GetClipboardSequenceNumber() == precedingSequence, "canceling an image restore drains its decoder before returning without changing the clipboard");
                 var dispatcherResponsive = false;
                 Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => dispatcherResponsive = true));
                 Pump(service.RestoreAsync(largeClip));

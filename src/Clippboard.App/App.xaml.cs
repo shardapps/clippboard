@@ -174,7 +174,10 @@ public partial class App : Application
         {
             _overlay?.Dispose(); _closeOverlay = false; _visibilityRevision = 0; _restoredSequence = 0;
             if (open) _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
-            var session = new OverlayProcess(request => Dispatcher.InvokeAsync(() => HandleOverlayAsync(request)).Task.Unwrap(), standby: !open);
+            OverlayProcess? session = null;
+            session = new OverlayProcess(request => Dispatcher.InvokeAsync(() =>
+                ReferenceEquals(_overlay, session) && !_exiting ? HandleOverlayAsync(request)
+                    : Task.FromResult(new OverlayReply(Error: "This rope session has closed."))).Task.Unwrap(), standby: !open);
             _overlay = session; _foreground!.OverlayProcessId = (uint)session.Process.Id;
             if (open) NativeMethods.AllowSetForegroundWindow((uint)session.Process.Id);
             session.Process.Exited += (_, _) => Dispatcher.BeginInvoke(new Action(() =>

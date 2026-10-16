@@ -51,7 +51,7 @@ internal sealed class LocalOcr(IOcrBackend? backend = null, Func<bool>? packaged
         try
         {
             clip = await load(); cancellation.ThrowIfCancellationRequested();
-            if (clip?.Kind != ClipKind.Image || clip.ImagePng is not { Length: >= 8 and <= 16 * 1024 * 1024 } png
+            if (clip?.Kind != ClipKind.Image || clip.ImagePng is not { Length: >= 8 and <= ImageLimits.MaxEncodedBytes } png
                 || !png.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
                 throw new OcrUnavailableException("This image expired, was deleted or is not a supported PNG.");
             var text = await _backend.RecognizeAsync(png, language, cancellation);
@@ -74,16 +74,18 @@ internal sealed class WindowsOcrBackend : IOcrBackend
     public async Task<string> RecognizeAsync(byte[] png, string language, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();
-        var engine = OcrEngine.TryCreateFromLanguage(new Language(language))
-            ?? throw new OcrUnavailableException("This Windows OCR language is no longer available. Reopen the panel.");
         using var stream = new MemoryStream(png, false);
         using var random = stream.AsRandomAccessStream();
         var decoder = await BitmapDecoder.CreateAsync(random);
         cancellation.ThrowIfCancellationRequested();
-        if (decoder.PixelWidth == 0 || decoder.PixelHeight == 0 || (ulong)decoder.PixelWidth * decoder.PixelHeight > 16_000_000)
+        if (decoder.PixelWidth == 0 || decoder.PixelHeight == 0 || (ulong)decoder.PixelWidth * decoder.PixelHeight > ImageLimits.MaxPixels)
             throw new OcrUnavailableException("This image exceeds the capture pixel limit. Use a smaller image.");
         var scale = Math.Min(1, OcrEngine.MaxImageDimension / (double)Math.Max(decoder.PixelWidth, decoder.PixelHeight));
         var transform = new BitmapTransform { ScaledWidth = Math.Max(1, (uint)(decoder.PixelWidth * scale)), ScaledHeight = Math.Max(1, (uint)(decoder.PixelHeight * scale)) };
+        if (!MemoryAvailability.ImageFits((long)decoder.PixelWidth * decoder.PixelHeight, (long)transform.ScaledWidth * transform.ScaledHeight, png.Length, MemoryAvailability.AvailableBytes()))
+            throw new OcrUnavailableException("Windows has too little available memory for this image. Free some memory and try again.");
+        var engine = OcrEngine.TryCreateFromLanguage(new Language(language))
+            ?? throw new OcrUnavailableException("This Windows OCR language is no longer available. Reopen the panel.");
         // Gray8 bounds decoded pixels to one byte per pixel. The encoded stream
         // adapts the existing owned PNG; no second encoded-image copy is made.
         using var bitmap = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Gray8, BitmapAlphaMode.Ignore, transform,

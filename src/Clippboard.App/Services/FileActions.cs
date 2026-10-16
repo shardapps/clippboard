@@ -33,7 +33,7 @@ internal static class FileActions
     internal static async Task SavePngAsync(string destination, byte[] png, CancellationToken cancellation = default, DestinationRevision? expected = null)
     {
         cancellation.ThrowIfCancellationRequested();
-        if (png.Length is < 8 or > 16 * 1024 * 1024 || !png.AsSpan(0, 8).SequenceEqual(new byte[] {137, 80, 78, 71, 13, 10, 26, 10}))
+        if (png.Length is < 8 or > ImageLimits.MaxEncodedBytes || !png.AsSpan(0, 8).SequenceEqual(new byte[] {137, 80, 78, 71, 13, 10, 26, 10}))
             throw new FileActionException("This image is unavailable or exceeds the PNG export limit.");
         var target = Path.GetFullPath(destination);
         if (!string.Equals(Path.GetExtension(target), ".png", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(target).Contains(':'))

@@ -70,7 +70,7 @@ Precision input now updates one rendering-driven controller. It integrates the e
 
 Visibility reconciliation runs only when the viewport range changes. Notes are rebound and reused, including a small reserve bounded by viewport geometry for staggered entering/leaving boundaries. Their image sources, canceled work, hover state and action bindings are reset before reuse. This follows Microsoft's [control recycling guidance](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/controls/how-to-improve-the-scrolling-performance-of-a-listbox).
 
-Decoded cache retention is the smallest of the user ceiling, two viewports of previews, and one percent of currently available physical memory. [GlobalMemoryStatusEx](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-globalmemorystatusex) supplies current availability. Shrinking the budget evicts immediately; a background-priority check handles pressure while the overlay is stationary. Preview decoding uses one or two workers according to memory headroom and processor availability. Visible images and framework/native allocations are additional to the cache budget; this is not a total-process RAM guarantee.
+Decoded cache retention is the smallest of the user ceiling, two viewports of previews, and one percent of current headroom (the lesser of available physical memory and commit capacity). [GlobalMemoryStatusEx](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-globalmemorystatusex) supplies current physical and commit availability. Shrinking the budget evicts immediately; a background-priority check handles pressure while the overlay is stationary. Preview decoding uses one or two workers according to memory headroom and processor availability. Visible images and framework/native allocations are additional to the cache budget; this is not a total-process RAM guarantee.
 
 The listener uses a [message-only native window](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#message-only-windows), avoiding a WPF listener surface. The overlay measures content before native creation and reuses that surface for settings/details. No forced GC, working-set trimming or fixed per-machine memory target is used.
 
@@ -105,3 +105,21 @@ On one Windows 11 x64 machine with .NET 10.0.12, `./scripts/dev.ps1 decode` deco
 This removes roughly 128 MiB of cumulative managed allocation in that workload. The private-byte readings are post-decode samples, not native peak memory or total-app idle RAM. The small timing difference is a tradeoff, not a speedup claim. Native image buffers and rendering remain additional costs.
 
 A separate preparation experiment eagerly resolved/sealed deferred UI styles. Four prepared-launch samples shifted from 623–692 ms to 610–689 ms while prepared private memory grew from roughly 13.3 to 14.8–14.9 MiB. The overlap and increased idle cost did not justify keeping it, so that experiment was removed. Runtime-only preparation remains adaptive and creates no hidden control tree.
+
+## Development: memory-pressure admission
+
+Current headroom uses the smaller available physical-memory and commit-capacity values from Windows. The same signal governs standby retention, preview cache retention and decode concurrency. A new image admission check estimates a source raster, two output buffers and encoded input, and allows that estimate to use at most one quarter of reported headroom. This is a conservative preflight estimate, not a reservation or a total-process RAM cap; concurrent apps and native allocations can still change conditions.
+
+Capture can skip large images before encoding when headroom is low. Full preview/restore and on-demand OCR can decline an image with a retry message, without changing the stored original. The estimate runs before full raster/model work where those APIs permit it; obtaining a source clipboard bitmap and reading/decrypting encoded bytes have their own bounded costs. An unavailable memory query keeps existing safety bounds rather than inventing a per-machine capacity. Existing 16-million-pixel and 16-MiB encoded format limits remain unchanged and are now shared constants.
+
+Deterministic checks simulate exhausted headroom, low commit despite free physical memory, changing image budgets, invalid/overflow-sized inputs and unavailable queries. These do not substitute for real low-memory/slow-device testing.
+
+The Windows signal is documented in [MEMORYSTATUSEX](https://learn.microsoft.com/windows/win32/api/sysinfoapi/ns-sysinfoapi-memorystatusex); available commit can be smaller than free physical memory.
+
+### Default versus software rendering on one development machine
+
+After the .NET 10.0.13 update, eight disposable-process cycles per mode used 1,000 synthetic notes, scroll and settings. The default-renderer child's sampled peak private bytes ranged **192–210 MiB**, versus **72–87 MiB** with software rendering. The diagnostic parent returned to about **18 MiB private** and 0% one-core CPU over its ten-second idle sample after child disposal. These are development-process measurements, not installed-build or all-device results; initial cold timing outliers remain.
+
+Four subsequent sustained precision-scroll/reversal cycles recorded default-mode P95 rendering-callback gaps of **18–24 ms** and **1.5–3.3 CPU seconds** per workload. Software mode used **24–42 ms** and **3.6–5.1 CPU seconds**, with more long gaps in one cycle. Callback intervals are not physical presentation FPS. The existing software-rendering preference remains available to trade memory against CPU/motion; these results do not justify switching every device to software by default.
+
+`./scripts/dev.ps1 lifecycle` now records child/combined private peaks separately from working sets. `./scripts/dev.ps1 diagnostics -ScrollOnly -Software` now correctly applies and reports the requested renderer; the previous scroll-only diagnostic had ignored that flag. Ordinary software-mode app launches were unaffected by that diagnostic bug.

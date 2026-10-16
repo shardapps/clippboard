@@ -96,7 +96,7 @@ internal sealed class SettingsView : UserControl
             Hint("Uses software rendering. It can use more CPU and make motion less smooth. Save, then reopen the rope to change rendering mode.");
             Toggle("Prepare faster opening", _draft.FastOpen, v => _draft = _draft with { FastOpen = v });
             Hint("Prepares the overlay runtime without notes, windows or a graphics surface when RAM permits. Uses some extra idle RAM; turns off automatically under memory pressure. Save to apply.");
-            Hint("Only short history summaries remain while hidden. Images load when needed and the preview cache clears on close. Lower limits can remove older unstarred notes.");
+            Hint("Only short history summaries remain while hidden. Images load when needed and the preview cache clears on close. Large images can be skipped or declined when Windows has little memory. Lower limits can remove older unstarred notes.");
             var transfers = new WrapPanel { Margin = new Thickness(0, 8, 0, 8) };
             var export = new Button { Content = "Encrypted backup…" }; export.Click += (_, _) => TransferRequested?.Invoke(false); transfers.Children.Add(export);
             var import = new Button { Content = "Restore backup…" }; import.Click += (_, _) => TransferRequested?.Invoke(true); transfers.Children.Add(import); _content.Children.Add(transfers);

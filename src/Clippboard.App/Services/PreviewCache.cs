@@ -63,17 +63,21 @@ internal sealed class PreviewCache(IHistoryAccess store)
         return image;
     }
 
-    internal static BitmapSource Decode(byte[] png, int width, int height)
+    internal static BitmapSource Decode(byte[] png, int width, int height, long? availableBytes = null)
     {
         using var stream = new MemoryStream(png, false);
         var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
         var frame = decoder.Frames[0];
-        if ((long)frame.PixelWidth * frame.PixelHeight > 16_000_000) throw new InvalidDataException("Image dimensions exceed the capture limit.");
+        var sourcePixels = (long)frame.PixelWidth * frame.PixelHeight;
+        if (sourcePixels > ImageLimits.MaxPixels) throw new InvalidDataException("Image dimensions exceed the capture limit.");
         var scale = Math.Min(1, Math.Min((double)width / Math.Max(1, frame.PixelWidth), (double)height / Math.Max(1, frame.PixelHeight)));
+        var outputWidth = Math.Max(1, (int)(frame.PixelWidth * scale)); var outputHeight = Math.Max(1, (int)(frame.PixelHeight * scale));
+        if (!MemoryAvailability.ImageFits(sourcePixels, (long)outputWidth * outputHeight, png.Length, availableBytes ?? MemoryAvailability.AvailableBytes()))
+            throw new ImageMemoryException();
         stream.Position = 0;
         var bitmap = new BitmapImage(); bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        bitmap.DecodePixelWidth = Math.Max(1, (int)(frame.PixelWidth * scale));
-        bitmap.DecodePixelHeight = Math.Max(1, (int)(frame.PixelHeight * scale));
+        bitmap.DecodePixelWidth = outputWidth;
+        bitmap.DecodePixelHeight = outputHeight;
         bitmap.StreamSource = stream; bitmap.EndInit();
         // BitmapImage retains StreamSource even with OnLoad. Copy only decoded
         // pixels into an independent source so LRU entries cannot retain full PNGs.
@@ -106,3 +110,5 @@ internal sealed class PreviewCache(IHistoryAccess store)
     }
     public void Clear() { ++_generation; _images.Clear(); _recency.Clear(); _bytes = 0; }
 }
+
+internal sealed class ImageMemoryException() : IOException("Windows has too little available memory for this image. Free some memory and try again.");

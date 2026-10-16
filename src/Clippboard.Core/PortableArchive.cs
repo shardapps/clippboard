@@ -14,7 +14,7 @@ namespace Clippboard.Core;
 public static class PortableArchive
 {
     public const int MaxEntries = 1000;
-    private const int MaxMetadata = 24 * 1024 * 1024, MaxImage = 16 * 1024 * 1024;
+    private const int MaxMetadata = 24 * 1024 * 1024, MaxImage = ImageLimits.MaxEncodedBytes;
     private sealed class NoInlineImage : JsonConverter<byte[]>
     {
         public override byte[] Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options) => throw new JsonException("Backup images require binary records.");
@@ -118,7 +118,7 @@ public static class PortableArchive
                 || !png.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) || !png.AsSpan(12, 4).SequenceEqual("IHDR"u8))
                 throw new InvalidDataException("Invalid backup PNG.");
             var width = BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(16)); var height = BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(20));
-            if (width == 0 || height == 0 || (ulong)width * height > 16_000_000) throw new InvalidDataException("Backup image exceeds its pixel limit.");
+            if (width == 0 || height == 0 || (ulong)width * height > ImageLimits.MaxPixels) throw new InvalidDataException("Backup image exceeds its pixel limit.");
         }
     }
     private static async Task WriteIntAsync(Stream stream, int number, CancellationToken cancellation)

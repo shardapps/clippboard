@@ -390,6 +390,7 @@ internal static partial class Program
                 Check(ClipboardService.ReadData(blankFiles, () => null) is null, "blank file location rejected");
                 var bitmap = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8);
                 var image = new DataObject(); image.SetImage(bitmap);
+                Check(ClipboardService.ReadData(image, () => bitmap, availableBytes: 0) is null, "image capture skips encoding when Windows has no known memory headroom");
                 var converted = ClipboardService.ReadData(image, () => bitmap);
                 Check(converted?.Kind == ClipKind.Image && converted.ImagePng![0] == 137 && converted.ImagePng[1] == 80, "bitmap to PNG conversion");
                 Check(ClipboardService.ReadData(image, () => throw new InvalidOperationException("Disabled image must not be read"), new AppSettings { CaptureImages = false }) is null, "disabled images never decode");

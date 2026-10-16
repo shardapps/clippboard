@@ -47,8 +47,9 @@ internal static class PerformanceDiagnostics
         var path = Path.GetFullPath(output); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(path, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
     }
-    internal static async Task RunScrollAsync(HistoryStore store, string output)
+    internal static async Task RunScrollAsync(HistoryStore store, string output, bool software = false)
     {
+        if (software) RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         using var process = Process.GetCurrentProcess();
         var cycles = new List<object>();
         for (var cycle = 0; cycle < 4; cycle++)
@@ -58,7 +59,7 @@ internal static class PerformanceDiagnostics
             await Task.Delay(500);
             var samples = new List<double>(); TimeSpan? previous = null;
             EventHandler frame = (_, args) => { var time = ((RenderingEventArgs)args).RenderingTime; if (previous is TimeSpan last && time > last) samples.Add((time - last).TotalMilliseconds); previous = time; };
-            var allocated = GC.GetTotalAllocatedBytes(); var created = window.CreatedNoteCount;
+            var allocated = GC.GetTotalAllocatedBytes(); var cpu = process.TotalProcessorTime; var created = window.CreatedNoteCount;
             CompositionTarget.Rendering += frame;
             try
             {
@@ -68,11 +69,11 @@ internal static class PerformanceDiagnostics
             }
             finally { CompositionTarget.Rendering -= frame; }
             process.Refresh(); var sorted = samples.Order().ToArray();
-            cycles.Add(new { Cycle = cycle, Frames = sorted.Length, P95FrameGapMs = sorted.Length == 0 ? 0 : sorted[(int)((sorted.Length - 1) * .95)], MaxFrameGapMs = sorted.LastOrDefault(), GapsOver33Ms = sorted.Count(x => x > 33.4), CreatedCards = window.CreatedNoteCount - created, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated, WorkingSetBytes = process.WorkingSet64, PrivateBytes = process.PrivateMemorySize64, RetainedPreviewBytes = window.CachedImageBytes, FinalOffset = window.ScrollOffset });
+            cycles.Add(new { Cycle = cycle, Frames = sorted.Length, P95FrameGapMs = sorted.Length == 0 ? 0 : sorted[(int)((sorted.Length - 1) * .95)], MaxFrameGapMs = sorted.LastOrDefault(), GapsOver33Ms = sorted.Count(x => x > 33.4), CreatedCards = window.CreatedNoteCount - created, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated, CpuSeconds = (process.TotalProcessorTime - cpu).TotalSeconds, WorkingSetBytes = process.WorkingSet64, PrivateBytes = process.PrivateMemorySize64, RetainedPreviewBytes = window.CachedImageBytes, FinalOffset = window.ScrollOffset });
             await window.CloseRopeAsync();
         }
         var path = Path.GetFullPath(output); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new { Scenario = "Four sustained 360-update precision gestures and reversals over 1000 synthetic notes; rendering callbacks, not display FPS; no clipboard or forced GC", Cycles = cycles }, new JsonSerializerOptions { WriteIndented = true }));
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new { Scenario = "Four sustained 360-update precision gestures and reversals over 1000 synthetic notes; rendering callbacks, not display FPS; no clipboard or forced GC", SoftwareRendering = software, RendererRequested = RenderOptions.ProcessRenderMode.ToString(), Cycles = cycles }, new JsonSerializerOptions { WriteIndented = true }));
     }
     public static async Task RunAsync(HistoryStore store, string output, bool software)
     {

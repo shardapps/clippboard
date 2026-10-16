@@ -4,11 +4,14 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
-    <Version>0.5.1</Version>
+    <Version>0.6.0-beta.1</Version>
+    <FileVersion>0.6.0.0</FileVersion>
+    <WindowsPackageVersion>0.6.0.0</WindowsPackageVersion>
     <Authors>Shard Apps contributors</Authors>
     <RepositoryUrl>https://github.com/shardapps/clippboard</RepositoryUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <NuGetLockFilePath Condition="'$(ClippboardPublishProfile)' != ''">$(MSBuildProjectDirectory)/packages.$(ClippboardPublishProfile).lock.json</NuGetLockFilePath>
     <WindowsSdkPackageVersion>10.0.22000.87</WindowsSdkPackageVersion>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>

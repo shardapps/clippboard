@@ -1,11 +1,16 @@
 #ifndef AppVersion
-  #define AppVersion "0.3.0"
+  #error Build through scripts/package.ps1 with an explicit AppVersion.
+#endif
+
+#ifndef FileVersion
+  #define FileVersion AppVersion
 #endif
 
 [Setup]
 AppId={{52BFACD5-1656-42C4-B488-96B815B572DA}
 AppName=Clippboard
 AppVersion={#AppVersion}
+VersionInfoVersion={#FileVersion}
 AppPublisher=Shard Apps
 AppPublisherURL=https://github.com/shardapps
 AppSupportURL=https://github.com/shardapps/clippboard/issues

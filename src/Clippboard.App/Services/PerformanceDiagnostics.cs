@@ -17,6 +17,30 @@ namespace Clippboard.App.Services;
 // Explicit synthetic diagnostic. No screenshot buffers, clipboard listener or forced collections.
 internal static class PerformanceDiagnostics
 {
+    internal static async Task RunMetadataAsync(string output)
+    {
+        var started = GC.GetTotalAllocatedBytes(true);
+        var rows = Enumerable.Range(0, 1000).Select(index => new ClipSummary(index.ToString("x32"), ClipKind.Text,
+            DateTimeOffset.UnixEpoch.AddMinutes(index), index % 10 == 0, index.ToString("D4") + new string('p', 316),
+            "Text:" + index.ToString("x64"), 4096, false, new string((char)('a' + index % 26), 64),
+            Enumerable.Range(0, 8).Select(label => new string((char)('a' + (index + label) % 26), 24)).ToArray())).ToArray();
+        var construction = GC.GetTotalAllocatedBytes(true) - started;
+        var cached = Array.AsReadOnly(rows.OrderByDescending(item => item.Pinned).ThenByDescending(item => item.CopiedAt).ToArray());
+        var json = JsonSerializer.SerializeToUtf8Bytes(cached); var wireBytes = json.Length;
+        System.Security.Cryptography.CryptographicOperations.ZeroMemory(json);
+        started = GC.GetTotalAllocatedBytes(true);
+        for (var iteration = 0; iteration < 1000; iteration++)
+            GC.KeepAlive(rows.OrderByDescending(item => item.Pinned).ThenByDescending(item => item.CopiedAt).ToArray());
+        var sorting = GC.GetTotalAllocatedBytes(true) - started;
+        started = GC.GetTotalAllocatedBytes(true);
+        for (var iteration = 0; iteration < 1000; iteration++) GC.KeepAlive(cached);
+        var reuse = GC.GetTotalAllocatedBytes(true) - started;
+        var report = new { Scenario = "In-memory representation of 1000 synthetic maximum-length summaries with titles/eight labels; 1000 former sort/materialize operations versus reusing one read-only snapshot. Excludes storage/IPC/UI overhead, payloads, native memory and paging implementation. No forced GC or clipboard.",
+            Runtime = Environment.Version.ToString(), Entries = rows.Length, ConstructionAllocatedBytes = construction, JsonMetadataBytes = wireBytes,
+            SortMaterializeAllocatedBytes = sorting, SnapshotReuseAllocatedBytes = reuse };
+        var path = Path.GetFullPath(output); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+    }
     internal static async Task RunDecodeAsync(string output)
     {
         var report = await Task.Run(() =>

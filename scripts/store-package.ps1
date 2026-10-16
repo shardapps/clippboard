@@ -13,8 +13,10 @@ if (!$SdkDirectory) {
 }
 $makeappx = Join-Path $SdkDirectory 'makeappx.exe'
 if (!(Test-Path -LiteralPath $makeappx)) { throw 'Windows SDK MakeAppx is required.' }
-$buildProperties = [xml][IO.File]::ReadAllText((Join-Path $projectRoot 'Directory.Build.props'))
-$version = $buildProperties.Project.PropertyGroup.Version
+. "$PSScriptRoot/version.ps1"
+$versions = Get-ClippboardBuildVersion $projectRoot
+$version = $versions.Source
+$windowsVersion = $versions.Windows
 $stage = Join-Path $projectRoot "artifacts\store\$version\stage"
 $output = Join-Path $projectRoot "artifacts\store\$version\Clippboard-$version-x64.msix"
 # A fresh layout prevents stale runtime files from entering a subsequent package.
@@ -23,7 +25,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $stage 'app') | Out-Null
 if (!$SkipPublish) {
   $dotnetPath = Join-Path $projectRoot '.tools\dotnet\dotnet.exe'
   if (!(Test-Path -LiteralPath $dotnetPath)) { $dotnetPath = (Get-Command dotnet -ErrorAction Stop).Source }
-  & $dotnetPath publish src/Clippboard.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false -o (Join-Path $stage 'app')
+  & $dotnetPath publish src/Clippboard.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:ClippboardPublishProfile=store -p:RestoreLockedMode=true -p:DebugType=None -p:DebugSymbols=false -o (Join-Path $stage 'app')
   if ($LASTEXITCODE -ne 0) { throw 'Store publish failed.' }
 } else {
   Copy-Item -LiteralPath 'artifacts\portable\win-x64\Clippboard.exe' -Destination (Join-Path $stage 'app\Clippboard.exe')
@@ -32,10 +34,10 @@ if (!$SkipPublish) {
 & "$PSScriptRoot/verify-notices.ps1" -Root (Join-Path $stage 'app')
 & "$PSScriptRoot\brand.ps1" -StoreAssetDirectory (Join-Path $stage 'Assets')
 [xml]$manifest = [IO.File]::ReadAllText((Join-Path $projectRoot 'installer/store/AppxManifest.xml'))
-$manifest.Package.Identity.Version = "$version.0"
+$manifest.Package.Identity.Version = $windowsVersion
 $manifest.Save((Join-Path $stage 'AppxManifest.xml'))
 & $makeappx pack /d $stage /p $output /o
 if ($LASTEXITCODE -ne 0) { throw 'MSIX schema/content validation failed.' }
 $hash = Get-FileHash -LiteralPath $output -Algorithm SHA256
-[ordered]@{ Version = "$version.0"; PackageName = $manifest.Package.Identity.Name; Publisher = $manifest.Package.Identity.Publisher; PublisherDisplayName = 'ShardCoders'; Architecture = 'x64'; SHA256 = $hash.Hash.ToLowerInvariant(); Signed = $false; Distribution = 'Microsoft Store submission only; Store signing requires certification' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path (Split-Path -Parent $output) 'package-info.json') -Encoding utf8
+[ordered]@{ Version = $windowsVersion; PackageName = $manifest.Package.Identity.Name; Publisher = $manifest.Package.Identity.Publisher; PublisherDisplayName = 'ShardCoders'; Architecture = 'x64'; SHA256 = $hash.Hash.ToLowerInvariant(); Signed = $false; Distribution = 'Microsoft Store submission only; Store signing requires certification' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path (Split-Path -Parent $output) 'package-info.json') -Encoding utf8
 Write-Output "Validated unsigned Store submission package: $output"

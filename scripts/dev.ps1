@@ -1,4 +1,4 @@
-param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','decode','format')][string]$Task = 'build',
+param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','decode','metadata','format')][string]$Task = 'build',
   [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
   [switch]$Settings, [switch]$Help, [switch]$Notices, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [switch]$Ocr, [switch]$Backup, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly, [switch]$BuildDiagnostics)
 $ErrorActionPreference = 'Stop'
@@ -18,6 +18,7 @@ New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
 $dotnetPath = Join-Path $projectRoot '.tools\dotnet\dotnet.exe'
 if (!(Test-Path -LiteralPath $dotnetPath)) { $dotnetPath = (Get-Command dotnet -ErrorAction Stop).Source }
 switch ($Task) {
+  'metadata' { & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- --metadata-diagnostics (Join-Path $projectRoot 'artifacts/metadata-diagnostics.json') }
   'decode' { & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- --decode-diagnostics (Join-Path $projectRoot 'artifacts/decode-diagnostics.json') }
   'lifecycle' {
     $diagnosticArgs = @('--lifecycle-diagnostics', (Join-Path $projectRoot 'artifacts/overlay-lifecycle.json'))
@@ -34,7 +35,7 @@ switch ($Task) {
   'test' { & $dotnetPath run --project tests/Clippboard.Core.Tests -c Release -p:UseAppHost=false }
   'run' { & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- --dev }
   'format' { & $dotnetPath format Clippboard.slnx --verify-no-changes }
-  'publish' { & $dotnetPath publish src/Clippboard.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/portable/win-x64 }
+  'publish' { & $dotnetPath publish src/Clippboard.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:ClippboardPublishProfile=bundle -p:RestoreLockedMode=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/portable/win-x64 }
   'preview' {
     $previewArgs = @('--preview', (Join-Path $projectRoot $PreviewPath), '--theme', $Theme)
     if ($Settings) { $previewArgs += '--settings' }

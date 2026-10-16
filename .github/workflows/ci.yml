@@ -1,4 +1,4 @@
-name: Windows build
+name: Store layout startup comparison
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: windows-${{ github.ref }}
@@ -20,59 +21,7 @@ env:
   NUGET_PACKAGES: ${{ github.workspace }}\.cache\nuget
 
 jobs:
-  compile:
-    runs-on: windows-2025
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: '**/packages*.lock.json'
-      - name: Restore locked dependencies
-        run: dotnet restore Clippboard.slnx --locked-mode
-      - name: Audit direct and transitive NuGet dependencies
-        run: ./scripts/audit-dependencies.ps1
-      - name: Compile with warnings as errors
-        run: dotnet build Clippboard.slnx -c Release --no-restore -p:ContinuousIntegrationBuild=true
-      - name: Storage, format and WPF regression checks
-        run: ./scripts/dev.ps1 test
-      - name: Signing and packaging failure guards
-        run: ./scripts/test-packaging-guards.ps1
-      - name: Publish portable executable
-        run: ./scripts/dev.ps1 publish
-      - name: Publish normal-code control for same-runner startup comparison
-        run: dotnet publish src/Clippboard.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:ClippboardPublishProfile=bundle -p:RestoreLockedMode=true -p:PublishReadyToRun=false -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/portable-baseline/win-x64
-      - name: Build per-user installer
-        run: ./scripts/package.ps1 -SkipPublish
-      - name: Verify checksums and signature metadata
-        run: ./scripts/verify-package.ps1
-      - name: Preserve exact validation binaries
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: validation-input
-          path: |
-            src/Clippboard.App/bin/Release/net10.0-windows10.0.22000.0/*.dll
-            src/Clippboard.App/bin/Release/net10.0-windows10.0.22000.0/*.json
-            src/Clippboard.App/bin/Release/net10.0-windows10.0.22000.0/licenses/**
-            tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/*.dll
-            tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/*.json
-            tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/licenses/**
-            artifacts/portable/win-x64/**
-            artifacts/portable-baseline/win-x64/**
-            artifacts/installer/*.exe
-            artifacts/build-info.json
-            artifacts/SHA256SUMS.txt
-          if-no-files-found: error
-          retention-days: 3
-
-  motion:
-    needs: compile
+  compare:
     runs-on: windows-2025
     timeout-minutes: 8
     steps:
@@ -84,208 +33,49 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
-      - name: Download exact validation binaries
+      - name: Download verified normal Store ingestion build
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: validation-input
-      - name: Published normal and application-only precompiled profiles
-        timeout-minutes: 5
+          name: validation-store
+          run-id: 38928887370
+          path: input-normal
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+      - name: Download verified application-only precompiled Store build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: validation-store
+          run-id: 38929075942
+          path: input-r2r
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+      - name: Verify and extract isolated comparison layouts without installing
         run: |
-          function Invoke-Profile([string]$Executable, [string[]]$Parameters) {
-            $process = Start-Process -FilePath $Executable -ArgumentList $Parameters -WindowStyle Hidden -PassThru
-            try {
-              if (!$process.WaitForExit(120000)) { $process.Kill($true); throw 'Profile process timed out.' }
-              if ($process.ExitCode -ne 0) { throw "Profile failed: $Executable exit=$($process.ExitCode)" }
-            } finally { $process.Dispose() }
+          if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Isolated runner required.' }
+          foreach ($variant in @('normal','r2r')) {
+            $packages = @(Get-ChildItem -LiteralPath "input-$variant" -Filter '*.msix' -Recurse)
+            if ($packages.Count -ne 1) { throw 'Expected one previously verified package.' }
+            ./scripts/verify-store-package.ps1 -Path $packages[0].FullName
+            [IO.Compression.ZipFile]::ExtractToDirectory($packages[0].FullName, (Join-Path (Get-Location) "evaluation-$variant"))
           }
-          $app = './artifacts/portable/win-x64/Clippboard.exe'
-          Invoke-Profile $app @('--diagnostics', 'artifacts/motion-diagnostics.json', '--scroll-only')
-          Invoke-Profile './artifacts/portable-baseline/win-x64/Clippboard.exe' @('--lifecycle-diagnostics', 'artifacts/overlay-lifecycle-baseline-default.json')
-          Invoke-Profile $app @('--metadata-diagnostics', 'artifacts/metadata-diagnostics.json')
-          Invoke-Profile $app @('--lifecycle-diagnostics', 'artifacts/overlay-lifecycle-r2r-default.json')
-          Invoke-Profile $app @('--lifecycle-diagnostics', 'artifacts/overlay-lifecycle-software.json', '--software')
-      - name: Preserve reports even on failure
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: validation-reports-${{ github.job }}
-          path: |
-            artifacts/installer-tests/**
-            artifacts/overlay-lifecycle*.json
-            artifacts/motion-diagnostics.json
-            artifacts/metadata-diagnostics.json
-            artifacts/session-checks/report.json
-          if-no-files-found: warn
-          retention-days: 14
-
-  native:
-    needs: compile
-    runs-on: windows-2025
-    timeout-minutes: 9
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: '10.0.x'
-      - name: Download exact validation binaries
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: validation-input
-      - name: Native listener, hotkey, overlay, accepted paste and restart
-        timeout-minutes: 7
-        run: dotnet tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/Clippboard.Core.Tests.dll --session artifacts/portable/win-x64/Clippboard.exe artifacts/session-checks/report.json
-      - name: Preserve reports even on failure
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: validation-reports-${{ github.job }}
-          path: |
-            artifacts/installer-tests/**
-            artifacts/overlay-lifecycle*.json
-            artifacts/motion-diagnostics.json
-            artifacts/metadata-diagnostics.json
-            artifacts/session-checks/report.json
-          if-no-files-found: warn
-          retention-days: 14
-
-  installer:
-    needs: compile
-    runs-on: windows-2025
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: '10.0.x'
-      - name: Download exact validation binaries
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: validation-input
-      - name: Fetch published 0.5.1 upgrade baseline
-        timeout-minutes: 3
-        run: |
-          New-Item -ItemType Directory -Force .cache/upgrade-baseline | Out-Null
-          $installer = Join-Path (Get-Location) '.cache/upgrade-baseline/Clippboard-Setup-0.5.1.exe'
-          Invoke-WebRequest -Uri 'https://github.com/shardapps/clippboard/releases/download/v0.5.1/Clippboard-Setup-0.5.1.exe' -OutFile $installer -TimeoutSec 90 -MaximumRetryCount 1 -RetryIntervalSec 3
-          if ((Get-FileHash -LiteralPath $installer).Hash -ne 'a1cc196d5eac7443f47f5b4ff98ab83f703aad1d187cede930be9521546960aa') { throw 'Published upgrade baseline checksum mismatch.' }
-      - name: Isolated upgrade, reinstall, native preview and uninstall
+      - name: Compare loose self-contained layouts on the same runner
         timeout-minutes: 4
         run: |
-          ./scripts/test-installer.ps1 -PreviousInstaller '.cache/upgrade-baseline/Clippboard-Setup-0.5.1.exe' -PreviousInstallerSHA256 'a1cc196d5eac7443f47f5b4ff98ab83f703aad1d187cede930be9521546960aa'
-      - name: Preserve reports even on failure
+          function Invoke-Profile([string]$Variant) {
+            $exe = Join-Path (Get-Location) "evaluation-$Variant/app/Clippboard.exe"
+            $process = Start-Process -FilePath $exe -ArgumentList @('--lifecycle-diagnostics', "artifacts/overlay-lifecycle-store-$Variant.json") -WindowStyle Hidden -PassThru
+            try {
+              if (!$process.WaitForExit(120000)) { $process.Kill($true); throw 'Profile process timed out.' }
+              if ($process.ExitCode -ne 0) { throw "Profile failed: $Variant exit=$($process.ExitCode)" }
+            } finally { $process.Dispose() }
+          }
+          Invoke-Profile 'normal'
+          Invoke-Profile 'r2r'
+      - name: Preserve layout comparison reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: validation-reports-${{ github.job }}
-          path: |
-            artifacts/installer-tests/**
-            artifacts/overlay-lifecycle*.json
-            artifacts/motion-diagnostics.json
-            artifacts/metadata-diagnostics.json
-            artifacts/session-checks/report.json
-          if-no-files-found: warn
-          retention-days: 14
-
-  store:
-    needs: compile
-    runs-on: windows-2025
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: '**/packages*.lock.json'
-      - name: Build and validate Microsoft Store MSIX
-        run: ./scripts/store-package.ps1
-      - name: Verify Store identity, contents and checksums
-        run: ./scripts/verify-store-package.ps1
-      - name: Preserve verified Store candidate
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: validation-store
-          path: |
-            artifacts/store/**/*.msix
-            artifacts/store/**/package-info.json
-            artifacts/store/**/stage/app/Clippboard.exe
-          if-no-files-found: error
-          retention-days: 3
-
-  # Stable required check; skipped or cancelled prerequisites must fail.
-  build:
-    if: always()
-    needs: [compile, motion, native, installer, store]
-    runs-on: windows-2025
-    timeout-minutes: 5
-    steps:
-      - name: Require every validation stage
-        env:
-          STAGES: ${{ toJSON(needs) }}
-        run: |
-          $stages = $env:STAGES | ConvertFrom-Json -AsHashtable
-          foreach ($stage in $stages.GetEnumerator()) {
-            if ($stage.Value.result -ne 'success') { throw "Required stage $($stage.Key): $($stage.Value.result)" }
-          }
-      - name: Download exact validation binaries
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: validation-input
-      - name: Download reports
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: validation-reports-*
-          path: artifacts
-          merge-multiple: true
-      - name: Download Store candidate
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: validation-store
-          path: artifacts/store
-      - name: Upload testing builds
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: clippboard-windows-x64-r2r-experiment
-          path: |
-            artifacts/portable/win-x64/**
-            artifacts/installer/*.exe
-            artifacts/SHA256SUMS.txt
-            artifacts/build-info.json
-            artifacts/installer-tests/installed-preview.png
-            artifacts/installer-tests/upgrade-*.json
-            artifacts/overlay-lifecycle*.json
-            artifacts/motion-diagnostics.json
-            artifacts/metadata-diagnostics.json
-            artifacts/session-checks/report.json
-          if-no-files-found: error
-          retention-days: 14
-      - name: Upload small native host for virtual-drive development
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: clippboard-msix-host-x64-r2r-experiment
-          path: |
-            artifacts/store/**/stage/app/Clippboard.exe
-            artifacts/store/**/package-info.json
-          if-no-files-found: error
-          retention-days: 14
-      - name: Upload Store submission package
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: clippboard-store-x64-r2r-experiment
-          path: |
-            artifacts/store/**/*.msix
-            artifacts/store/**/package-info.json
+          name: store-layout-comparison
+          path: artifacts/overlay-lifecycle-store*.json
           if-no-files-found: error
           retention-days: 14

@@ -11,6 +11,7 @@
     <RepositoryUrl>https://github.com/shardapps/clippboard</RepositoryUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <PublishReadyToRun Condition="'$(ClippboardPublishProfile)' == 'bundle-r2r' Or '$(ClippboardPublishProfile)' == 'store-r2r'">true</PublishReadyToRun>
     <NuGetLockFilePath Condition="'$(ClippboardPublishProfile)' != ''">$(MSBuildProjectDirectory)/packages.$(ClippboardPublishProfile).lock.json</NuGetLockFilePath>
     <WindowsSdkPackageVersion>10.0.22000.87</WindowsSdkPackageVersion>
     <NuGetAudit>true</NuGetAudit>

@@ -88,14 +88,14 @@ jobs:
       - name: Scroll and lifecycle profiles from exact compiled binaries
         timeout-minutes: 5
         run: |
-          $app = 'src/Clippboard.App/bin/Release/net10.0-windows10.0.22000.0/Clippboard.dll'
-          dotnet $app --diagnostics artifacts/motion-diagnostics.json --scroll-only
+          $app = './artifacts/portable/win-x64/Clippboard.exe'
+          & $app --diagnostics artifacts/motion-diagnostics.json --scroll-only
           if ($LASTEXITCODE -ne 0) { throw 'Scroll profile failed.' }
-          dotnet $app --metadata-diagnostics artifacts/metadata-diagnostics.json
+          & $app --metadata-diagnostics artifacts/metadata-diagnostics.json
           if ($LASTEXITCODE -ne 0) { throw 'Metadata profile failed.' }
-          dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-hardware.json
+          & $app --lifecycle-diagnostics artifacts/overlay-lifecycle-hardware.json
           if ($LASTEXITCODE -ne 0) { throw 'Default renderer lifecycle failed.' }
-          dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-software.json --software
+          & $app --lifecycle-diagnostics artifacts/overlay-lifecycle-software.json --software
           if ($LASTEXITCODE -ne 0) { throw 'Software renderer lifecycle failed.' }
       - name: Preserve reports even on failure
         if: always()
@@ -250,7 +250,7 @@ jobs:
       - name: Upload testing builds
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: clippboard-windows-x64-beta
+          name: clippboard-windows-x64-r2r-experiment
           path: |
             artifacts/portable/win-x64/**
             artifacts/installer/*.exe
@@ -267,7 +267,7 @@ jobs:
       - name: Upload small native host for virtual-drive development
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: clippboard-msix-host-x64-beta
+          name: clippboard-msix-host-x64-r2r-experiment
           path: |
             artifacts/store/**/stage/app/Clippboard.exe
             artifacts/store/**/package-info.json
@@ -276,7 +276,7 @@ jobs:
       - name: Upload Store submission package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: clippboard-store-x64-beta
+          name: clippboard-store-x64-r2r-experiment
           path: |
             artifacts/store/**/*.msix
             artifacts/store/**/package-info.json

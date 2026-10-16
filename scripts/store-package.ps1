@@ -25,7 +25,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $stage 'app') | Out-Null
 if (!$SkipPublish) {
   $dotnetPath = Join-Path $projectRoot '.tools\dotnet\dotnet.exe'
   if (!(Test-Path -LiteralPath $dotnetPath)) { $dotnetPath = (Get-Command dotnet -ErrorAction Stop).Source }
-  & $dotnetPath publish src/Clippboard.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:ClippboardPublishProfile=store -p:RestoreLockedMode=true -p:DebugType=None -p:DebugSymbols=false -o (Join-Path $stage 'app')
+  & $dotnetPath publish src/Clippboard.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:ClippboardPublishProfile=store-r2r -p:RestoreLockedMode=true -p:DebugType=None -p:DebugSymbols=false -o (Join-Path $stage 'app')
   if ($LASTEXITCODE -ne 0) { throw 'Store publish failed.' }
 } else {
   Copy-Item -LiteralPath 'artifacts\portable\win-x64\Clippboard.exe' -Destination (Join-Path $stage 'app\Clippboard.exe')

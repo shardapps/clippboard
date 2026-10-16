@@ -17,6 +17,6 @@ dotnet restore src/Clippboard.App -r win-x64 -p:SelfContained=true -p:PublishSin
 dotnet restore src/Clippboard.App -r win-x64 -p:SelfContained=true -p:PublishSingleFile=false -p:ClippboardPublishProfile=store
 ```
 
-NuGet caches include all `packages*.lock.json` files. Actions are pinned to commits; checkout does not persist credentials. CI requires no signing or publishing secrets. NuGet graph auditing does not cover the self-contained runtime or downloaded Windows SDK/Inno tools; their provenance and servicing remain separate checks. No runtime/hardware matrix is claimed: this pipeline covers Windows 11 x64 code on a hosted runner. Device/Store acceptance is tracked in the [beta checklist](beta-checklist.md).
+NuGet caches include all `packages*.lock.json` files. Actions are pinned to commits; artifact download uses the Node 24 action with digest mismatches failing by default; checkout does not persist credentials. CI requires no signing or publishing secrets. NuGet graph auditing does not cover the self-contained runtime or downloaded Windows SDK/Inno tools; their provenance and servicing remain separate checks. No runtime/hardware matrix is claimed: this pipeline covers Windows 11 x64 code on a hosted runner. Device/Store acceptance is tracked in the [beta checklist](beta-checklist.md).
 
 The privacy-site workflow validates PRs separately and gates production deployment. App publication, signing and Store certification remain separate from this CI workflow. Do not weaken required checks to merge a failed run.

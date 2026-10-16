@@ -105,6 +105,11 @@ public partial class App
     {
         switch (request.Command)
         {
+            case "diagnostics":
+                var diagnosticSettings = _settings; var diagnosticProcess = _overlay?.Process;
+                var captureSuspended = _clipboard?.SessionLocked == true || (_settings.ClearOnLock && !_sessionWatchAvailable);
+                var transferActive = _transfers?.HoldsCapture == true;
+                return new(Diagnostics: await Task.Run(() => SupportDiagnostics.Collect(diagnosticSettings, diagnosticProcess, captureSuspended, transferActive)));
             case "transfer-export": case "transfer-import":
                 if (_sessionLocked || _clipboard?.SessionLocked == true) return new(Error: "Unlock Windows before transferring history.");
                 _transfers ??= new BackupJobs(_store!, () =>

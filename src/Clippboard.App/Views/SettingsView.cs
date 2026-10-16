@@ -16,6 +16,8 @@ internal sealed class SettingsView : UserControl
     private readonly Button _save = new() { Content = "Save changes", Padding = new Thickness(17, 10, 17, 10) };
     private readonly Button[] _tabs = new Button[5];
     private int _page;
+    internal Func<System.Threading.CancellationToken, Task<string>>? DiagnosticsRequested { get; set; }
+    internal Func<string, System.Threading.CancellationToken, Task>? SupportCopyRequested { get; set; }
     public event Func<AppSettings, Task<string?>>? SaveRequested;
     public event Action<AppSettings>? AppearancePreview;
     public event Action? Dismissed;
@@ -151,11 +153,9 @@ internal sealed class SettingsView : UserControl
                 _content.Children.Add(button);
             }
             Hint("Please use sample clipboard data and remove personal details from screenshots. Security findings belong in the repository's private security reporting.");
-            var info = new TextBox { Text = Clippboard.App.Services.Feedback.SupportInfo(), IsReadOnly = true, TextWrapping = TextWrapping.Wrap, FontSize = 13, Margin = new Thickness(0, 10, 0, 8) };
-            _content.Children.Add(info);
-            var copy = new Button { Content = "Copy support information" };
-            copy.Click += (_, _) => { try { Clipboard.SetText(info.Text); _notice.Text = "Copied. Paste it into your report if useful."; } catch (System.Runtime.InteropServices.ExternalException) { _notice.Text = "Clipboard is busy. Select the text above and copy it manually."; } };
-            _content.Children.Add(copy);
+            _content.Children.Add(new DiagnosticsView(
+                cancellation => DiagnosticsRequested?.Invoke(cancellation) ?? Task.FromResult(Clippboard.App.Services.Feedback.SupportInfo() + "\nResource counters are unavailable in synthetic previews."),
+                (text, cancellation) => SupportCopyRequested?.Invoke(text, cancellation) ?? Task.FromException(new InvalidOperationException("The listener is unavailable."))));
         }
         _content.BeginAnimation(OpacityProperty, null); _content.Opacity = 0;
         Clippboard.App.Design.Interaction.Move(_content, OpacityProperty, 1, _draft.Animate && Clippboard.App.Design.Interaction.GetEnabled(this), 180);

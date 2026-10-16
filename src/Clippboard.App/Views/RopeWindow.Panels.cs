@@ -38,6 +38,15 @@ public partial class RopeWindow
         SidebarHost.Width = Math.Min(620, Math.Max(220, ActualWidth - 36));
         SidebarHost.MaxHeight = Math.Max(180, AvailableHeight - 100);
         var view = new SettingsView(_settings, StartupAvailable);
+        if (!_preview && _store is OverlayClient client)
+        {
+            view.DiagnosticsRequested = async cancellation => (await client.CallAsync(new("diagnostics"), cancellation)).Diagnostics ?? throw new IOException("Diagnostics unavailable.");
+            view.SupportCopyRequested = async (text, cancellation) =>
+            {
+                await client.CallAsync(new("restore", Text: text), cancellation);
+                await client.CallAsync(new("paste", Flag: true), cancellation);
+            };
+        }
         view.AppearancePreview += PreviewAppearance;
         view.Dismissed += DismissSettings;
         view.TransferRequested += OpenBackup;

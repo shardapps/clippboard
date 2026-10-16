@@ -574,6 +574,22 @@ internal static partial class Program
                 Check(Feedback.Link("bug").Host == "github.com" && Feedback.Link("bug").Query.Contains("template=bug_report.yml"), "feedback opens correct public form");
                 var support = Feedback.SupportInfo();
                 Check(!support.Contains(Environment.UserName, StringComparison.OrdinalIgnoreCase) && !support.Contains(root, StringComparison.OrdinalIgnoreCase), "support information excludes account and paths");
+                var diagnostics = SupportDiagnostics.Format(new AppSettings { ExcludedApps = ["private-fixture.exe"] },
+                    new ResourceSample(10485760, 20971520, 80), new ResourceSample(5242880, 8388608, 40), true, false, false);
+                Check(diagnostics.Contains("Combined private memory: 15.0 MiB") && diagnostics.Contains("handles 80"), "diagnostics reports both owned processes with private-memory sum");
+                Check(!diagnostics.Contains("private-fixture.exe") && !diagnostics.Contains(root) && !diagnostics.Contains(Environment.UserName, StringComparison.OrdinalIgnoreCase), "diagnostics schema omits excluded names, paths and account identifiers");
+                Check(SupportDiagnostics.Format(new(), null, null, false, false, false).Contains("Listener: unavailable"), "missing resource counters are unavailable rather than zero");
+                var copiedDiagnostics = ""; var collectedDiagnostics = 0;
+                var diagnosticsView = new DiagnosticsView(_ => { collectedDiagnostics++; return Task.FromResult(diagnostics); }, (text, _) => { copiedDiagnostics = text; return Task.CompletedTask; });
+                Check(collectedDiagnostics == 0, "opening help does not collect counters automatically");
+                Pump(diagnosticsView.CopyAsync()); Check(copiedDiagnostics.Length == 0, "diagnostics cannot copy before explicit collection and review");
+                Pump(diagnosticsView.CollectAsync()); Check(diagnosticsView.Report == diagnostics && copiedDiagnostics.Length == 0, "collection updates preview without sharing");
+                Pump(diagnosticsView.CopyAsync()); Check(copiedDiagnostics == diagnostics, "explicit copy uses exactly the reviewed report");
+                var lateReport = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var lateDiagnostics = new DiagnosticsView(_ => lateReport.Task, (_, _) => Task.CompletedTask);
+                var diagnosticHost = new System.Windows.Controls.Border { Child = lateDiagnostics };
+                var pendingDiagnostics = lateDiagnostics.CollectAsync(); diagnosticHost.Child = null; lateReport.SetResult(diagnostics);
+                Pump(pendingDiagnostics); Check(lateDiagnostics.Report != diagnostics, "detached diagnostics ignores a late reply even before Loaded");
                 window.OpenSettings(); window.UpdateLayout();
                 var host = (System.Windows.Controls.Border)window.FindName("SidebarHost");
                 Check(host.Child is SettingsView && host.Visibility == Visibility.Visible, "custom settings sidebar opens");

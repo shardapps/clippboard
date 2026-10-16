@@ -16,6 +16,8 @@ internal static partial class Program
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using var image = new MemoryStream(); encoder.Save(image); var png = image.ToArray();
         var target = Path.Combine(directory, "sample.png"); await FileActions.SavePngAsync(target, png);
+        await FileActions.SavePngAsync(target, png, expected: FileActions.DestinationState(target));
+        Check((await File.ReadAllBytesAsync(target)).SequenceEqual(png), "successful PNG replacement releases its own destination guard before Windows atomic move");
         Check((await File.ReadAllBytesAsync(target)).SequenceEqual(png), "explicit export preserves original PNG bytes");
         Check(Directory.GetFiles(directory, "*.tmp").Length == 0, "successful export removes staging files");
         await File.WriteAllTextAsync(target, "existing destination");

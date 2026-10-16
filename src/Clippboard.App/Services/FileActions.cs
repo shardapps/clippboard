@@ -11,6 +11,7 @@ internal sealed class FileActionException(string message) : IOException(message)
 
 internal static class FileActions
 {
+    internal static readonly DestinationProbe Revisions = new();
     internal sealed record DestinationRevision(bool Exists, long Length, long ModifiedTicks);
     internal static DestinationRevision DestinationState(string path)
     {
@@ -54,6 +55,8 @@ internal static class FileActions
             { await output.WriteAsync(png, cancellation); await output.FlushAsync(cancellation); }
             cancellation.ThrowIfCancellationRequested();
             if (revision != DestinationState(target)) throw new FileActionException("The destination changed while saving. Choose the file again.");
+            // Windows replacement can fail while our own destination handle is open.
+            destinationGuard?.Dispose();
             File.Move(temporary, target, replacing);
         }
         finally { File.Delete(temporary); }

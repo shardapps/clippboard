@@ -14,6 +14,7 @@ namespace Clippboard.App;
 public partial class App
 {
     private OverlayProcess? _overlay;
+    private BackupJobs? _transfers;
     private long _historyVersion;
     private bool _closeOverlay;
     private uint _restoredSequence;
@@ -104,9 +105,22 @@ public partial class App
     {
         switch (request.Command)
         {
+            case "transfer-export": case "transfer-import":
+                if (_sessionLocked || _clipboard?.SessionLocked == true) return new(Error: "Unlock Windows before transferring history.");
+                _transfers ??= new BackupJobs(_store!, () =>
+                {
+                    if (!_exiting && !Dispatcher.HasShutdownStarted) Dispatcher.BeginInvoke(new Action(() => { if (!_exiting) ++_historyVersion; }));
+                });
+                return new(Transfer: _transfers.Start(request.Id ?? "", request.Command == "transfer-import", request.Path ?? throw new ArgumentException("Backup path required."),
+                    request.Secret ?? throw new ArgumentException("Password required."), request.Destination, _captureLease.Token));
+            case "transfer-state": return new(Transfer: _transfers?.Snapshot(request.Id ?? ""));
+            case "transfer-commit":
+                if (_sessionLocked || _clipboard?.SessionLocked == true) return new(Error: "Unlock Windows before restoring history.");
+                return new(Transfer: _transfers?.Commit(request.Id ?? "") ?? throw new InvalidOperationException("Inspect a backup first."));
+            case "transfer-cancel": _transfers?.Cancel(request.Id ?? ""); return new();
             case "wait-open": if (_overlay is not null) await _overlay.WaitForOpenAsync(); goto case "init";
             case "standby-ready": return new();
-            case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false }, CaptureSuspended: _clipboard?.SessionLocked == true || (_settings.ClearOnLock && !_sessionWatchAvailable));
+            case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false }, CaptureSuspended: _transfers?.HoldsCapture == true || _clipboard?.SessionLocked == true || (_settings.ClearOnLock && !_sessionWatchAvailable));
             case "list": return new(Entries: await Task.Run(() => _store!.ListAsync()));
             case "search": return new(Matches: await Task.Run(() => HistorySearch.MatchBatchAsync(_store!,
                 request.Query ?? throw new ArgumentException("Search query required."), request.Ids ?? throw new ArgumentException("Search IDs required."))));

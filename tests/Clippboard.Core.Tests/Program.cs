@@ -232,6 +232,16 @@ internal static partial class Program
         try
         {
             CheckFormats();
+            foreach (var cluster in new[] { "🧵", "e\u0301", "👩‍💻", "🇵🇰", "👍🏽" })
+            {
+                var text = new string('a', 319) + cluster + " suffix";
+                var unicodeClip = new Clip { Kind = ClipKind.Text, Text = text };
+                Check(unicodeClip.Summary(0).Preview == new string('a', 319) && unicodeClip.Text == text,
+                    "preview preserves whole grapheme boundaries and original text: " + cluster);
+            }
+            Check(new Clip { Kind = ClipKind.Text, Text = "a" + new string('\u0301', 400) }.Summary(0).Preview == "…", "oversized first grapheme yields a bounded visible preview");
+            var unicodeFile = "C:\\synthetic\\" + new string('a', 319) + "👩‍💻.txt";
+            Check(new Clip { Kind = ClipKind.Files, FilePaths = [unicodeFile] }.Summary(0).Preview == new string('a', 319), "file-name previews preserve the same Unicode boundaries");
             CheckNativeImageCopy();
             var notices = BundledNotices.Read();
             Check(notices.Contains("LICENSE-CLIPPBOARD.txt") && notices.Contains("NOTICES-WPF.txt") && notices.Contains("Windows SDK License") && notices.Contains(".NET Library License"), "standalone app embeds project and third-party notices including separate Microsoft binary terms");

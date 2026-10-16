@@ -39,7 +39,12 @@ internal sealed class OverlayProcess : IDisposable
     }
     internal void NotifyVisibility(bool close, long revision)
     {
-        if (!_disposed && _surface != 0) Platform.NativeMethods.PostMessage(_surface, VisibilityMessage, (nint)revision, close ? 1 : 0);
+        if (!_disposed && _surface != 0)
+        {
+            // A native handle can be recycled before the child exit event.
+            Platform.NativeMethods.GetWindowThreadProcessId(_surface, out var owner);
+            if (owner == (uint)Process.Id) Platform.NativeMethods.PostMessage(_surface, VisibilityMessage, (nint)revision, close ? 1 : 0);
+        }
         // The regular state reply is the fallback if posting fails or the
         // native surface has not been created yet.
     }

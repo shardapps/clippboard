@@ -227,6 +227,7 @@ internal static partial class Program
         try
         {
             CheckFormats();
+            CheckNativeImageCopy();
             await CheckBoundedReaderAsync();
             await CheckBoundedImageBufferAsync();
             await CheckOverlayTransportAsync();
@@ -788,6 +789,20 @@ internal static partial class Program
                 Check(Clipboard.GetText() == "restored fixture" && captured.Count == 3, "own restore does not duplicate history");
                 Pump(service.RestoreAsync(captured[1]));
                 Check(Clipboard.GetImage()?.PixelWidth == 2, "Windows image restore");
+                var largePng = SyntheticDecodePng(1024, out var largePixels);
+                CryptographicOperations.ZeroMemory(largePixels);
+                var largeClip = new Clip { Kind = ClipKind.Image, ImagePng = largePng };
+                var precedingSequence = NativeMethods.GetClipboardSequenceNumber();
+                var interruptedRestore = service.RestoreAsync(largeClip); service.SessionLocked = true;
+                var lockRejected = false;
+                try { Pump(interruptedRestore); } catch (InvalidOperationException) { lockRejected = true; }
+                Check(lockRejected && NativeMethods.GetClipboardSequenceNumber() == precedingSequence, "lock during image decoding prevents delayed clipboard restoration");
+                service.SessionLocked = false;
+                var dispatcherResponsive = false;
+                Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => dispatcherResponsive = true));
+                Pump(service.RestoreAsync(largeClip));
+                Check(dispatcherResponsive && Clipboard.GetImage()?.PixelWidth == 1024, "original image restore decodes off the UI dispatcher and preserves dimensions");
+                CryptographicOperations.ZeroMemory(largePng);
                 var privateData = new DataObject(); privateData.SetText("excluded fixture"); privateData.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream([1]));
                 Clipboard.SetDataObject(privateData, true); Pump(Task.Delay(350));
                 Check(captured.Count == 3, "Windows exclusion marker suppresses capture");

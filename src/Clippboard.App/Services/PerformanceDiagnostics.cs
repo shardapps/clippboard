@@ -17,6 +17,36 @@ namespace Clippboard.App.Services;
 // Explicit synthetic diagnostic. No screenshot buffers, clipboard listener or forced collections.
 internal static class PerformanceDiagnostics
 {
+    internal static async Task RunDecodeAsync(string output)
+    {
+        var report = await Task.Run(() =>
+        {
+            const int size = 2048;
+            var pixels = new byte[size * size * 4]; new Random(724).NextBytes(pixels);
+            for (var index = 3; index < pixels.Length; index += 4) pixels[index] = 255;
+            var source = System.Windows.Media.Imaging.BitmapSource.Create(size, size, 96, 96, PixelFormats.Bgra32, null, pixels, size * 4); source.Freeze();
+            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder(); encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(source));
+            using var encoded = new BoundedImageBuffer(16 * 1024 * 1024); encoder.Save(encoded); var png = encoded.ToArray();
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(pixels);
+            _ = PreviewCache.Decode(png, size, size);
+            using var process = Process.GetCurrentProcess(); var samples = new List<object>();
+            var allocated = GC.GetTotalAllocatedBytes(true); var managedBefore = GC.GetTotalMemory(false);
+            for (var cycle = 0; cycle < 8; cycle++)
+            {
+                var watch = Stopwatch.StartNew(); var decoded = PreviewCache.Decode(png, size, size);
+                watch.Stop(); process.Refresh();
+                samples.Add(new { Cycle = cycle, DecodeMs = watch.Elapsed.TotalMilliseconds, PrivateBytesAfterDecode = process.PrivateMemorySize64,
+                    WorkingSetAfterDecode = process.WorkingSet64, Frozen = decoded.IsFrozen, decoded.PixelWidth, decoded.PixelHeight });
+                GC.KeepAlive(decoded);
+            }
+            var result = new { Scenario = "Eight full-size decodes of one synthetic 2048x2048 PNG after one warmup; no clipboard, window, forced GC or working-set trim. Post-decode samples are not native peak memory.",
+                Runtime = Environment.Version.ToString(), EncodedBytes = png.Length, DecodeAllocatedBytes = GC.GetTotalAllocatedBytes(true) - allocated,
+                ManagedBytesBefore = managedBefore, ManagedBytesAfter = GC.GetTotalMemory(false), Samples = samples };
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); return result;
+        });
+        var path = Path.GetFullPath(output); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+    }
     internal static async Task RunScrollAsync(HistoryStore store, string output)
     {
         using var process = Process.GetCurrentProcess();

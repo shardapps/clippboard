@@ -20,7 +20,7 @@ internal sealed class ClipboardService : IDisposable
     private uint _sequence;
     private uint _ownSequence;
     private int _attempts;
-    private bool _saving;
+    private bool _saving, _settingClipboard;
     private bool _disposed;
     private readonly FileAvailabilityProbe _fileProbe = new();
     private readonly BoundedClipboardReader _reader;
@@ -33,7 +33,7 @@ internal sealed class ClipboardService : IDisposable
         set { if (_sessionLocked == value) return; _sessionLocked = value; ++_sessionEpoch; }
     }
     internal Func<bool>? CaptureHold { get; set; }
-    private bool CaptureBlocked => Paused || SessionLocked || Settings.IsCapturePaused || CaptureHold?.Invoke() == true;
+    private bool CaptureBlocked => _settingClipboard || Paused || SessionLocked || Settings.IsCapturePaused || CaptureHold?.Invoke() == true;
     private bool SourceAllowed()
     {
         if (Settings.ExcludedApps.Length == 0) return true;
@@ -173,13 +173,15 @@ internal sealed class ClipboardService : IDisposable
     public async Task RestoreAsync(Clip clip)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (SessionLocked) throw new InvalidOperationException("Unlock Windows before restoring a note.");
+        var startingSequence = NativeMethods.GetClipboardSequenceNumber(); var sessionEpoch = _sessionEpoch;
         var data = new DataObject();
         switch (clip.Kind)
         {
             case ClipKind.Text: data = FormattedClipboard.ForText(clip); break;
             case ClipKind.Image:
                 // Preserve original dimensions, without retaining its encoded buffer.
-                data.SetImage(PreviewCache.Decode(clip.ImagePng ?? [], int.MaxValue, int.MaxValue));
+                data.SetImage(await Task.Run(() => PreviewCache.Decode(clip.ImagePng ?? [], int.MaxValue, int.MaxValue)));
                 break;
             case ClipKind.Files:
                 var paths = clip.FilePaths ?? [];
@@ -193,8 +195,13 @@ internal sealed class ClipboardService : IDisposable
         }
         // The setter is synchronous, so own sequence is recorded before the message pump handles its event.
         ObjectDisposedException.ThrowIf(_disposed, this);
-        Clipboard.SetDataObject(data, true);
-        _ownSequence = NativeMethods.GetClipboardSequenceNumber();
+        if (SessionLocked || sessionEpoch != _sessionEpoch || startingSequence != NativeMethods.GetClipboardSequenceNumber())
+            throw new InvalidOperationException("The clipboard or Windows session changed while preparing this note. Try again.");
+        // OLE may pump messages while flushing a large image. Suppress only
+        // this synchronous setter, so genuine copies during decode still save.
+        _settingClipboard = true;
+        try { Clipboard.SetDataObject(data, true); _ownSequence = NativeMethods.GetClipboardSequenceNumber(); }
+        finally { _settingClipboard = false; }
     }
 
     internal static uint ShortcutModifiers(ShortcutChoice choice) => 0x4000u | (choice switch { ShortcutChoice.AltV => 0x0001u, ShortcutChoice.CtrlAltV => 0x0003u, _ => 0x0006u });

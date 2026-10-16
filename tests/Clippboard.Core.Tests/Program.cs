@@ -707,9 +707,12 @@ internal static partial class Program
                 var slide = (TranslateTransform)window.FindName("Slide");
                 var retraction = window.RequestRetractionAsync(); if (SystemParameters.ClientAreaAnimation) Pump(Task.Delay(100));
                 var retractPosition = slide.Y; var retractVelocity = SmoothMotion.Velocity(slide, TranslateTransform.YProperty);
-                Pump(window.ResumeRequestedOpenAsync());
-                Check(Math.Abs(slide.Y - retractPosition) < .001 && Math.Abs(SmoothMotion.Velocity(slide, TranslateTransform.YProperty) - retractVelocity) < .001,
-                    "shortcut reversal retains actual position and velocity without restarting entrance");
+                var resumed = window.ResumeRequestedOpenAsync();
+                Check(SystemParameters.ClientAreaAnimation
+                    ? Math.Abs(slide.Y - retractPosition) < .001 && Math.Abs(SmoothMotion.Velocity(slide, TranslateTransform.YProperty) - retractVelocity) < .001
+                    : slide.Y == 0 && !slide.HasAnimatedProperties,
+                    "shortcut reversal retains position/velocity when animated and applies exact rest with Windows reduced motion");
+                Pump(resumed);
                 Pump(retraction); Pump(Task.Delay(150));
                 Check(!window.Retired && window.IsVisible, "canceled retraction completion cannot retire a reopened overlay");
                 for (var reversal = 0; reversal < 4; reversal++)

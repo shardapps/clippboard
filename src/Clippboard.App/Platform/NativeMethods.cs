@@ -16,6 +16,7 @@ internal static class NativeMethods
     [DllImport("user32.dll")] internal static extern bool AllowSetForegroundWindow(uint process);
     [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(nint hwnd, out uint process);
     [DllImport("user32.dll")] internal static extern bool IsWindow(nint hwnd);
+    [DllImport("user32.dll", SetLastError = true)] internal static extern bool PostMessage(nint hwnd, int message, nint wParam, nint lParam);
     [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll", SetLastError = true)] internal static extern uint SendInput(uint count, Input[] inputs, int size);
 

@@ -702,6 +702,26 @@ internal static partial class Program
                 window.Dispatcher.BeginInvoke(async () => { try { await close; } catch (Exception ex) { failure = ex; } finally { frame.Continue = false; } });
                 Dispatcher.PushFrame(frame);
                 Check(window.Retired && !window.IsVisible && window.RenderedNoteCount == 0 && window.CachedImageBytes == 0 && window.DetailText is null, "closing releases native surface, cards, detail and thumbnail cache");
+                window = new RopeWindow(cacheStore, preview: true, settings: new AppSettings { Animate = true }) { Width = 1200, Height = 720, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };
+                window.Show(); window.RenderDemo(); window.UpdateLayout(); window.AnimateEntrance(); Pump(Task.Delay(130));
+                var slide = (TranslateTransform)window.FindName("Slide");
+                var retraction = window.RequestRetractionAsync(); if (SystemParameters.ClientAreaAnimation) Pump(Task.Delay(100));
+                var retractPosition = slide.Y; var retractVelocity = SmoothMotion.Velocity(slide, TranslateTransform.YProperty);
+                Pump(window.ResumeRequestedOpenAsync());
+                Check(Math.Abs(slide.Y - retractPosition) < .001 && Math.Abs(SmoothMotion.Velocity(slide, TranslateTransform.YProperty) - retractVelocity) < .001,
+                    "shortcut reversal retains actual position and velocity without restarting entrance");
+                Pump(retraction); Pump(Task.Delay(150));
+                Check(!window.Retired && window.IsVisible, "canceled retraction completion cannot retire a reopened overlay");
+                for (var reversal = 0; reversal < 4; reversal++)
+                { var previousClose = window.RequestRetractionAsync(); if (SystemParameters.ClientAreaAnimation) Pump(Task.Delay(35)); Pump(window.ResumeRequestedOpenAsync()); Pump(previousClose); }
+                Check(!window.Retired && window.RenderedNoteCount < 10 && window.RenderedNoteCount > 0, "rapid repeated reversals keep one bounded live board");
+                var deliveredRevision = -1L; var deliveredClose = false;
+                window.VisibilityRequested += (closeRequest, revision) => { deliveredClose = closeRequest; deliveredRevision = revision; };
+                NativeMethods.PostMessage(new System.Windows.Interop.WindowInteropHelper(window).Handle, OverlayProcess.VisibilityMessage, 19, 1); Pump(Task.Delay(50));
+                Check(deliveredRevision == 19 && deliveredClose, "native visibility signal reaches the overlay without waiting for the polling timer");
+                var dismissals = 0; window.DismissRequested += () => { dismissals++; return Task.CompletedTask; };
+                var permanentClose = window.CloseRopeAsync(); Pump(window.ResumeRequestedOpenAsync()); Pump(permanentClose);
+                Check(window.Retired && dismissals == 1, "ordinary dismissal is acknowledged once and cannot be undone by a stale open state");
                 for (var cycle = 0; cycle < 3; cycle++)
                 {
                     window = new RopeWindow(cacheStore, preview: true, settings: new AppSettings { Animate = false }) { Width = 1200, Height = 1000, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };

@@ -137,7 +137,7 @@ public partial class App : Application
         if (_toggling || _selecting || _store is null || _sessionLocked) return;
         if (_overlay is not null && !_overlay.Process.HasExited)
         {
-            if (_overlay.OpenRequested) { _closeOverlay = true; return; }
+            if (_overlay.OpenRequested) { _closeOverlay = !_closeOverlay; ++_visibilityRevision; _overlay.NotifyVisibility(_closeOverlay, _visibilityRevision); return; }
             _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
             _closeOverlay = false; _restoredSequence = 0;
             NativeMethods.AllowSetForegroundWindow((uint)_overlay.Process.Id);
@@ -170,7 +170,7 @@ public partial class App : Application
         _toggling = true;
         try
         {
-            _overlay?.Dispose(); _closeOverlay = false; _restoredSequence = 0;
+            _overlay?.Dispose(); _closeOverlay = false; _visibilityRevision = 0; _restoredSequence = 0;
             if (open) _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
             var session = new OverlayProcess(request => Dispatcher.InvokeAsync(() => HandleOverlayAsync(request)).Task.Unwrap(), standby: !open);
             _overlay = session; _foreground!.OverlayProcessId = (uint)session.Process.Id;
@@ -180,7 +180,8 @@ public partial class App : Application
                 if (!ReferenceEquals(_overlay, session)) return;
                 var failed = session.Process.ExitCode != 0 && session.OpenRequested; _overlay = null; _foreground.OverlayProcessId = 0; _transfers?.Cancel(); session.Dispose();
                 if (failed) Notify("The rope closed unexpectedly. Your saved history is safe; open it again.");
-                if (!failed && !_exiting) Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(MaintainStandby));
+                if (!failed && !_exiting && !_sessionLocked && session.OpenRequested && !_closeOverlay) StartOverlay(open: true);
+                else if (!failed && !_exiting) Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(MaintainStandby));
             }));
             session.Process.EnableRaisingEvents = true;
         }

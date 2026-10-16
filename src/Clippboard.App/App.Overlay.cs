@@ -17,6 +17,7 @@ public partial class App
     private BackupJobs? _transfers;
     private long _historyVersion;
     private bool _closeOverlay;
+    private long _visibilityRevision;
     private uint _restoredSequence;
     private async Task RunOverlayAsync(string pipeName, bool software)
     {
@@ -66,6 +67,30 @@ public partial class App
         }
         _rope.Selected += summary => RestoreAndPasteAsync(new("restore", summary.Id), !_rope.SavedSettings.AutoPaste || (Keyboard.Modifiers & ModifierKeys.Shift) != 0);
         _rope.EditedTextSelected += text => RestoreAndPasteAsync(new("restore", Text: text), true);
+        var visibilityRevision = initial.VisibilityRevision;
+        _rope.DismissRequested += async () =>
+        {
+            using var deadline = new System.Threading.CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+            try { await client.CallAsync(new("dismiss", VisibilityRevision: visibilityRevision), deadline.Token); }
+            catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException) { }
+        };
+        async Task ApplyVisibilityAsync(bool close, long revision)
+        {
+            if (revision <= visibilityRevision || _rope.Retired) return;
+            visibilityRevision = revision;
+            if (close) _ = _rope.RequestRetractionAsync();
+            else
+            {
+                try { await _rope.ResumeRequestedOpenAsync(); }
+                catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException) { await _rope.CloseRopeAsync(); }
+            }
+        }
+        _rope.VisibilityRequested += async (close, revision) => await ApplyVisibilityAsync(close, revision);
+        _rope.SourceInitialized += async (_, _) =>
+        {
+            try { await client.CallAsync(new("surface-ready", Surface: (long)new System.Windows.Interop.WindowInteropHelper(_rope).Handle)); }
+            catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException) { }
+        };
         var poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
         var polling = false; var version = initial.Version;
         poll.Tick += async (_, _) =>
@@ -76,8 +101,8 @@ public partial class App
             {
                 var state = await client.CallAsync(new("state"));
                 _rope.SetPaused(state.Settings?.IsCapturePaused == true || state.CaptureSuspended);
-                if (state.Close) await _rope.CloseRopeAsync();
-                else if (state.Version != version)
+                await ApplyVisibilityAsync(state.Close, state.VisibilityRevision);
+                if (!state.Close && state.Version != version)
                 {
                     version = state.Version;
                     if (state.Settings is not null && state.Settings != _rope.SavedSettings) _rope.ApplyAppearance(state.Settings);
@@ -105,6 +130,12 @@ public partial class App
     {
         switch (request.Command)
         {
+            case "surface-ready":
+                if (_overlay?.SetSurface((nint)request.Surface) == true) _overlay.NotifyVisibility(_closeOverlay, _visibilityRevision);
+                return new();
+            case "dismiss":
+                if (request.VisibilityRevision == _visibilityRevision) { _closeOverlay = true; ++_visibilityRevision; }
+                return new();
             case "diagnostics":
                 var diagnosticSettings = _settings; var diagnosticProcess = _overlay?.Process;
                 var captureSuspended = _clipboard?.SessionLocked == true || (_settings.ClearOnLock && !_sessionWatchAvailable);
@@ -125,7 +156,7 @@ public partial class App
             case "transfer-cancel": _transfers?.Cancel(request.Id ?? ""); return new();
             case "wait-open": if (_overlay is not null) await _overlay.WaitForOpenAsync(); goto case "init";
             case "standby-ready": return new();
-            case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false }, CaptureSuspended: _transfers?.HoldsCapture == true || _clipboard?.SessionLocked == true || (_settings.ClearOnLock && !_sessionWatchAvailable));
+            case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, VisibilityRevision: _visibilityRevision, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false }, CaptureSuspended: _transfers?.HoldsCapture == true || _clipboard?.SessionLocked == true || (_settings.ClearOnLock && !_sessionWatchAvailable));
             case "list": return new(Entries: await Task.Run(() => _store!.ListAsync()));
             case "search": return new(Matches: await Task.Run(() => HistorySearch.MatchBatchAsync(_store!,
                 request.Query ?? throw new ArgumentException("Search query required."), request.Ids ?? throw new ArgumentException("Search IDs required."))));

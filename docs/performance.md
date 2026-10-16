@@ -81,3 +81,11 @@ Run `./scripts/dev.ps1 diagnostics -ScrollOnly` for four sustained 360-update pr
 Image cards request encrypted, versioned thumbnail files instead of transferring original PNGs on each open. The first view generates a thumbnail outside the history lock; later views read the bounded derived file. Detail and restore continue to request the original bytes. Cache retention fits both one sixteenth of the configured history budget and unused payload space. Optional files are removed with their original entry and rebuilt on corruption. No plaintext images are written to temporary storage.
 
 A deterministic 1024×1024 high-entropy fixture encoded to **3,660,603 bytes** as an original PNG and **147,228 bytes** as its card preview, a **96.0% reduction in that image attachment**. This is a transfer-size comparison, not a total-process RAM or display-latency measurement. First generation still requires the original, and WPF/native allocations remain additional. Tests exercise DPAPI persistence, restart cache hits, corruption recovery, deletion during generation, storage headroom, output bounds and original-byte preservation.
+
+## Development: reversible shortcut motion
+
+The next beta sends a small native visibility signal to the verified child-owned window rather than waiting for the 350 ms metadata polling timer. Revision numbers prevent an older state reply from undoing a newer shortcut request; regular polling remains a fallback. No clipboard payload travels in window messages.
+
+A second shortcut can retarget an in-progress retraction from its current position and velocity. Its canceled delay cannot later destroy the reopened surface. Ordinary outside/Escape/selection dismissal stays terminal, acknowledges the listener, and a later open request can create a new child if retirement already finished. Lock also advances the visibility revision. Reduced motion still applies without a spring.
+
+Local WPF checks cover repeated reversals, position/velocity continuity, stale close completion, actual native-message delivery and terminal dismissal. The isolated native session adds three real hotkey reversal pairs before restoring/pasting text. These checks do not prove physical frame latency, device smoothness or Store-installed behavior.

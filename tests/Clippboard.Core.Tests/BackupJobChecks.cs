@@ -35,6 +35,13 @@ internal static partial class Program
         Check(jobs.Snapshot(id)?.Phase == BackupPhase.Failed && await File.ReadAllTextAsync(path) == "Changed external destination", "stale export selection cannot overwrite a changed file");
         id = Guid.NewGuid().ToString("N"); jobs.Start(id, false, path, password, FileActions.DestinationState(path), CancellationToken.None); await jobs.Completion.WaitAsync(TimeSpan.FromSeconds(30));
         Check(jobs.Snapshot(id)?.Phase == BackupPhase.Completed, "replacement export completes before import: " + jobs.Snapshot(id));
+        using (var heldDestination = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var lockedId = Guid.NewGuid().ToString("N");
+            jobs.Start(lockedId, false, path, password, FileActions.DestinationState(path), CancellationToken.None);
+            await jobs.Completion.WaitAsync(TimeSpan.FromSeconds(30));
+            Check(jobs.Snapshot(lockedId)?.Phase == BackupPhase.Failed, "a destination held by another application is preserved rather than replaced");
+        }
         var targetPath = Path.Combine(root, "backup-job-target"); var target = new HistoryStore(targetPath, new WindowsProtector()); await target.InitializeAsync(); var changed = 0;
         using var imports = new BackupJobs(target, () => changed++); id = Guid.NewGuid().ToString("N");
         imports.Start(id, true, path, password, null, CancellationToken.None); await imports.Completion.WaitAsync(TimeSpan.FromSeconds(30));

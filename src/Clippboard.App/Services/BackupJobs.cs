@@ -173,6 +173,10 @@ internal sealed class BackupJobs(HistoryStore history, Action changed) : IDispos
                     (done, total) => Update(job, new(job.State.Id, BackupPhase.Verifying, done, total)));
             cancellation.ThrowIfCancellationRequested();
             if (expected != FileActions.DestinationState(target)) throw new FileActionException("The destination changed. Select it again.");
+            // MoveFileEx replacement can reject an open destination even when
+            // its handle shares delete. Release our content guard after the
+            // final revision check, then use atomic replacement (never delete first).
+            guard?.Dispose();
             File.Move(temporary, target, expected.Exists);
         }
         finally { File.Delete(temporary); }

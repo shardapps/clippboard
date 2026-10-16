@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -42,16 +43,32 @@ public sealed record Clip
     public ClipSummary Summary(long storedBytes, string? fingerprint = null) => new(
         Id, Kind, CopiedAt, Pinned, Kind switch
         {
-            ClipKind.Text => (Text ?? "")[..Math.Min(Text?.Length ?? 0, 320)],
+            ClipKind.Text => Abbreviate(Text ?? ""),
             ClipKind.Image => "Copied image",
             ClipKind.Files => FilePreview(),
             _ => ""
         }, fingerprint ?? Fingerprint(), storedBytes, IsSnippet, Title, (Labels ?? []).ToArray(), HasRichText);
 
+    private static string Abbreviate(string value)
+    {
+        const int limit = 320;
+        if (value.Length <= limit) return value;
+        var end = 0;
+        while (end < limit)
+        {
+            // Two units of lookahead detect a cluster crossing the boundary
+            // without scanning an arbitrarily long combining sequence.
+            var length = StringInfo.GetNextTextElementLength(value.AsSpan(end, Math.Min(value.Length - end, limit - end + 2)));
+            if (length > limit - end) break;
+            end += length;
+        }
+        // One pathological extended grapheme can exceed the entire preview.
+        return end == 0 ? "…" : value[..end];
+    }
     private string FilePreview()
     {
         var preview = string.Join("\n", (FilePaths ?? []).Take(5).Select(Path.GetFileName));
-        return preview[..Math.Min(preview.Length, 320)];
+        return Abbreviate(preview);
     }
 }
 

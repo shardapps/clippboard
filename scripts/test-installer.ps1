@@ -16,12 +16,25 @@ if (Test-Path -LiteralPath $registryKey) { throw 'Existing Clippboard installati
 if (Test-Path -LiteralPath $testDirectory) { throw 'Installer smoke destination must be fresh.' }
 function Invoke-SmokeExecutable([string]$Executable, [string[]]$Arguments) {
   Write-Output "Starting isolated executable: $Executable"
-  $process = Start-Process -FilePath $Executable -ArgumentList $Arguments -WindowStyle Hidden -PassThru
+  $watch = [Diagnostics.Stopwatch]::StartNew()
+  $phase = Join-Path $logs 'process-phases.log'
+  Add-Content -LiteralPath $phase -Value "$([DateTimeOffset]::UtcNow.ToString('O')) START $Executable"
+  # Direct process creation avoids a shell-launch dependency on the runner desktop.
+  # This does not alter signatures, Windows protections or the installer arguments.
+  $start = [Diagnostics.ProcessStartInfo]::new($Executable)
+  $start.Arguments = $Arguments -join ' '
+  $start.UseShellExecute = $false
+  $start.CreateNoWindow = $true
+  $start.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+  $process = [Diagnostics.Process]::Start($start)
   try {
     if (!$process.WaitForExit(60000)) { $process.Kill($true); throw "Executable timed out: $Executable" }
     if ($process.ExitCode -ne 0) { throw "Executable failed with exit code $($process.ExitCode): $Executable" }
     Write-Output "Completed isolated executable: $Executable"
-  } finally { $process.Dispose() }
+  } finally {
+    Add-Content -LiteralPath $phase -Value "$([DateTimeOffset]::UtcNow.ToString('O')) END $Executable elapsedMs=$($watch.ElapsedMilliseconds)"
+    $process.Dispose()
+  }
 }
 $setup = Join-Path $projectRoot "artifacts\installer\Clippboard-Setup-$($info.Version).exe"
 $uninstall = Join-Path $testDirectory 'unins000.exe'

@@ -51,13 +51,13 @@ public partial class App : Application
             if (e.Args.Contains("--overlay") || e.Args.Contains("--preview") || e.Args.Contains("--diagnostics"))
                 Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Clippboard;component/Design/Controls.xaml", UriKind.Relative) });
             var lifecycleIndex = Array.IndexOf(e.Args, "--lifecycle-diagnostics");
-            if (lifecycleIndex >= 0) { if (lifecycleIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await OverlayDiagnostics.RunAsync(e.Args[lifecycleIndex + 1], e.Args.Contains("--software")); Shutdown(); return; }
+            if (lifecycleIndex >= 0) { if (lifecycleIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await OverlayDiagnostics.RunAsync(e.Args[lifecycleIndex + 1], e.Args.Contains("--software"), e.Args.Contains("--runtime-only-preparation")); Shutdown(); return; }
             var decodeIndex = Array.IndexOf(e.Args, "--decode-diagnostics");
             if (decodeIndex >= 0) { if (decodeIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await PerformanceDiagnostics.RunDecodeAsync(e.Args[decodeIndex + 1]); Shutdown(); return; }
             var metadataIndex = Array.IndexOf(e.Args, "--metadata-diagnostics");
             if (metadataIndex >= 0) { if (metadataIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await PerformanceDiagnostics.RunMetadataAsync(e.Args[metadataIndex + 1]); Shutdown(); return; }
             var overlayIndex = Array.IndexOf(e.Args, "--overlay");
-            if (overlayIndex >= 0) { if (overlayIndex + 1 >= e.Args.Length) throw new ArgumentException("Overlay session required."); await RunOverlayAsync(e.Args[overlayIndex + 1], e.Args.Contains("--software")); return; }
+            if (overlayIndex >= 0) { if (overlayIndex + 1 >= e.Args.Length) throw new ArgumentException("Overlay session required."); await RunOverlayAsync(e.Args[overlayIndex + 1], e.Args.Contains("--software"), e.Args.Contains("--runtime-only-preparation")); return; }
             _development = e.Args.Contains("--dev");
             var preview = Array.IndexOf(e.Args, "--preview");
             var diagnostic = Array.IndexOf(e.Args, "--diagnostics");

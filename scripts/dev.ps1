@@ -1,6 +1,6 @@
 param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','decode','metadata','format')][string]$Task = 'build',
   [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
-  [switch]$Settings, [switch]$Help, [switch]$Notices, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [switch]$Ocr, [switch]$Backup, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly, [switch]$BuildDiagnostics)
+  [switch]$Settings, [switch]$Help, [switch]$Notices, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [switch]$Ocr, [switch]$Backup, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly, [switch]$BuildDiagnostics, [switch]$RuntimeOnlyPreparation)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
@@ -23,12 +23,14 @@ switch ($Task) {
   'lifecycle' {
     $diagnosticArgs = @('--lifecycle-diagnostics', (Join-Path $projectRoot 'artifacts/overlay-lifecycle.json'))
     if ($Software) { $diagnosticArgs += '--software' }
+    if ($RuntimeOnlyPreparation) { $diagnosticArgs += '--runtime-only-preparation' }
     & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- @diagnosticArgs
   }
   'diagnostics' {
     $diagnosticArgs = @('--diagnostics', (Join-Path $projectRoot 'artifacts/motion-diagnostics.json'))
     if ($ScrollOnly) { $diagnosticArgs += '--scroll-only' }
     if ($Software) { $diagnosticArgs += '--software' }
+    if ($RuntimeOnlyPreparation) { $diagnosticArgs += '--runtime-only-preparation' }
     & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- @diagnosticArgs
   }
   'build' { $verbosity = if ($BuildDiagnostics) { 'diagnostic' } else { 'minimal' }; & $dotnetPath build Clippboard.slnx -c Release -m:1 -p:UseAppHost=false -verbosity:$verbosity }

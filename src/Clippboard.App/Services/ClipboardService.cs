@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
@@ -170,9 +171,10 @@ internal sealed class ClipboardService : IDisposable
         return null;
     }
 
-    public async Task RestoreAsync(Clip clip)
+    public async Task RestoreAsync(Clip clip, CancellationToken cancellation = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        cancellation.ThrowIfCancellationRequested();
         if (SessionLocked) throw new InvalidOperationException("Unlock Windows before restoring a note.");
         var startingSequence = NativeMethods.GetClipboardSequenceNumber(); var sessionEpoch = _sessionEpoch;
         var data = new DataObject();
@@ -181,12 +183,12 @@ internal sealed class ClipboardService : IDisposable
             case ClipKind.Text: data = FormattedClipboard.ForText(clip); break;
             case ClipKind.Image:
                 // Preserve original dimensions, without retaining its encoded buffer.
-                data.SetImage(await Task.Run(() => PreviewCache.Decode(clip.ImagePng ?? [], int.MaxValue, int.MaxValue)));
+                data.SetImage(await Task.Run(() => PreviewCache.Decode(clip.ImagePng ?? [], int.MaxValue, int.MaxValue), cancellation));
                 break;
             case ClipKind.Files:
                 var paths = clip.FilePaths ?? [];
                 // Avoid blocking Explorer's UI on unavailable network shares.
-                var available = await _fileProbe.CheckAsync(paths);
+                var available = await _fileProbe.CheckAsync(paths).WaitAsync(cancellation);
                 if (!available) throw new FileNotFoundException("An original file was moved, deleted, or is unavailable. Copy it again.");
                 var files = new StringCollection(); files.AddRange(paths); data.SetFileDropList(files);
                 // Always restore as COPY, never replay an old cut operation.
@@ -195,6 +197,7 @@ internal sealed class ClipboardService : IDisposable
         }
         // The setter is synchronous, so own sequence is recorded before the message pump handles its event.
         ObjectDisposedException.ThrowIf(_disposed, this);
+        cancellation.ThrowIfCancellationRequested();
         if (SessionLocked || sessionEpoch != _sessionEpoch || startingSequence != NativeMethods.GetClipboardSequenceNumber())
             throw new InvalidOperationException("The clipboard or Windows session changed while preparing this note. Try again.");
         // OLE may pump messages while flushing a large image. Suppress only

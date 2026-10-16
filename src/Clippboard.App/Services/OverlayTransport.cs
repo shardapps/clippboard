@@ -158,15 +158,27 @@ internal sealed class OverlayServer(Func<OverlayRequest, Task<OverlayReply>> han
 {
     internal string Name { get; } = "ShardApps.Clippboard." + Guid.NewGuid().ToString("N");
     private readonly CancellationTokenSource _lifetime = new();
-    internal Task RunAsync() => Task.Run(async () =>
+    private readonly object _gate = new();
+    private Task? _run, _shutdown;
+    private bool _disposed;
+    internal Task Shutdown { get { lock (_gate) return _shutdown ?? Task.CompletedTask; } }
+    internal Task RunAsync()
     {
-        while (!_lifetime.IsCancellationRequested)
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _run ??= RunCoreAsync(_lifetime.Token);
+        }
+    }
+    private Task RunCoreAsync(CancellationToken lifetime) => Task.Run(async () =>
+    {
+        while (!lifetime.IsCancellationRequested)
         {
             using var pipe = new NamedPipeServerStream(Name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
             try
             {
-                await pipe.WaitForConnectionAsync(_lifetime.Token);
-                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token); deadline.CancelAfter(TimeSpan.FromSeconds(30));
+                await pipe.WaitForConnectionAsync(lifetime);
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(lifetime); deadline.CancelAfter(TimeSpan.FromSeconds(30));
                 var request = await OverlayTransport.ReadAsync<OverlayRequest>(pipe, OverlayTransport.RequestLimit, deadline.Token);
                 OverlayReply reply;
                 try { reply = await handler(request); }
@@ -180,5 +192,24 @@ internal sealed class OverlayServer(Func<OverlayRequest, Task<OverlayReply>> han
             catch (Exception ex) when (ex is IOException or InvalidDataException or OperationCanceledException or JsonException or UnauthorizedAccessException) { /* A disconnected or malformed client cannot stop capture. */ }
         }
     });
-    public void Dispose() { _lifetime.Cancel(); }
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true; _shutdown = StopAsync(_run);
+        }
+    }
+    private async Task StopAsync(Task? running)
+    {
+        try
+        {
+            try { await _lifetime.CancelAsync().ConfigureAwait(false); }
+            catch (AggregateException) { /* Cancellation stays requested even if a callback fails. */ }
+            if (running is not null)
+                try { await running.ConfigureAwait(false); }
+                catch (Exception) { /* RunAsync still exposes its fault; observe it while draining ownership. */ }
+        }
+        finally { _lifetime.Dispose(); }
+    }
 }

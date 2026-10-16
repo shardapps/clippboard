@@ -1,0 +1,29 @@
+# 0.6.0-beta.1 candidate evidence
+
+The public 0.5.1 alpha is unchanged. This is a validation candidate for Windows 11 x64, not a stable release or an all-hardware guarantee.
+
+## Tested source and automation
+
+[Windows candidate run 38922906824](https://github.com/shardapps/clippboard/actions/runs/38922906824) passed all six required jobs on October 16, 2026. PR head: `d3c684c16d707d6a75c561aec0e21574e39dd85d`. Actions tested merge commit `b06a2d373a2d3f2683b7ec3e1758a0870e80752f`; its tree and the PR head's tree both equal `5df282ba199ab18504136d3fe8afec67dab8035a`. Candidate merge `12edda26104aa74ec4fe5c1dd89387f2de021c1a` preserved that tree.
+
+| Check | Evidence |
+| --- | --- |
+| Compile, locked restore, NuGet graph audit | Passed; warnings are errors. No reported vulnerable graph entries; framework/download servicing is separate. |
+| Regressions | 499 storage/format/cache/WPF/DPAPI assertions on CI, 478 locally; CI includes isolated native image/clipboard checks. |
+| Packaging guards | Signing rejection, altered/missing notices and prerelease/numeric version checks passed. |
+| Installer | Published 0.5.1 installer hash pinned to `a1cc196d5eac7443f47f5b4ff98ab83f703aad1d187cede930be9521546960aa`. Upgrade preserves encrypted fixture bytes, preferences, stars and file references; reinstall, installed preview and uninstall passed. Job: 1m40s. |
+| Store ingestion | Numeric identity/file version 0.6.0.0, expected publisher, opt-in startup, required contents/notices and SHA-256 passed. This unsigned ingestion package has not passed beta Store certification. |
+| Native runtime | Three Unicode/restore/paste cycles, rapid shortcut reversals, formatted text, 100-copy burst, images, file reference, 30 idle samples over five minutes and restart passed. |
+| Motion/resource lifecycle | Eight cycles per configured renderer, disposal/standby-release assertions, sustained precision-scroll/reversal and metadata reports passed. Hosted default rendering does not establish physical GPU behavior. |
+
+The pipeline now assembles `clippboard-beta-release-candidate` only after all prerequisites pass. It contains the portable ZIP with notices, installer, SHA-256 manifest, build metadata and source/run provenance. The assembler re-verifies input packages and ZIP contents. These evaluation artifacts expire after 14 days; retain the chosen verified files before that deadline. They are not a public release, a signed attestation or Store-signed downloads. GitHub EXEs remain unsigned.
+
+## Performance limits that remain open
+
+The hosted native test measured shortcut-to-visible-window samples of **713, 705 and 815 ms**. This is not physical frame presentation and does **not** establish instant opening. Prepared 1,000-note diagnostic processes reached first content in roughly 411–449 ms with default rendering, versus 744–840 ms without preparation. Further installed-device latency work remains an acceptance gate; do not mark it solved from passing functional tests.
+
+On this runner, the listener's private bytes were about **39.5 MiB** after the capture workload and **19.9 MiB** after restart; sampled one-core idle CPU was **0.068%**. These are listener counters, not total app/GPU RAM. The lifecycle diagnostic parent returned to roughly 16–17 MiB private after child disposal. Hosted results differ from the development machine; see [the performance report](performance.md) for renderer tradeoffs and measurement definitions.
+
+The separate local .NET 10.0.13 synthetic decode experiment allocated **126,848 managed bytes** over eight 2048×2048 decodes, without forced GC or working-set trimming. The earlier managed-copy implementation allocated about 128 MiB cumulatively in the same workload. This is allocation reduction, not a 128 MiB reduction in total retained app RAM.
+
+The [beta checklist](beta-checklist.md) retains the physical trackpad/refresh-rate, mixed-DPI, accessibility, destination-app, low-memory, longer-session and Store-installed acceptance gates. Use synthetic data and record the tested build hash. Publication remains held until the required results are reviewed.

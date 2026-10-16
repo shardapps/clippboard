@@ -82,7 +82,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Download exact validation binaries
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: validation-input
       - name: Scroll and lifecycle profiles from exact compiled binaries
@@ -125,7 +125,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Download exact validation binaries
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: validation-input
       - name: Native listener, hotkey, overlay, accepted paste and restart
@@ -159,7 +159,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Download exact validation binaries
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: validation-input
       - name: Fetch published 0.5.1 upgrade baseline
@@ -232,21 +232,34 @@ jobs:
           foreach ($stage in $stages.GetEnumerator()) {
             if ($stage.Value.result -ne 'success') { throw "Required stage $($stage.Key): $($stage.Value.result)" }
           }
+      - name: Checkout tested source for package verification
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Download exact validation binaries
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: validation-input
       - name: Download reports
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: validation-reports-*
           path: artifacts
           merge-multiple: true
       - name: Download Store candidate
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: validation-store
           path: artifacts/store
+      - name: Assemble versioned beta evaluation assets
+        run: ./scripts/prepare-candidate.ps1
+      - name: Upload beta evaluation assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: clippboard-beta-release-candidate
+          path: artifacts/candidate/**
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload testing builds
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

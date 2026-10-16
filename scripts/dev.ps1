@@ -1,6 +1,6 @@
 param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','decode','format')][string]$Task = 'build',
   [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
-  [switch]$Settings, [switch]$Help, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [switch]$Ocr, [switch]$Backup, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly, [switch]$BuildDiagnostics)
+  [switch]$Settings, [switch]$Help, [switch]$Notices, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [switch]$Ocr, [switch]$Backup, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly, [switch]$BuildDiagnostics)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
@@ -39,6 +39,7 @@ switch ($Task) {
     $previewArgs = @('--preview', (Join-Path $projectRoot $PreviewPath), '--theme', $Theme)
     if ($Settings) { $previewArgs += '--settings' }
     if ($Help) { $previewArgs += '--help-preview' }
+    if ($Notices) { $previewArgs += '--notices' }
     if ($Detail) { $previewArgs += '--detail' }
     if ($Snippet) { $previewArgs += '--snippet' }
     if ($Combine) { $previewArgs += '--combination' }

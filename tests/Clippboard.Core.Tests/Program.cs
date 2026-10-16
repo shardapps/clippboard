@@ -228,6 +228,8 @@ internal static partial class Program
         {
             CheckFormats();
             CheckNativeImageCopy();
+            var notices = BundledNotices.Read();
+            Check(notices.Contains("LICENSE-CLIPPBOARD.txt") && notices.Contains("NOTICES-WPF.txt") && notices.Contains("Windows SDK License") && notices.Contains(".NET Library License"), "standalone app embeds project and third-party notices including separate Microsoft binary terms");
             await CheckBoundedReaderAsync();
             await CheckBoundedImageBufferAsync();
             await CheckOverlayTransportAsync();

@@ -9,5 +9,9 @@
     <RepositoryUrl>https://github.com/shardapps/clippboard</RepositoryUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <WindowsSdkPackageVersion>10.0.22000.87</WindowsSdkPackageVersion>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
   </PropertyGroup>
 </Project>

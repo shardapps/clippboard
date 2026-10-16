@@ -36,6 +36,7 @@ try {
   Invoke-SmokeExecutable $setup @('/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', "/DIR=`"$testDirectory`"", "/LOG=`"$logs\install.log`"")
   $installed = Join-Path $testDirectory 'Clippboard.exe'
   if (!(Test-Path -LiteralPath $installed) -or !(Test-Path -LiteralPath $uninstall) -or !(Test-Path -LiteralPath $registryKey)) { throw 'Installation did not create expected files and uninstall registration.' }
+  & "$PSScriptRoot/verify-notices.ps1" -Root $testDirectory
   if ((Get-FileHash -LiteralPath $installed).Hash -ne (Get-FileHash -LiteralPath 'artifacts\portable\win-x64\Clippboard.exe').Hash) { throw 'Installed binary differs from packaged binary.' }
   if ($PreviousInstaller) {
     & dotnet tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/Clippboard.Core.Tests.dll --upgrade-fixture $installed (Join-Path $logs 'upgrade-data') verify

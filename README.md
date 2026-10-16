@@ -46,7 +46,7 @@ Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setup
 **Microsoft Store:** [install Clippboard from Microsoft Store](https://apps.microsoft.com/detail/9PP8015JDJ45), published on **October 13, 2026**, under **ShardCoders**. The approved package is **0.5.1.0**, Windows 11 x64; its public listing and official Download / View in Store controls are verified, including the Pakistan catalog. Use the Store distribution for the Microsoft trust path. Store-signed installed behavior remains a separate test; Store signing does not sign the GitHub EXEs. [Store distribution](docs/store.md) · [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
 
 1. Clone this repository and open PowerShell in its folder.
-2. Run `./scripts/bootstrap.ps1` to install a private .NET 10 SDK under `.tools/` and build.
+2. Run `./scripts/bootstrap.ps1` to install a private .NET 10 SDK (10.0.402 or newer) under `.tools/` and build.
 3. Run `./scripts/dev.ps1 run` to start the development app.
 4. Copy text, a screenshot, or a file. Press **Ctrl + Shift + V** and select its note.
 
@@ -56,7 +56,7 @@ Development runs store history under this repository's ignored `.data/` folder. 
 
 Search checks the saved short previews, including displayed file names, rather than decrypting all full notes. Click **All types** to cycle Text → Image → Files → All types. Use the speech-bubble button for Help and feedback. Appearance changes preview live; closing without Save restores your saved appearance.
 
-For a self-contained executable, run `./scripts/dev.ps1 publish`. Output: `artifacts/portable/win-x64/Clippboard.exe`; recipients do not need .NET installed. Build the setup executable with `./scripts/package.ps1` after installing Inno Setup 6. CI produces portable and setup artifacts. These are unsigned testing builds. [Packaging details →](docs/development.md)
+For a self-contained executable, run `./scripts/dev.ps1 publish`. Output: `artifacts/portable/win-x64/Clippboard.exe`; recipients do not need .NET installed. Build the setup executable with `./scripts/package.ps1` after installing Inno Setup 6. CI produces portable and setup artifacts. These are unsigned testing builds. [Packaging details →](docs/development.md) · [Dependency and notice review](docs/dependency-audit.md)
 
 <details><summary>Settings and themes preview</summary>
 

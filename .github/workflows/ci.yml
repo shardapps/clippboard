@@ -36,6 +36,8 @@ jobs:
           cache-dependency-path: '**/packages.lock.json'
       - name: Restore locked dependencies
         run: dotnet restore Clippboard.slnx --locked-mode
+      - name: Audit direct and transitive NuGet dependencies
+        run: ./scripts/audit-dependencies.ps1
       - name: Compile with warnings as errors
         run: dotnet build Clippboard.slnx -c Release --no-restore -p:ContinuousIntegrationBuild=true
       - name: Storage, format and WPF regression checks

@@ -18,7 +18,14 @@ try {
   '{"Version":"0.3.0","Signed":false,"Artifacts":[{},{}]}' | Set-Content -LiteralPath "$fixture\artifacts\build-info.json" -Encoding utf8
   @((('0' * 64) + '  same.exe'), (('0' * 64) + '  same.exe')) | Set-Content -LiteralPath "$fixture\artifacts\SHA256SUMS.txt" -Encoding utf8
   Expect-Rejection { & "$fixture\scripts\verify-package.ps1" } 'Duplicate checksum path'
-  Write-Output 'PASS: five signing/package fail-closed guards.'
+  Copy-Item -LiteralPath (Join-Path $projectRoot 'assets/licenses') -Destination (Join-Path $fixture 'licenses') -Recurse
+  Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE') -Destination (Join-Path $fixture 'licenses/LICENSE-CLIPPBOARD.txt')
+  & "$PSScriptRoot/verify-notices.ps1" -Root $fixture
+  [IO.File]::AppendAllText((Join-Path $fixture 'licenses/NOTICES-WPF.txt'), 'Synthetic changed notice')
+  Expect-Rejection { & "$PSScriptRoot/verify-notices.ps1" -Root $fixture } 'Missing or altered bundled notice'
+  Remove-Item -LiteralPath (Join-Path $fixture 'licenses/NOTICES-WPF.txt')
+  Expect-Rejection { & "$PSScriptRoot/verify-notices.ps1" -Root $fixture } 'Missing or altered bundled notice'
+  Write-Output 'PASS: five signing/package guards and valid/altered/missing notice checks.'
 } finally {
   Set-Location -LiteralPath $projectRoot
   $resolvedFixture = [IO.Path]::GetFullPath($fixture)

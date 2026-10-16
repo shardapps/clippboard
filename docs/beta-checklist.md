@@ -28,7 +28,7 @@ Local checks currently cover 478 assertions; focused PRs must also finish full C
 - [ ] Final candidate CI: warnings-as-errors, locked restore/audit, full storage/format/WPF checks and corrupt/oversize/cancellation regressions.
 - [ ] Repeated hardware/default and software lifecycle plus precision scrolling, with private memory, CPU and callback-gap reports.
 - [ ] Real isolated capture/hotkey/reversal/restore/paste, image/HTML/file formats, burst, restart and sustained idle.
-- [ ] Published 0.5.1-source installer baseline → candidate upgrade, encrypted bytes/preferences/stars/file-reference preservation, reinstall, preview and uninstall.
+- [ ] Published 0.5.1 installer baseline → candidate upgrade, encrypted bytes/preferences/stars/file-reference preservation, reinstall, preview and uninstall.
 - [ ] Candidate portable/setup/MSIX version/resource/identity checks, notices and SHA-256 manifests; draft assets match the tested head.
 
 ## Release acceptance still requiring device/Store evidence

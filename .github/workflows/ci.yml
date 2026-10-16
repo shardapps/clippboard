@@ -162,27 +162,17 @@ jobs:
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: validation-input
-      - name: Build pinned public 0.5.1 upgrade baseline
-        timeout-minutes: 4
+      - name: Fetch published 0.5.1 upgrade baseline
+        timeout-minutes: 3
         run: |
-          $projectPath = (Get-Location).Path
-          $baseline = Join-Path $projectPath '.cache/upgrade-baseline'
-          New-Item -ItemType Directory -Force .cache | Out-Null
-          git fetch --no-tags --depth=1 origin d368f3e5afcced6016b3c32f294cc85d656e5217
-          if ($LASTEXITCODE -ne 0) { throw 'Pinned upgrade source fetch failed.' }
-          git archive --format=zip -o .cache/upgrade-source.zip d368f3e5afcced6016b3c32f294cc85d656e5217
-          if ($LASTEXITCODE -ne 0) { throw 'Pinned upgrade source archive failed.' }
-          Expand-Archive -LiteralPath .cache/upgrade-source.zip -DestinationPath $baseline
-          try {
-            & "$baseline/scripts/dev.ps1" publish
-            & "$baseline/scripts/package.ps1" -SkipPublish
-          } finally { Set-Location -LiteralPath $projectPath }
+          New-Item -ItemType Directory -Force .cache/upgrade-baseline | Out-Null
+          $installer = Join-Path (Get-Location) '.cache/upgrade-baseline/Clippboard-Setup-0.5.1.exe'
+          Invoke-WebRequest -Uri 'https://github.com/shardapps/clippboard/releases/download/v0.5.1/Clippboard-Setup-0.5.1.exe' -OutFile $installer -TimeoutSec 90 -MaximumRetryCount 1 -RetryIntervalSec 3
+          if ((Get-FileHash -LiteralPath $installer).Hash -ne 'a1cc196d5eac7443f47f5b4ff98ab83f703aad1d187cede930be9521546960aa') { throw 'Published upgrade baseline checksum mismatch.' }
       - name: Isolated upgrade, reinstall, native preview and uninstall
         timeout-minutes: 4
         run: |
-          $baseline = Join-Path (Get-Location) '.cache/upgrade-baseline'
-          $installer = Join-Path $baseline 'artifacts/installer/Clippboard-Setup-0.5.1.exe'
-          ./scripts/test-installer.ps1 -PreviousInstaller $installer -PreviousInstallerSHA256 (Get-FileHash -LiteralPath $installer).Hash
+          ./scripts/test-installer.ps1 -PreviousInstaller '.cache/upgrade-baseline/Clippboard-Setup-0.5.1.exe' -PreviousInstallerSHA256 'a1cc196d5eac7443f47f5b4ff98ab83f703aad1d187cede930be9521546960aa'
       - name: Preserve reports even on failure
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

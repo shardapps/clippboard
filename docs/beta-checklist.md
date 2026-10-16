@@ -21,15 +21,15 @@ The owner authorized this work on October 13, 2026. The source is being prepared
 - [x] Unicode grapheme boundaries for newly generated text/file previews (#44).
 - [x] Current servicing floor, NuGet graph audit and verified embedded/distributed third-party notices (#41).
 
-Local checks currently cover 478 assertions; focused PRs must also finish full CI at their exact heads. The [performance report](performance.md), [resource audit](resource-ownership.md), [dependency review](dependency-audit.md) and feature guides explain what was measured and what was not. The metadata comparison is an in-memory allocation experiment, not an installed search/IPC benchmark or a paging implementation.
+Local checks cover 478 assertions; the candidate passed 499 assertions on isolated Windows CI, including the additional runner-only checks. See the [candidate evidence](beta-validation.md) for the exact tested commits and limits. The [performance report](performance.md), [resource audit](resource-ownership.md), [dependency review](dependency-audit.md) and feature guides explain what was measured and what was not. The metadata comparison is an in-memory allocation experiment, not an installed search/IPC benchmark or a paging implementation.
 
 ## Candidate automation gates
 
-- [ ] Final candidate CI: warnings-as-errors, locked restore/audit, full storage/format/WPF checks and corrupt/oversize/cancellation regressions.
-- [ ] Repeated hardware/default and software lifecycle plus precision scrolling, with private memory, CPU and callback-gap reports.
-- [ ] Real isolated capture/hotkey/reversal/restore/paste, image/HTML/file formats, burst, restart and sustained idle.
-- [ ] Published 0.5.1 installer baseline → candidate upgrade, encrypted bytes/preferences/stars/file-reference preservation, reinstall, preview and uninstall.
-- [ ] Candidate portable/setup/MSIX version/resource/identity checks, notices and SHA-256 manifests; draft assets match the tested head.
+- [x] Final candidate CI: warnings-as-errors, locked restore/audit, full storage/format/WPF checks and corrupt/oversize/cancellation regressions.
+- [x] Repeated hardware/default and software lifecycle plus precision scrolling, with private memory, CPU and callback-gap reports.
+- [x] Real isolated capture/hotkey/reversal/restore/paste, image/HTML/file formats, burst, restart and sustained idle.
+- [x] Published 0.5.1 installer baseline → candidate upgrade, encrypted bytes/preferences/stars/file-reference preservation, reinstall, preview and uninstall.
+- [x] Candidate portable/setup/MSIX version/resource/identity checks, notices and SHA-256 manifests; tested binaries match the recorded source tree. Versioned ZIP/setup/checksum/provenance assembly is a required final CI step; no public beta release is made.
 
 ## Release acceptance still requiring device/Store evidence
 

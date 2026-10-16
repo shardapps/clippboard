@@ -23,7 +23,7 @@ public partial class App
         _sessionLocked = locked;
         if (locked)
         {
-            _clipboard.SessionLocked = true; _captureLease.Cancel(); _closeOverlay = true;
+            _clipboard.SessionLocked = true; _transfers?.Cancel(); _captureLease.Cancel(); _closeOverlay = true;
             if (_settings.ClearOnLock) _lockCleanup = ClearLockedHistoryAsync();
             ++_historyVersion;
         }

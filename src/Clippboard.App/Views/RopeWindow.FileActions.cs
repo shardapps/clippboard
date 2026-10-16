@@ -55,7 +55,7 @@ public partial class RopeWindow
             _externalDialog = true; bool? chosen;
             try { chosen = dialog.ShowDialog(this); } finally { _externalDialog = false; }
             if (chosen != true || Retired || _closing) return;
-            var destination = await Task.Run(() => FileActions.DestinationState(dialog.FileName), cancellation);
+            var destination = await FileActions.Revisions.ReadAsync(dialog.FileName, cancellation);
             clip = await Task.Run(() => _store.GetAsync(id));
             cancellation.ThrowIfCancellationRequested();
             if (clip?.Kind != ClipKind.Image || clip.ImagePng is null) throw new IOException("This image expired or was deleted.");

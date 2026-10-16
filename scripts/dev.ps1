@@ -1,6 +1,6 @@
 param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','format')][string]$Task = 'build',
   [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
-  [switch]$Settings, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [switch]$Ocr, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly, [switch]$BuildDiagnostics)
+  [switch]$Settings, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [switch]$Ocr, [switch]$Backup, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly, [switch]$BuildDiagnostics)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
@@ -41,6 +41,7 @@ switch ($Task) {
     if ($Snippet) { $previewArgs += '--snippet' }
     if ($Combine) { $previewArgs += '--combination' }
     if ($Ocr) { $previewArgs += '--ocr' }
+    if ($Backup) { $previewArgs += '--backup' }
     if ($Measure) { $previewArgs += @('--measure', (Join-Path $projectRoot 'artifacts/performance.json')) }
     & $dotnetPath run --project src/Clippboard.App -c Release -p:UseAppHost=false -- @previewArgs
   }

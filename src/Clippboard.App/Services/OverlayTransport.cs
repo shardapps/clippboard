@@ -13,10 +13,11 @@ using Clippboard.Core;
 namespace Clippboard.App.Services;
 
 internal sealed record OverlayRequest(string Command, string? Id = null, bool Flag = false, AppSettings? Settings = null,
-    string? Query = null, IReadOnlyList<string>? Ids = null, string? Text = null, string? Title = null, string[]? Labels = null);
+    string? Query = null, IReadOnlyList<string>? Ids = null, string? Text = null, string? Title = null, string[]? Labels = null,
+    string? Path = null, byte[]? Secret = null, FileActions.DestinationRevision? Destination = null);
 internal sealed record OverlayReply(string? Error = null, AppSettings? Settings = null, long Target = 0, long Version = 0, bool Close = false,
     bool StartupAvailable = true, IReadOnlyList<ClipSummary>? Entries = null, Clip? Clip = null, bool Demo = false, int ListenerProcess = 0, bool Standby = false,
-    IReadOnlyList<string>? Matches = null, bool CaptureSuspended = false, bool Saved = false);
+    IReadOnlyList<string>? Matches = null, bool CaptureSuspended = false, bool Saved = false, BackupState? Transfer = null);
 
 internal static class OverlayTransport
 {
@@ -111,7 +112,7 @@ internal static class OverlayTransport
     }
 }
 
-internal sealed class OverlayClient(string pipeName) : IHistoryAccess, IDisposable
+internal sealed class OverlayClient(string pipeName) : IHistoryAccess, IHistoryTransfer, IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
@@ -142,6 +143,14 @@ internal sealed class OverlayClient(string pipeName) : IHistoryAccess, IDisposab
     public async Task ClearAsync() => await CallAsync(new("clear"));
     public async Task<bool> SaveSnippetAsync(string? id, string text, string title, string[] labels, CancellationToken cancellation = default)
         => (await CallAsync(new("save-snippet", Id: id, Text: text, Title: title, Labels: labels), cancellation)).Saved;
+    public async Task<BackupState> BeginTransferAsync(string id, bool importing, string path, byte[] password, FileActions.DestinationRevision? expected, CancellationToken cancellation)
+        => (await CallAsync(new(importing ? "transfer-import" : "transfer-export", Id: id, Path: path, Secret: password, Destination: expected), cancellation)).Transfer
+            ?? throw new IOException("Transfer did not start.");
+    public async Task<BackupState?> TransferStateAsync(string id, CancellationToken cancellation)
+        => (await CallAsync(new("transfer-state", Id: id), cancellation)).Transfer;
+    public async Task<BackupState> CommitTransferAsync(string id, CancellationToken cancellation)
+        => (await CallAsync(new("transfer-commit", Id: id), cancellation)).Transfer ?? throw new IOException("Restore could not start.");
+    public async Task CancelTransferAsync(string id) => _ = await CallAsync(new("transfer-cancel", Id: id));
     public void Dispose() { _lifetime.Cancel(); _lifetime.Dispose(); }
 }
 
@@ -164,6 +173,7 @@ internal sealed class OverlayServer(Func<OverlayRequest, Task<OverlayReply>> han
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or CryptographicException
                     or NotSupportedException or FormatException or System.Runtime.InteropServices.COMException)
                 { reply = new(Error: "Could not complete this action. Check the original item and try again."); }
+                finally { if (request.Secret is byte[] secret) CryptographicOperations.ZeroMemory(secret); }
                 try { await OverlayTransport.WriteReplyAsync(pipe, reply, OverlayTransport.ReplyLimit, deadline.Token); }
                 finally { if (reply.Clip?.ImagePng is byte[] png) CryptographicOperations.ZeroMemory(png); }
             }

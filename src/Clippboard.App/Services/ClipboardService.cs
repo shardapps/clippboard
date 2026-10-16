@@ -32,7 +32,8 @@ internal sealed class ClipboardService : IDisposable
         get => _sessionLocked;
         set { if (_sessionLocked == value) return; _sessionLocked = value; ++_sessionEpoch; }
     }
-    private bool CaptureBlocked => Paused || SessionLocked || Settings.IsCapturePaused;
+    internal Func<bool>? CaptureHold { get; set; }
+    private bool CaptureBlocked => Paused || SessionLocked || Settings.IsCapturePaused || CaptureHold?.Invoke() == true;
     private bool SourceAllowed()
     {
         if (Settings.ExcludedApps.Length == 0) return true;

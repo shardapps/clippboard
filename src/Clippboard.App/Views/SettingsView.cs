@@ -20,6 +20,7 @@ internal sealed class SettingsView : UserControl
     public event Action<AppSettings>? AppearancePreview;
     public event Action? Dismissed;
     public event Func<Task>? ClearRequested;
+    public event Action<bool>? TransferRequested;
     internal AppSettings Draft => _draft;
 
     public SettingsView(AppSettings settings, bool startupAvailable)
@@ -93,6 +94,10 @@ internal sealed class SettingsView : UserControl
             Toggle("Prepare faster opening", _draft.FastOpen, v => _draft = _draft with { FastOpen = v });
             Hint("Prepares the overlay runtime without notes, windows or a graphics surface when RAM permits. Uses some extra idle RAM; turns off automatically under memory pressure. Save to apply.");
             Hint("Only short history summaries remain while hidden. Images load when needed and the preview cache clears on close. Lower limits can remove older unstarred notes.");
+            var transfers = new WrapPanel { Margin = new Thickness(0, 8, 0, 8) };
+            var export = new Button { Content = "Encrypted backup…" }; export.Click += (_, _) => TransferRequested?.Invoke(false); transfers.Children.Add(export);
+            var import = new Button { Content = "Restore backup…" }; import.Click += (_, _) => TransferRequested?.Invoke(true); transfers.Children.Add(import); _content.Children.Add(transfers);
+            Hint("Portable backups use your passphrase. You review imports before restoring; original file contents and startup settings are not transferred.");
             var clear = new Button { Content = "Clear clipboard history…", Margin = new Thickness(0, 18, 0, 0) }; var confirmed = false;
             clear.Click += async (_, _) =>
             {

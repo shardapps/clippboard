@@ -11,6 +11,7 @@ internal sealed class FileActionException(string message) : IOException(message)
 
 internal static class FileActions
 {
+    internal static readonly DestinationProbe Revisions = new();
     internal sealed record DestinationRevision(bool Exists, long Length, long ModifiedTicks);
     internal static DestinationRevision DestinationState(string path)
     {

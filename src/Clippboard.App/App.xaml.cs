@@ -81,7 +81,7 @@ public partial class App : Application
             _store = new HistoryStore(Path.Combine(root, "history"), new WindowsProtector(), _settings.HistoryLimits(), PreviewCache.EncodeThumbnail);
             await Task.Run(() => _store.InitializeAsync());
 
-            _clipboard = new ClipboardService(SaveAsync, _settings.Shortcut) { Settings = _settings, Paused = _settings.CapturePaused };
+            _clipboard = new ClipboardService(SaveAsync, _settings.Shortcut) { Settings = _settings, Paused = _settings.CapturePaused, CaptureHold = () => _transfers?.HoldsCapture == true };
             try { SystemEvents.SessionSwitch += OnSessionSwitch; }
             catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.ExternalException)
             { _sessionWatchAvailable = false; _clipboard.Paused |= _settings.ClearOnLock; }
@@ -101,7 +101,7 @@ public partial class App : Application
             };
             _maintenance.Start();
             _standbyMaintenance = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(5) };
-            _standbyMaintenance.Tick += (_, _) => { RefreshTimedPause(); MaintainStandby(); };
+            _standbyMaintenance.Tick += (_, _) => { RefreshTimedPause(); _transfers?.Expire(); MaintainStandby(); };
             _standbyMaintenance.Start();
             if (!_clipboard.HotkeyAvailable) Notify(SettingsView.ShortcutLabel(_settings.Shortcut) + " is used by another app. Open Clippboard from its tray icon.");
             if (_store.UnreadableEntries > 0) Notify($"Removed {_store.UnreadableEntries} damaged or unreadable history entries.");
@@ -178,7 +178,7 @@ public partial class App : Application
             session.Process.Exited += (_, _) => Dispatcher.BeginInvoke(new Action(() =>
             {
                 if (!ReferenceEquals(_overlay, session)) return;
-                var failed = session.Process.ExitCode != 0 && session.OpenRequested; _overlay = null; _foreground.OverlayProcessId = 0; session.Dispose();
+                var failed = session.Process.ExitCode != 0 && session.OpenRequested; _overlay = null; _foreground.OverlayProcessId = 0; _transfers?.Cancel(); session.Dispose();
                 if (failed) Notify("The rope closed unexpectedly. Your saved history is safe; open it again.");
                 if (!failed && !_exiting) Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(MaintainStandby));
             }));
@@ -308,6 +308,7 @@ public partial class App : Application
                 Text = "Hi there,\n\nThanks for sharing this. I'll take a look and get back to you shortly.\n\nBest wishes" }.Summary(0));
         if (args.Contains("--combination")) await _rope.PreviewCombinationAsync();
         if (args.Contains("--ocr")) await _rope.PreviewOcrAsync();
+        if (args.Contains("--backup")) _rope.PreviewBackup();
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
         _rope.UpdateLayout();
         SavePreview(output);
@@ -345,6 +346,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _exiting = true; _standbyMaintenance?.Stop();
+        _transfers?.Dispose();
         SystemEvents.SessionSwitch -= OnSessionSwitch;
         _captureLease.Cancel(); _captureLease.Dispose();
         _overlay?.Dispose(); _maintenance?.Stop(); _clipboard?.Dispose(); _foreground?.Dispose();

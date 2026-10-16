@@ -12,7 +12,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: windows-${{ github.ref }}
+  group: store-layout-comparison-${{ github.run_id }}
   cancel-in-progress: true
 
 env:

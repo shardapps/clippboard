@@ -122,9 +122,13 @@ After the .NET 10.0.13 update, eight disposable-process cycles per mode used 1,0
 
 Four subsequent sustained precision-scroll/reversal cycles recorded default-mode P95 rendering-callback gaps of **18–24 ms** and **1.5–3.3 CPU seconds** per workload. Software mode used **24–42 ms** and **3.6–5.1 CPU seconds**, with more long gaps in one cycle. Callback intervals are not physical presentation FPS. The existing software-rendering preference remains available to trade memory against CPU/motion; these results do not justify switching every device to software by default.
 
+<<<<<<< HEAD
 `./scripts/dev.ps1 lifecycle` now records child/combined private peaks separately from working sets. `./scripts/dev.ps1 diagnostics -ScrollOnly -Software` now correctly applies and reports the requested renderer; the previous scroll-only diagnostic had ignored that flag. Ordinary software-mode app launches were unaffected by that diagnostic bug.
 ### Bounded metadata representation
 
 `./scripts/dev.ps1 metadata` constructs 1,000 synthetic maximum-length summaries (320-unit previews, titles and eight labels) without history, payloads or a window. On .NET 10.0.13, construction allocated 2,840,200 managed bytes and JSON metadata was 882,901 bytes. One thousand former sort/materialize operations allocated 37,474,704 bytes; reusing one prebuilt read-only snapshot allocated zero bytes in that comparison. This excludes expiry checks, storage, IPC, UI/native memory and does not measure retained heap or installed search latency.
 
 The current bounded snapshot is kept rather than adding a paging protocol: full-text/filter logic needs the catalog, the supported maximum is 1,000 entries, and payloads remain separate. The actual store has regression checks for read-only snapshot reuse and invalidation. A future increase beyond that limit would require revisiting paging/index design rather than simply raising the limit.
+=======
+`./scripts/dev.ps1 lifecycle` now records child/combined private peaks separately from working sets. `./scripts/dev.ps1 diagnostics -ScrollOnly -Software` now correctly applies and reports the requested renderer; the previous scroll-only diagnostic had ignored that flag. Ordinary software-mode app launches were unaffected by that diagnostic bug.
+>>>>>>> origin/main

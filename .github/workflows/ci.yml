@@ -46,6 +46,8 @@ jobs:
         run: ./scripts/test-packaging-guards.ps1
       - name: Publish portable executable
         run: ./scripts/dev.ps1 publish
+      - name: Publish normal-code control for same-runner startup comparison
+        run: dotnet publish src/Clippboard.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:ClippboardPublishProfile=bundle -p:RestoreLockedMode=true -p:PublishReadyToRun=false -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/portable-baseline/win-x64
       - name: Build per-user installer
         run: ./scripts/package.ps1 -SkipPublish
       - name: Verify checksums and signature metadata
@@ -62,6 +64,7 @@ jobs:
             tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/*.json
             tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/licenses/**
             artifacts/portable/win-x64/**
+            artifacts/portable-baseline/win-x64/**
             artifacts/installer/*.exe
             artifacts/build-info.json
             artifacts/SHA256SUMS.txt
@@ -91,6 +94,8 @@ jobs:
           $app = './artifacts/portable/win-x64/Clippboard.exe'
           & $app --diagnostics artifacts/motion-diagnostics.json --scroll-only
           if ($LASTEXITCODE -ne 0) { throw 'Scroll profile failed.' }
+          & './artifacts/portable-baseline/win-x64/Clippboard.exe' --lifecycle-diagnostics artifacts/overlay-lifecycle-baseline-default.json
+          if ($LASTEXITCODE -ne 0) { throw 'Normal-code control lifecycle failed.' }
           & $app --metadata-diagnostics artifacts/metadata-diagnostics.json
           if ($LASTEXITCODE -ne 0) { throw 'Metadata profile failed.' }
           & $app --lifecycle-diagnostics artifacts/overlay-lifecycle-hardware.json

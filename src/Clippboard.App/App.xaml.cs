@@ -52,6 +52,8 @@ public partial class App : Application
                 Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Clippboard;component/Design/Controls.xaml", UriKind.Relative) });
             var lifecycleIndex = Array.IndexOf(e.Args, "--lifecycle-diagnostics");
             if (lifecycleIndex >= 0) { if (lifecycleIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await OverlayDiagnostics.RunAsync(e.Args[lifecycleIndex + 1], e.Args.Contains("--software")); Shutdown(); return; }
+            var decodeIndex = Array.IndexOf(e.Args, "--decode-diagnostics");
+            if (decodeIndex >= 0) { if (decodeIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await PerformanceDiagnostics.RunDecodeAsync(e.Args[decodeIndex + 1]); Shutdown(); return; }
             var overlayIndex = Array.IndexOf(e.Args, "--overlay");
             if (overlayIndex >= 0) { if (overlayIndex + 1 >= e.Args.Length) throw new ArgumentException("Overlay session required."); await RunOverlayAsync(e.Args[overlayIndex + 1], e.Args.Contains("--software")); return; }
             _development = e.Args.Contains("--dev");

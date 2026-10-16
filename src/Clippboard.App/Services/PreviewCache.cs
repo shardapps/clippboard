@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Windows.Media;
 using Clippboard.Core;
@@ -77,10 +78,16 @@ internal sealed class PreviewCache(IHistoryAccess store)
         // BitmapImage retains StreamSource even with OnLoad. Copy only decoded
         // pixels into an independent source so LRU entries cannot retain full PNGs.
         BitmapSource source = bitmap.Format == PixelFormats.Bgra32 ? bitmap : new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
-        var stride = checked(source.PixelWidth * 4);
-        var pixels = new byte[checked(stride * source.PixelHeight)]; source.CopyPixels(pixels, stride, 0);
-        var detached = BitmapSource.Create(source.PixelWidth, source.PixelHeight, source.DpiX, source.DpiY, PixelFormats.Bgra32, null, pixels, stride);
-        System.Security.Cryptography.CryptographicOperations.ZeroMemory(pixels);
+        var detached = new WriteableBitmap(source.PixelWidth, source.PixelHeight, source.DpiX, source.DpiY, PixelFormats.Bgra32, null);
+        detached.Lock();
+        try
+        {
+            // Copy directly between native image buffers. A full-size managed
+            // pixel array would duplicate up to 64 MB for a single allowed image.
+            source.CopyPixels(Int32Rect.Empty, detached.BackBuffer, checked(detached.BackBufferStride * source.PixelHeight), detached.BackBufferStride);
+            detached.AddDirtyRect(new Int32Rect(0, 0, source.PixelWidth, source.PixelHeight));
+        }
+        finally { detached.Unlock(); }
         detached.Freeze(); return detached;
     }
 

@@ -89,3 +89,19 @@ The next beta sends a small native visibility signal to the verified child-owned
 A second shortcut can retarget an in-progress retraction from its current position and velocity. Its canceled delay cannot later destroy the reopened surface. Ordinary outside/Escape/selection dismissal stays terminal, acknowledges the listener, and a later open request can create a new child if retirement already finished. Lock also advances the visibility revision. Reduced motion still applies without a spring.
 
 Local WPF checks cover repeated reversals, position/velocity continuity, stale close completion, actual native-message delivery and terminal dismissal. The isolated native session adds three real hotkey reversal pairs before restoring/pasting text. These checks do not prove physical frame latency, device smoothness or Store-installed behavior.
+
+## Development: full-size image copy allocation
+
+The decoder copies WIC pixels directly into a locked native bitmap and freezes the independent result. It no longer creates a full-size managed pixel array between two native buffers. PNG stream detachment, original dimensions, pixel bounds and BGRA data are preserved. Clipboard image decoding runs off the listener dispatcher; a changed clipboard or Windows lock during preparation rejects the stale restore.
+
+On one Windows 11 x64 machine with .NET 10.0.12, `./scripts/dev.ps1 decode` decoded a synthetic 2048×2048, 14,345,210-byte PNG eight times after one warmup, without a window, forced GC or working-set trim:
+
+| Measurement | Before | Native copy |
+| --- | ---: | ---: |
+| Process-wide managed allocations during eight decodes | 134,337,248 bytes | 128,184 bytes |
+| Highest sampled private bytes after a decode | 147,783,680 | 139,583,488 |
+| Mean decode time | 82.4 ms | 85.3 ms |
+
+This removes roughly 128 MiB of cumulative managed allocation in that workload. The private-byte readings are post-decode samples, not native peak memory or total-app idle RAM. The small timing difference is a tradeoff, not a speedup claim. Native image buffers and rendering remain additional costs.
+
+A separate preparation experiment eagerly resolved/sealed deferred UI styles. Four prepared-launch samples shifted from 623–692 ms to 610–689 ms while prepared private memory grew from roughly 13.3 to 14.8–14.9 MiB. The overlap and increased idle cost did not justify keeping it, so that experiment was removed. Runtime-only preparation remains adaptive and creates no hidden control tree.

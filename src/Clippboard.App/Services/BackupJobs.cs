@@ -10,7 +10,7 @@ using Clippboard.Core;
 namespace Clippboard.App.Services;
 
 internal enum BackupPhase { Exporting, Verifying, Inspecting, Ready, Restoring, Canceling, Completed, Canceled, Failed }
-internal sealed record BackupState(string Id, BackupPhase Phase, int Done = 0, int Total = 0, string? Message = null, RestorePreview? Preview = null);
+internal sealed record BackupState(string Id, BackupPhase Phase, int Done = 0, int Total = 0, string? Message = null, RestorePreview? Preview = null, string? FailureCode = null);
 internal interface IHistoryTransfer
 {
     Task<BackupState> BeginTransferAsync(string id, bool importing, string path, byte[] password, FileActions.DestinationRevision? expected, CancellationToken cancellation);
@@ -135,7 +135,7 @@ internal sealed class BackupJobs(HistoryStore history, Action changed) : IDispos
         {
             var message = ex is CryptographicException ? "The password is incorrect or the backup is damaged. Existing notes were preserved."
                 : "Could not finish this transfer. Check the backup, available history capacity, free disk space and access. Existing notes were preserved.";
-            Update(job, job.State with { Phase = BackupPhase.Failed, Message = message });
+            Update(job, job.State with { Phase = BackupPhase.Failed, Message = message, FailureCode = ex.GetType().Name + ":" + ex.HResult.ToString("X8", System.Globalization.CultureInfo.InvariantCulture) });
         }
         finally
         {

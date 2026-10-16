@@ -13,3 +13,5 @@ Use synthetic clipboard examples and redact screenshots before reporting. Securi
 ![Help with explicit diagnostics collection](assets/help-preview.png)
 
 Synthetic preview: `./scripts/dev.ps1 -Task preview -Help -Theme Cloud`.
+
+Diagnostics are a Help action; Save changes applies preferences and is not required to collect or copy the preview.

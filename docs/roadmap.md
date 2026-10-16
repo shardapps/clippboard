@@ -16,10 +16,11 @@ The next implementation and validation gates are tracked in [the beta checklist]
 
 - [ ] Iterate rope geometry, peg detail, paper appearance, hover, and motion with user feedback.
 - [x] Browse all saved notes with viewport rendering, all/starred filtering and resizable full-content views.
-- [ ] Search by content and date.
+- [x] Next-beta source: full-text/file-path search, date/type/star filters and keyboard navigation; installed acceptance remains pending.
 - [x] Persistent themes, shortcut, limits, retention, capture types, pause, ordering, size and spacing.
-- [ ] Per-application capture exclusions.
-- [ ] HTML/RTF and broader image-format preservation.
+- [x] Next-beta source: per-application exclusions, timed pause and recoverable clear-on-lock; physical session acceptance remains pending.
+- [x] Next-beta source: bounded HTML/RTF with inert previews and plain-text fallback.
+- [ ] Broader original image-format fidelity beyond normalized PNG; do not advertise unsupported clipboard formats.
 - [x] Time-bounded clipboard reads and file-location validation, with at most one blocked OS worker per operation.
 - [x] Native synthetic capture, hotkey, accepted text paste and restart persistence on an isolated Windows runner.
 - [x] Isolated rapid-copy, image/file capture, storage bounds, five-minute idle and restart persistence.
@@ -35,4 +36,6 @@ The next implementation and validation gates are tracked in [the beta checklist]
 - [x] Public GitHub 0.5.1 alpha with verified checksums, provenance, release notes and licences.
 - [ ] Store-signed installed behavior and trusted signing for the separate EXE.
 
-Later: validated ARM64 support, optional file snapshots, app exclusions/incognito capture, richer previews. No cloud/account/AI processing is planned for version one.
+Next-beta source also implements labels, editable snippets, previewed text transformations, text combinations, local Windows OCR, password-encrypted backups and reviewed diagnostics. Delivery and device/Store validation are distinguished in the [beta checklist](beta-checklist.md).
+
+Later: validated ARM64 support, optional file snapshots and richer previews. Private browser-tab detection is not promised by executable exclusion rules. No cloud/account/remote-AI processing is planned for version one.

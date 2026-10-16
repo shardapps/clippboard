@@ -1,0 +1,13 @@
+<Project>
+  <!-- Experimental application-only precompilation. Preserve the runtime/SDK
+       assemblies exactly as serviced; avoid recompiling their unused code. -->
+  <Target Name="SelectApplicationReadyToRunAssemblies"
+          AfterTargets="ComputeResolvedFilesToPublishList"
+          Condition="'$(PublishReadyToRun)' == 'true' And '$(MSBuildProjectName)' == 'Clippboard.App'">
+    <ItemGroup>
+      <PublishReadyToRunExclude Include="@(ResolvedFileToPublish->'%(Filename)%(Extension)')"
+          Condition="'%(ResolvedFileToPublish.Extension)' == '.dll' And '%(ResolvedFileToPublish.Filename)' != 'Clippboard' And '%(ResolvedFileToPublish.Filename)' != 'Clippboard.Core'" />
+    </ItemGroup>
+    <Message Importance="high" Text="ReadyToRun compiles only Clippboard.dll and Clippboard.Core.dll; framework/SDK assemblies keep their serviced images." />
+  </Target>
+</Project>

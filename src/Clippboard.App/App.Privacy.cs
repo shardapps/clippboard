@@ -15,6 +15,7 @@ public partial class App
     private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
     {
         if (e.Reason is not SessionSwitchReason.SessionLock and not SessionSwitchReason.SessionUnlock) return;
+        if (_exiting || Dispatcher.HasShutdownStarted) return;
         Dispatcher.BeginInvoke(new Action(async () => await SetSessionLockedAsync(e.Reason == SessionSwitchReason.SessionLock)));
     }
     private async Task SetSessionLockedAsync(bool locked)
@@ -23,7 +24,7 @@ public partial class App
         _sessionLocked = locked;
         if (locked)
         {
-            _clipboard.SessionLocked = true; _transfers?.Cancel(); _captureLease.Cancel(); _closeOverlay = true;
+            _clipboard.SessionLocked = true; _transfers?.Cancel(); _captureLease.Cancel(); _closeOverlay = true; ++_visibilityRevision; _overlay?.NotifyVisibility(true, _visibilityRevision);
             if (_settings.ClearOnLock) _lockCleanup = ClearLockedHistoryAsync();
             ++_historyVersion;
         }

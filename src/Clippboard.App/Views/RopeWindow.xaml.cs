@@ -43,6 +43,11 @@ public partial class RopeWindow : Window
     private CancellationTokenSource _loads = new();
     private int _renderVersion;
     private bool _closing, _starredOnly, _scrollSync;
+    private bool _reversibleClose;
+    private Task _closeTask = Task.CompletedTask;
+    private Task? _dismissNotification;
+    private CancellationTokenSource? _closeDelay;
+    internal event Func<Task>? DismissRequested;
     private readonly System.Windows.Threading.DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(160) };
     private readonly System.Windows.Threading.DispatcherTimer _memoryTimer = new(System.Windows.Threading.DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(5) };
     private string _query = "";
@@ -87,7 +92,7 @@ public partial class RopeWindow : Window
         Closed += (_, _) => { _searchLoads?.Cancel(); _searchLoads?.Dispose(); _searchLoads = null; };
         Closed += (_, _) => { _searchCache.Clear(); _searchMatches.Clear(); };
         Closed += (_, _) => { _combinationIds.Clear(); _combineLoad?.Cancel(); _combineLoad?.Dispose(); _combineLoad = null; };
-        Closed += (_, _) => { Retired = true; SmoothMotion.CancelTree(this); _searchTimer.Stop(); DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _spareCards.Clear(); _bindings.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
+        Closed += (_, _) => { _closeDelay?.Cancel(); Retired = true; SmoothMotion.CancelTree(this); _searchTimer.Stop(); DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _spareCards.Clear(); _bindings.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
     }
     public void ApplyAppearance(AppSettings settings)
     {
@@ -176,20 +181,46 @@ public partial class RopeWindow : Window
     }
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int width, int height, uint flags);
-    public async Task CloseRopeAsync()
+    public Task CloseRopeAsync() => BeginClose(false);
+    internal Task RequestRetractionAsync() => BeginClose(true);
+    private Task BeginClose(bool reversible)
     {
-        if (!IsVisible || _closing) return;
-        _closing = true; StopScroll(); _memoryTimer.Stop(); _searchTimer.Stop(); ++_renderVersion; CancelLoads();
-        DismissSettings(); DismissDetail();
-        var duration = Animated ? 650 : 1;
-        // Retarget the current entrance position/velocity; retract with the
-        // same response as opening rather than snapping up at twice the speed.
-        SmoothMotion.Move(Slide, TranslateTransform.YProperty, -Math.Max(600, Panel.ActualHeight + 24), Animated, 650);
-        await Task.Delay(duration);
-        Hide(); SmoothMotion.CancelTree(this); Notes.Children.Clear(); _cards.Clear(); _cache.Clear();
-        Slide.BeginAnimation(TranslateTransform.YProperty, null); Slide.Y = -600;
-        Rope.BeginAnimation(RopeVisual.SagProperty, null); _closing = false;
-        Close(); // Destroy the transparent native surface; the tray creates a fresh overlay on next open.
+        if (Retired || !IsVisible) return Task.CompletedTask;
+        if (_closing) { if (!reversible) { _reversibleClose = false; _ = NotifyDismissAsync(); } return _closeTask; }
+        _closing = true; _reversibleClose = reversible; _dismissNotification = null;
+        var delay = _closeDelay = new CancellationTokenSource();
+        return _closeTask = RetractAsync(delay, reversible);
+    }
+    private async Task RetractAsync(CancellationTokenSource delay, bool reversible)
+    {
+        try
+        {
+            if (!reversible) await NotifyDismissAsync();
+            if (Retired || delay.IsCancellationRequested) return;
+            StopScroll(); _memoryTimer.Stop(); _searchTimer.Stop(); ++_renderVersion; CancelLoads();
+            DismissSettings(); DismissDetail();
+            SmoothMotion.Move(Slide, TranslateTransform.YProperty, -Math.Max(600, Panel.ActualHeight + 24), Animated, 650);
+            await Task.Delay(Animated ? 650 : 1, delay.Token);
+            if (!ReferenceEquals(_closeDelay, delay) || !_closing || Retired) return;
+            if (!_reversibleClose) await NotifyDismissAsync();
+            if (Retired || delay.IsCancellationRequested) return;
+            Hide(); SmoothMotion.CancelTree(this); Notes.Children.Clear(); _cards.Clear(); _cache.Clear();
+            Slide.BeginAnimation(TranslateTransform.YProperty, null); Slide.Y = -600;
+            Rope.BeginAnimation(RopeVisual.SagProperty, null); _closing = false;
+            Close();
+        }
+        catch (OperationCanceledException) when (delay.IsCancellationRequested) { }
+        finally { if (ReferenceEquals(_closeDelay, delay)) _closeDelay = null; delay.Dispose(); }
+    }
+    private Task NotifyDismissAsync() => _dismissNotification ??= DismissRequested?.Invoke() ?? Task.CompletedTask;
+    internal async Task ResumeRequestedOpenAsync()
+    {
+        if (Retired || !_closing || !_reversibleClose) return;
+        _closeDelay?.Cancel(); _closeDelay = null; _closing = _reversibleClose = false;
+        SmoothMotion.Move(Slide, TranslateTransform.YProperty, 0, Animated, 650);
+        SmoothMotion.Move(Rope, RopeVisual.SagProperty, 24, Animated, 600, _appearance.PlayfulMotion ? .72 : 1);
+        _memoryTimer.Start(); Activate();
+        if (!_preview) await RefreshAsync(); else RenderVisible();
     }
     private void CancelLoads()
     {

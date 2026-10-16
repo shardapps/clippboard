@@ -12,6 +12,8 @@ internal sealed class OverlayProcess : IDisposable
     private readonly OverlayServer _server;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly TaskCompletionSource _activation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    internal const int VisibilityMessage = 0x8000 + 0x451;
+    private nint _surface;
     private bool _disposed;
     internal bool OpenRequested { get; private set; }
     internal Process Process { get; }
@@ -27,6 +29,18 @@ internal sealed class OverlayProcess : IDisposable
         try { Process = Process.Start(launch) ?? throw new IOException("Could not start the rope."); }
         catch { _server.Dispose(); _lifetime.Dispose(); throw; }
         if (!standby) RequestOpen();
+    }
+    internal bool SetSurface(nint surface)
+    {
+        Platform.NativeMethods.GetWindowThreadProcessId(surface, out var owner);
+        if (_disposed || surface == 0 || owner != (uint)Process.Id) return false;
+        _surface = surface; return true;
+    }
+    internal void NotifyVisibility(bool close, long revision)
+    {
+        if (!_disposed && _surface != 0) Platform.NativeMethods.PostMessage(_surface, VisibilityMessage, (nint)revision, close ? 1 : 0);
+        // The regular state reply is the fallback if posting fails or the
+        // native surface has not been created yet.
     }
     internal void RequestOpen() { OpenRequested = true; _activation.TrySetResult(); }
     internal async Task WaitForOpenAsync()

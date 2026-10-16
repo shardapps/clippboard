@@ -13,6 +13,7 @@ namespace Clippboard.App.Views;
 
 public partial class RopeWindow
 {
+    internal event Action<bool, long>? VisibilityRequested;
     private HwndSource? _inputSource;
     private bool _scrollRunning;
     private long _scrollFrameStamp, _gestureStamp;
@@ -36,6 +37,8 @@ public partial class RopeWindow
     }
     private nint OnNativeScroll(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
+        if (message == Services.OverlayProcess.VisibilityMessage && !Retired && (long)wParam >= 0 && ((long)lParam is 0 or 1))
+        { handled = true; VisibilityRequested?.Invoke(lParam != 0, (long)wParam); return 0; }
         if (message != HorizontalWheel.Message || Retired || _closing || !IsVisible || HorizontalWheel.ControlDown(wParam)
             || SidebarHost.Visibility == Visibility.Visible || DetailHost.Visibility == Visibility.Visible) return 0;
         var point = Board.PointFromScreen(new Point(HorizontalWheel.ScreenX(lParam), HorizontalWheel.ScreenY(lParam)));

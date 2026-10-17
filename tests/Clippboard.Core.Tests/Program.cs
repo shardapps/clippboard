@@ -735,16 +735,31 @@ internal static partial class Program
                 var tinyEncoder = new PngBitmapEncoder(); tinyEncoder.Frames.Add(BitmapFrame.Create(tiny));
                 using var tinyBuffer = new MemoryStream(); tinyEncoder.Save(tinyBuffer);
                 var encoded = tinyBuffer.ToArray();
+                var fullHistory = new DeferredHistory(); var fullCache = new PreviewCache(fullHistory);
+                var detailPng = tinyBuffer.ToArray();
+                fullHistory.Result.SetResult(new Clip { Kind = ClipKind.Image, ImagePng = detailPng });
+                var full = fullCache.GetDetailAsync("detail", 100, 100, CancellationToken.None); Pump(full);
+                Check(full.Result is { PixelWidth: 2, PixelHeight: 2, IsFrozen: true } && fullCache.Count == 0 && fullCache.RetainedBytes == 0 && detailPng.All(x => x == 0), "expanded image is detached, not retained in thumbnail cache, and releases original bytes");
+                var displayBounds = PreviewCache.DetailBounds(1600, 562, 1.25, 1.25);
+                Check(displayBounds == (2000, 703) && PreviewCache.DetailBounds(double.NaN, 0, 1, 1) == (1, 1)
+                    && PreviewCache.DetailBounds(double.MaxValue, 1, double.MaxValue, 1).Width == ImageLimits.MaxPixels, "expanded image bounds follow physical display pixels and reject invalid geometry");
                 deferred.Result.SetResult(new Clip { Kind = ClipKind.Image, ImagePng = encoded }); Pump(pending);
                 Check(pending.Result is not null && deferredCache.Count == 0 && encoded.All(x => x == 0), "late preview after clear cannot repopulate cache and releases encoded payload");
                 var cancelledHistory = new DeferredHistory(); var cancelledCache = new PreviewCache(cancelledHistory);
                 using var cancelledLoads = new CancellationTokenSource();
-                var queued = Enumerable.Range(0, 20).Select(i => cancelledCache.GetAsync(i.ToString(), cancelledLoads.Token)).ToArray();
+                var queued = Enumerable.Range(0, 20).Select(i => i % 2 == 0 ? cancelledCache.GetAsync(i.ToString(), cancelledLoads.Token)
+                    : cancelledCache.GetDetailAsync(i.ToString(), 2000, 1200, cancelledLoads.Token)).ToArray();
                 Pump(cancelledHistory.Started.Task.WaitAsync(TimeSpan.FromSeconds(3))); cancelledLoads.Cancel();
                 var abandoned = new byte[] { 1, 2, 3 };
                 cancelledHistory.Result.SetResult(new Clip { Kind = ClipKind.Image, ImagePng = abandoned });
                 try { Pump(Task.WhenAll(queued)); } catch (OperationCanceledException) { }
-                Check(queued.All(x => x.IsCanceled) && cancelledHistory.Calls <= 2 && abandoned.All(x => x == 0), "cancelled thumbnail queue bounds workers and wipes late payloads before decode");
+                Check(queued.All(x => x.IsCanceled) && cancelledHistory.Calls <= 2 && abandoned.All(x => x == 0), "shared thumbnail/detail admission bounds original reads and wipes late canceled payloads");
+                var failedHistory = new DeferredHistory(); var failedCache = new PreviewCache(failedHistory);
+                var invalidPng = new byte[] { 1, 2, 3 };
+                failedHistory.Result.SetResult(new Clip { Kind = ClipKind.Image, ImagePng = invalidPng });
+                var failedDecodes = Enumerable.Range(0, 5).Select(i => failedCache.GetDetailAsync(i.ToString(), 200, 200, CancellationToken.None)).ToArray();
+                try { Pump(Task.WhenAll(failedDecodes).WaitAsync(TimeSpan.FromSeconds(5))); } catch (Exception) when (failedDecodes.All(x => x.IsFaulted)) { }
+                Check(failedDecodes.All(x => x.IsFaulted) && failedHistory.Calls == 5 && invalidPng.All(x => x == 0), "invalid expanded images release admission slots and wipe payloads for subsequent requests");
                 if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true") CheckWindowsClipboard(root);
                 var close = window.CloseRopeAsync();
                 var frame = new DispatcherFrame();

@@ -85,12 +85,20 @@ public partial class RopeWindow
         Clip? loaded = null;
         try
         {
-            var clip = loaded = _preview && _previewDetail?.Id == entry.Id ? _previewDetail : await Task.Run(() => _store.GetAsync(entry.Id), cancellation);
+            var dpi = VisualTreeHelper.GetDpi(this);
+            var pixels = PreviewCache.DetailBounds(ActualWidth, AvailableHeight, dpi.DpiScaleX, dpi.DpiScaleY);
+            System.Windows.Media.Imaging.BitmapSource? image = null;
+            Clip? clip;
+            if (entry.Kind == ClipKind.Image && !_preview)
+            {
+                image = await _cache.GetDetailAsync(entry.Id, pixels.Width, pixels.Height, cancellation);
+                clip = image is null ? null : new Clip { Id = entry.Id, Kind = ClipKind.Image };
+            }
+            else clip = loaded = _preview && _previewDetail?.Id == entry.Id ? _previewDetail : await Task.Run(() => _store.GetAsync(entry.Id), cancellation);
             cancellation.ThrowIfCancellationRequested();
             if (_preview && clip is null) clip = new Clip { Id = entry.Id, Kind = entry.Kind, Text = entry.Preview, FilePaths = entry.Kind == ClipKind.Files ? entry.Preview.Split('\n') : null };
             if (clip is null) { SetStatus("This note has expired or was deleted."); DismissDetail(); return; }
-            System.Windows.Media.Imaging.BitmapSource? image = null;
-            if (clip.ImagePng is not null) image = await Task.Run(() => PreviewCache.Decode(clip.ImagePng, 1600, 1000), cancellation);
+            if (clip.ImagePng is not null) image = await Task.Run(() => PreviewCache.Decode(clip.ImagePng, pixels.Width, pixels.Height), cancellation);
             else if (_preview && _demoImages.TryGetValue(entry.Id, out var demo)) image = demo;
             cancellation.ThrowIfCancellationRequested();
             if (!IsVisible || _closing || !ReferenceEquals(_detailLoads, source)) return;

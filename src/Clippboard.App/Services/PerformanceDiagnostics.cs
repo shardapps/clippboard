@@ -63,9 +63,19 @@ internal static class PerformanceDiagnostics
                     WorkingSetAfterDecode = process.WorkingSet64, Frozen = decoded.IsFrozen, decoded.PixelWidth, decoded.PixelHeight });
                 GC.KeepAlive(decoded);
             }
-            var result = new { Scenario = "Eight full-size decodes of one synthetic 2048x2048 PNG after one warmup; no clipboard, window, forced GC or working-set trim. Post-decode samples are not native peak memory.",
-                Runtime = Environment.Version.ToString(), EncodedBytes = png.Length, DecodeAllocatedBytes = GC.GetTotalAllocatedBytes(true) - allocated,
-                ManagedBytesBefore = managedBefore, ManagedBytesAfter = GC.GetTotalMemory(false), Samples = samples };
+            var decodeAllocated = GC.GetTotalAllocatedBytes(true) - allocated; var managedAfter = GC.GetTotalMemory(false);
+            var detailSamples = new List<object>();
+            foreach (var target in new[] { (Name: "Former fixed detail", Width: 1600, Height: 1000),
+                (Name: "1600x562 overlay at 100%", Width: 1600, Height: 562),
+                (Name: "1600x562 overlay at 150%", Width: 2400, Height: 843) })
+            {
+                var decoded = PreviewCache.Decode(png, target.Width, target.Height);
+                detailSamples.Add(new { target.Name, decoded.PixelWidth, decoded.PixelHeight, DecodedPixelBytes = (long)decoded.PixelWidth * decoded.PixelHeight * 4 });
+                GC.KeepAlive(decoded);
+            }
+            var result = new { Scenario = "Eight full-size decodes of one synthetic 2048x2048 PNG after one warmup, plus former/display-sized detail comparison; no clipboard, window, forced GC or working-set trim. Post-decode samples are not native peak memory; decoded pixel bytes exclude source raster, WIC scratch and compositor allocations.",
+                Runtime = Environment.Version.ToString(), EncodedBytes = png.Length, DecodeAllocatedBytes = decodeAllocated,
+                ManagedBytesBefore = managedBefore, ManagedBytesAfter = managedAfter, Samples = samples, DetailSamples = detailSamples };
             System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); return result;
         });
         var path = Path.GetFullPath(output); Directory.CreateDirectory(Path.GetDirectoryName(path)!);

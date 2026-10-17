@@ -29,10 +29,13 @@ public partial class App
         if (initial.Demo) await client.CallAsync(new("diagnostic-renderer", Id: System.Windows.Media.RenderOptions.ProcessRenderMode.ToString()));
         if (initial.Standby)
         {
+            // Measure the cheaper runtime first. A listener that has processed
+            // large images is not a useful estimate of an empty child's cost.
+            var preparation = await client.CallAsync(new("standby-ready", Flag: Windows.Count == 0));
             // Build the empty controls before activation, without
             // creating an HWND, reading history or decoding a preview.
-            if (!runtimeOnlyPreparation) _rope = new RopeWindow(client, initial.Demo, initial.Settings) { StartupAvailable = initial.StartupAvailable };
-            await client.CallAsync(new("standby-ready", Flag: _rope is null ? Windows.Count == 0 : !_rope.IsVisible && new System.Windows.Interop.WindowInteropHelper(_rope).Handle == 0));
+            if (!runtimeOnlyPreparation && preparation.PrepareControls) _rope = new RopeWindow(client, initial.Demo, initial.Settings) { StartupAvailable = initial.StartupAvailable };
+            await client.CallAsync(new("standby-prepared", Id: _rope is null ? "runtime" : "controls", Flag: _rope is null ? Windows.Count == 0 : !_rope.IsVisible && new System.Windows.Interop.WindowInteropHelper(_rope).Handle == 0));
             do { initial = await client.CallAsync(new("wait-open")); } while (initial.Standby && !initial.Close);
             if (initial.Close) { Shutdown(); return; }
             System.Windows.Media.RenderOptions.ProcessRenderMode = initial.Settings?.LowMemoryRendering == true || software
@@ -84,7 +87,7 @@ public partial class App
             if (close) _ = _rope.RequestRetractionAsync();
             else
             {
-                try { await _rope.ResumeRequestedOpenAsync(); }
+                try { await _rope.ResumeRequestedOpenAsync(explicitRequest: true); }
                 catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException) { await _rope.CloseRopeAsync(); }
             }
         }
@@ -158,7 +161,23 @@ public partial class App
                 return new(Transfer: _transfers?.Commit(request.Id ?? "") ?? throw new InvalidOperationException("Inspect a backup first."));
             case "transfer-cancel": _transfers?.Cancel(request.Id ?? ""); return new();
             case "wait-open": if (_overlay is not null) await _overlay.WaitForOpenAsync(); goto case "init";
-            case "standby-ready": return new();
+            case "standby-ready":
+                if (_overlay is null || _overlay.OpenRequested || !request.Flag) return new();
+                _runtimePreparationBytes = MeasuredStandbyBytes();
+                using (var listener = System.Diagnostics.Process.GetCurrentProcess())
+                {
+                    _overlay.ControlsPrepared = _runtimePreparationBytes > 0 && _settings.FastOpen && MemoryAvailability.PrepareControls(MemoryAvailability.AvailableBytes(), _controlPreparationBytes, listener.PrivateMemorySize64);
+                    return new(PrepareControls: _overlay.ControlsPrepared);
+                }
+            case "standby-prepared":
+                if (_overlay is not null && !_overlay.OpenRequested && request.Flag && request.Id is "controls" or "runtime")
+                {
+                    _overlay.ControlsPrepared = request.Id == "controls";
+                    if (_overlay.ControlsPrepared) _controlPreparationBytes = Math.Max(_controlPreparationBytes, MeasuredStandbyBytes());
+                    if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true" && Environment.GetEnvironmentVariable("CLIPPBOARD_SESSION_DIAGNOSTICS") == "1")
+                        Console.Error.WriteLine($"Overlay preparation ready: {_overlay.Process.Id} {request.Id}");
+                }
+                return new();
             case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, VisibilityRevision: _visibilityRevision, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false }, CaptureSuspended: _transfers?.HoldsCapture == true || _clipboard?.SessionLocked == true || (_settings.ClearOnLock && !_sessionWatchAvailable));
             case "list": return new(Entries: await Task.Run(() => _store!.ListAsync()));
             case "search": return new(Matches: await Task.Run(() => HistorySearch.MatchBatchAsync(_store!,

@@ -6,7 +6,7 @@ Reviewed October 16, 2026. This records implementation and automated evidence, n
 | --- | --- |
 | Tray, clipboard listener and hotkeys | Listener process; disposed on application exit. The listener uses a message-only native window. |
 | Rope native surface, controls and renderer buffers | Disposable overlay process. Retirement removes hooks, rendering callbacks, static appearance events, timers and controls, then the child exits. |
-| Prepared runtime | Empty overlay controls only while idle; no native surface, history reads or image previews. Current memory headroom and measured private cost decide whether to keep preparation running. The FastOpen preference disables it. |
+| Prepared runtime | Runtime only, or empty overlay controls when affordable; no native surface, history reads or image previews. One bounded initial runtime probe learns the child's own cost. Later starts/retention and optional control preparation follow measured costs and current physical/commit headroom. The FastOpen preference disables both tiers. |
 | Session-switch subscription | Listener; unsubscribed on exit, with shutdown guards before dispatching lock work. |
 | Pipe server | One reusable worker per session. Shutdown cancels, drains the worker/callbacks, then disposes its cancellation source. Closed sessions cannot send actions to a replacement session. |
 | Restore action | Captures both session and lock leases before fetching the original. Closing/locking cancels pending work. An active WIC decode finishes before its caller can wipe the PNG; cancellation prevents the clipboard setter. File probes can abandon the caller while their single underlying OS worker remains bounded. |

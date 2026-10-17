@@ -1,4 +1,14 @@
-# 0.6.0-beta.1 candidate evidence
+# Beta candidate evidence
+
+## 0.6.0-beta.2 follow-up
+
+The next evaluation build fixes the incomplete history rail, transparent-gap dismissal, renewed foreground activation and explicit shortcut reversal during outside dismissal. WPF regressions cover layout, input routing and stale/fresh opens; isolated native CI additionally exercises six alternating gap/background dismissals and shortcut reopens before the existing capture/paste and idle soak. Publication remains held for the owner’s next installed-build review.
+
+The native surface no longer reserves closed sidebar margins across the monitor width. Panels keep the same bounded surface while open, avoiding repeated native resizes. This reduces the reserved pixel area; it is not a fixed total-process RAM reduction or an all-device memory guarantee.
+
+The opening investigation now includes the owner's exact installed beta.1 EXE, using only synthetic notes and its existing self-contained runtime cache. Four cold first-content events took **856–937 ms**, while four prepared events took **189–311 ms**. These are neither real clipboard-history timings nor physical frame presentation. The follow-up learns runtime/control preparation costs separately and can retain a cheaper runtime tier when controls exceed the headroom budget. The native CI job installs the setup at its default per-user location, verifies its executable against the portable input, waits for background preparation, and tests actual shortcuts/animated outside-dismissal reversals and graceful listener close. Cold/prepared lifecycle reporting also runs from that installed self-contained EXE. The CI-only animation helper explicitly separates reduced-motion regressions from the animated path.
+
+## 0.6.0-beta.1 historical baseline
 
 The public 0.5.1 alpha is unchanged. This is a validation candidate for Windows 11 x64, not a stable release or an all-hardware guarantee.
 

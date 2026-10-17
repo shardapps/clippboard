@@ -14,7 +14,10 @@ public partial class RopeWindow
         // Measure typography, toolbar wrapping and board geometry once before
         // creating the native surface. Its size follows content and the monitor.
         Panel.Measure(new System.Windows.Size(Width, double.PositiveInfinity));
-        _surfaceHeight = Math.Max(Panel.DesiredSize.Height + SidebarHost.Margin.Top + SidebarHost.Margin.Bottom,
+        // The sidebar has its own bounded scroll area. Its margins are not
+        // additional rope content; reserving them enlarged every compositor
+        // buffer across the full monitor width even with all panels closed.
+        _surfaceHeight = Math.Max(Panel.DesiredSize.Height,
             DetailHost.Height + DetailHost.Margin.Top + DetailHost.Margin.Bottom);
         Height = AvailableHeight;
     }

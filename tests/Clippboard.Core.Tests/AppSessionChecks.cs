@@ -39,9 +39,12 @@ internal static class AppSessionChecks
                 try
                 {
                     if (Directory.Exists(dataRoot)) throw new IOException("Session data must be fresh.");
+                    if (!SystemParameters.ClientAreaAnimation) throw new IOException("Native session CI must enable Windows client-area animations; reduced motion is tested separately.");
                     Directory.CreateDirectory(dataRoot);
                     fixture.Show(); fixture.Activate(); textbox.Focus();
                     Task? listenerReady = null;
+                    var preparedChildren = new System.Collections.Concurrent.ConcurrentQueue<(int Process, string Tier)>();
+                    var preparationTiers = new List<string>();
                     Process StartListener()
                     {
                         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -56,6 +59,12 @@ internal static class AppSessionChecks
                             if (line.Data is null) return;
                             Console.Error.WriteLine("Listener: " + line.Data);
                             if (line.Data == "Clipboard listener ready") ready.TrySetResult();
+                            const string prefix = "Overlay preparation ready: ";
+                            if (line.Data.StartsWith(prefix, StringComparison.Ordinal))
+                            {
+                                var fields = line.Data[prefix.Length..].Split(' ');
+                                if (fields.Length == 2 && int.TryParse(fields[0], out var child)) preparedChildren.Enqueue((child, fields[1]));
+                            }
                         };
                         process.BeginErrorReadLine();
                         return process;
@@ -66,7 +75,7 @@ internal static class AppSessionChecks
                     await Task.Run(() => listener.WaitForInputIdle(5000));
                     var fixtureHandle = new WindowInteropHelper(fixture).Handle;
                     var historyDirectory = Path.Combine(dataRoot, "history");
-                    var watch = Stopwatch.StartNew(); var visibleLatencies = new List<double>();
+                    var watch = Stopwatch.StartNew(); var visibleLatencies = new List<double>(); var reopenLatencies = new List<double>();
                     for (var cycle = 0; cycle < 3; cycle++)
                     {
                         var expected = $"Clippboard session {cycle + 1} — Unicode 🧵\nPakistan • synthetic fixture";
@@ -79,6 +88,10 @@ internal static class AppSessionChecks
                         else Clipboard.SetText(expected);
                         Console.WriteLine($"Fixture sequence {NativeMethods.GetClipboardSequenceNumber()}, Unicode format {Clipboard.ContainsText(TextDataFormat.UnicodeText)}");
                         await Until(() => Directory.GetFiles(Path.Combine(dataRoot, "history"), "*.meta").Length == cycle + 1, "real clipboard capture");
+                        (int Process, string Tier) prepared = default;
+                        await Until(() => preparedChildren.TryDequeue(out prepared), "installed background runtime prepared before shortcut");
+                        if (prepared.Process <= 0 || prepared.Tier is not ("controls" or "runtime")) throw new IOException("Invalid preparation acknowledgement.");
+                        preparationTiers.Add(prepared.Tier);
                         textbox.Clear(); fixture.Activate(); textbox.Focus(); NativeMethods.SetForegroundWindow(fixtureHandle);
                         if (NativeMethods.GetForegroundWindow() != fixtureHandle) throw new IOException("Fixture cannot acquire foreground; paste acceptance is untested.");
                         NativeMethods.AllowSetForegroundWindow((uint)listener.Id);
@@ -86,6 +99,8 @@ internal static class AppSessionChecks
                         var invocation = Stopwatch.StartNew(); InputChord();
                         nint overlay = 0;
                         await Until(() => (overlay = FindWindow(0, "Clippboard", visible: true)) != 0, "real overlay startup");
+                        NativeMethods.GetWindowThreadProcessId(overlay, out var activatedOwner);
+                        if (activatedOwner != prepared.Process) throw new IOException("Shortcut ignored the prepared child and cold-launched another process.");
                         visibleLatencies.Add(invocation.Elapsed.TotalMilliseconds);
                         await Task.Delay(1500);
                         if (cycle == 0)
@@ -96,6 +111,43 @@ internal static class AppSessionChecks
                             }
                             await Until(() => FindWindow(0, "Clippboard", visible: true) != 0, "rope visible after rapid shortcut reversals");
                             overlay = FindWindow(0, "Clippboard", visible: true); await Task.Delay(900);
+                            var regions = await Task.Run(() =>
+                            {
+                                var surface = AutomationElement.FromHandle(overlay);
+                                var note = surface.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "Restore Text: " + expected));
+                                if (note is null) throw new IOException("Gap fixture note is missing.");
+                                return (Surface: surface.Current.BoundingRectangle, Note: note.Current.BoundingRectangle);
+                            }).WaitAsync(TimeSpan.FromSeconds(10));
+                            if (regions.Surface.Right - regions.Note.Right < 100) throw new IOException("Fixture has no safe transparent gap.");
+                            fixture.Height = 80; fixture.Top = SystemParameters.WorkArea.Bottom - 90; fixture.UpdateLayout();
+                            var outsidePoint = textbox.PointToScreen(new Point(textbox.ActualWidth / 2, textbox.ActualHeight / 2));
+                            if (regions.Surface.Contains(outsidePoint)) throw new IOException("Fixture background click would overlap the rope.");
+                            for (var retry = 0; retry < 6; retry++)
+                            {
+                                if (retry % 2 == 0)
+                                    ClickAt((regions.Surface.Right + regions.Note.Right) / 2, regions.Note.Top + regions.Note.Height / 2);
+                                else
+                                {
+                                    ClickAt(outsidePoint.X, outsidePoint.Y);
+                                    await Until(() => NativeMethods.GetForegroundWindow() == fixtureHandle, "background fixture click acquired foreground");
+                                }
+                                await Task.Delay(100); // Reopen while the normal dismissal is still animating.
+                                if (SystemParameters.ClientAreaAnimation)
+                                {
+                                    var state = await Task.Run(() => AutomationElement.FromHandle(overlay).Current.ItemStatus).WaitAsync(TimeSpan.FromSeconds(3));
+                                    if (state != "Retracting") throw new IOException("Outside press did not start overlay dismissal.");
+                                }
+                                var reopen = Stopwatch.StartNew(); InputChord();
+                                var priorOverlay = overlay;
+                                NativeMethods.GetWindowThreadProcessId(priorOverlay, out var priorOwner);
+                                await Until(() => (overlay = FindWindow(0, "Clippboard", visible: true)) != 0 && NativeMethods.GetForegroundWindow() == overlay, "foreground reopen after outside dismissal");
+                                reopenLatencies.Add(reopen.Elapsed.TotalMilliseconds);
+                                await Task.Delay(750);
+                                if (!NativeMethods.IsWindow(overlay) || !IsWindowVisible(overlay)) throw new IOException("Canceled outside dismissal destroyed the reopened surface.");
+                                if (SystemParameters.ClientAreaAnimation && overlay != priorOverlay) throw new IOException("Fresh shortcut did not reverse the live dismissal.");
+                                NativeMethods.GetWindowThreadProcessId(overlay, out var reopenedOwner);
+                                if (reopenedOwner != priorOwner) throw new IOException("A fresh shortcut replaced the child instead of reversing the live dismissal.");
+                            }
                         }
                         await Task.Run(() =>
                         {
@@ -150,8 +202,12 @@ internal static class AppSessionChecks
                     await listenerReady!.WaitAsync(TimeSpan.FromSeconds(15));
                     if (FixturePayloads(historyDirectory).Count() != persisted) throw new IOException("History did not persist through restart.");
                     await Task.Delay(10000); listener.Refresh();
+                    var restartedPrivate = listener.PrivateMemorySize64; var restartedWorking = listener.WorkingSet64;
+                    if (!NativeMethods.PostMessage(FindOwnedMessageWindow(listener.Id, "Clippboard listener"), 0x0010, 0, 0)) throw new IOException("Could not request graceful installed-listener shutdown.");
+                    await listener.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+                    if (listener.ExitCode != 0) throw new IOException("Installed listener failed graceful window-close shutdown.");
                     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
-                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, RapidShortcutReversals = 3, HotkeyToVisibleWindowMs = visibleLatencies, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
+                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; six gap/background dismissal reopens; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, WindowsClientAreaAnimations = SystemParameters.ClientAreaAnimation, PreparationTiers = preparationTiers, RapidShortcutReversals = 3, OutsideDismissReopens = reopenLatencies.Count, OutsideDismissReopenMs = reopenLatencies, HotkeyToVisibleWindowMs = visibleLatencies, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = restartedWorking, PrivateBytes = restartedPrivate, GracefulWindowClosePassed = true, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
                     Console.WriteLine("PASS: native capture/paste, bursts, large images, file reference, bounded history, five-minute idle without crash, and restart persistence.");
                     result.TrySetResult(0);
                 }
@@ -222,6 +278,13 @@ internal static class AppSessionChecks
         NativeMethods.Input[] inputs = [Key(0x11,0),Key(0x10,0),Key(0x56,0),Key(0x56,2),Key(0x10,2),Key(0x11,2)];
         if (NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.Input>()) != inputs.Length) throw new IOException("Windows rejected the fixture hotkey.");
     }
+    private static void ClickAt(double x, double y)
+    {
+        if (!SetCursorPos((int)x, (int)y)) throw new IOException("Could not position the isolated fixture pointer.");
+        NativeMethods.Input Mouse(uint flags) => new() { Type = 0, Data = new NativeMethods.InputUnion { Mouse = new NativeMethods.MouseInput { Flags = flags } } };
+        NativeMethods.Input[] inputs = [Mouse(0x0002), Mouse(0x0004)];
+        if (NativeMethods.SendInput(2, inputs, Marshal.SizeOf<NativeMethods.Input>()) != 2) throw new IOException("Windows rejected the fixture click.");
+    }
     private static nint FindWindow(int process, string title, bool visible)
     {
         nint found = 0;
@@ -249,4 +312,5 @@ internal static class AppSessionChecks
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowProc callback, nint parameter);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(nint window, StringBuilder text, int maximum);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(nint window);
+    [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
 }

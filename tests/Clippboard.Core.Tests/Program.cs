@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Clippboard.App.Services;
@@ -298,6 +299,14 @@ internal static partial class Program
             Check(!MemoryAvailability.KeepStandby(-1, 10, false) && !MemoryAvailability.KeepStandby(0, 10, true), "unknown or exhausted memory never creates a standby overlay");
             Check(MemoryAvailability.KeepStandby(10000, 150, true) && !MemoryAvailability.KeepStandby(10000, 150, false), "standby memory pressure thresholds have hysteresis");
             Check(!MemoryAvailability.KeepStandby(10000, 250, true), "standby released when its measured private bytes exceed headroom");
+            Check(MemoryAvailability.StartStandby(10000, 0, 1000) && !MemoryAvailability.StartStandby(10000, 0, 1500)
+                && !MemoryAvailability.StartStandby(-1, 0, 1), "first runtime probe requires known headroom and a bounded bootstrap estimate");
+            Check(MemoryAvailability.StartStandby(10000, 100, 1000) && !MemoryAvailability.StartStandby(10000, 150, 1),
+                "later standby starts use measured child cost rather than listener cost or a fresh relaxed probe");
+            Check(!MemoryAvailability.PrepareControls(10000, 0, 1000) && MemoryAvailability.StartStandby(10000, 100, 1000),
+                "lower-memory runtime preparation survives when full controls cannot fit the budget");
+            Check(MemoryAvailability.PrepareControls(10000, 100, 1000) && !MemoryAvailability.PrepareControls(10000, 201, 1),
+                "control preparation follows actual learned cost after the initial estimate");
             await File.WriteAllTextAsync(settingsFile, "broken json");
             Check((await settingsStore.LoadAsync()).RetentionDays == 30, "settings corruption fallback");
             Check(!new AppSettings { CaptureImages = false }.Captures(ClipKind.Image), "format opt out");
@@ -518,6 +527,13 @@ internal static partial class Program
                 navigation.ApplyTemplate();
                 var navigationTrack = (System.Windows.Controls.Primitives.Track)navigation.Template.FindName("PART_Track", navigation);
                 Check(navigationTrack.Thumb.ActualWidth >= 32, "1000-note navigation retains a usable thumb width");
+                var navigationFrame = (System.Windows.Controls.Border)window.FindName("Navigation");
+                navigationFrame.Width = 600; window.UpdateLayout();
+                var navigationGrid = (System.Windows.Controls.Grid)navigationFrame.Child;
+                var lastArrow = (System.Windows.FrameworkElement)navigationGrid.Children[2];
+                Check(navigation.ActualWidth > navigation.MinWidth && Math.Abs(lastArrow.TranslatePoint(new Point(lastArrow.ActualWidth, 0), navigationFrame).X + lastArrow.Margin.Right - (navigationFrame.ActualWidth - navigationFrame.Padding.Right - navigationFrame.BorderThickness.Right)) < 1,
+                    $"history rail fills navigation pill (rail={navigation.ActualWidth}, min={navigation.MinWidth}, frame={navigationFrame.ActualWidth}, arrowRight={lastArrow.TranslatePoint(new Point(lastArrow.ActualWidth, 0), navigationFrame).X}, margin={lastArrow.Margin.Right}, padding={navigationFrame.Padding.Right})");
+                navigationFrame.Width = double.NaN; window.UpdateLayout();
                 var scroll = (System.Windows.Controls.ScrollViewer)window.FindName("NoteScroll");
                 scroll.ScrollToRightEnd(); window.UpdateLayout();
                 Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
@@ -533,6 +549,11 @@ internal static partial class Program
                 scroll.ScrollToLeftEnd(); window.UpdateLayout();
                 Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var board = (System.Windows.Controls.Grid)window.FindName("Board");
+                Check(!window.IsInteractiveSource(scroll) && !window.IsInteractiveSource(notes) && !window.IsInteractiveSource(board),
+                    "transparent scroll viewport, canvas and gaps are outside interactive surfaces");
+                var paper = ((System.Windows.Controls.Grid)notes.Children[0]).Children[1];
+                Check(window.IsInteractiveSource(paper) && window.IsInteractiveSource(navigation) && window.IsInteractiveSource((DependencyObject)window.FindName("SearchBox")),
+                    "note paper, slider and toolbar remain interactive");
                 var point = board.PointToScreen(new Point(200, 100));
                 var position = (nint)(((int)point.X & 0xffff) | (((int)point.Y & 0xffff) << 16));
                 var handle = new System.Windows.Interop.WindowInteropHelper(window).Handle;
@@ -753,6 +774,19 @@ internal static partial class Program
                 var dismissals = 0; window.DismissRequested += () => { dismissals++; return Task.CompletedTask; };
                 var permanentClose = window.CloseRopeAsync(); Pump(window.ResumeRequestedOpenAsync()); Pump(permanentClose);
                 Check(window.Retired && dismissals == 1, "ordinary dismissal is acknowledged once and cannot be undone by a stale open state");
+                window = new RopeWindow(cacheStore, preview: true, settings: new AppSettings { Animate = true }) { Width = 1200, Height = 720, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };
+                window.Show(); window.RenderDemo(); window.UpdateLayout();
+                var backgroundDismissals = 0; window.DismissRequested += () => { backgroundDismissals++; return Task.CompletedTask; };
+                var gapPress = new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.PreviewMouseDownEvent };
+                ((System.Windows.Controls.ScrollViewer)window.FindName("NoteScroll")).RaiseEvent(gapPress);
+                Check(gapPress.Handled && backgroundDismissals == 1, "preview mouse route dismisses a transparent ScrollViewer gap before its class handler consumes input");
+                if (SystemParameters.ClientAreaAnimation)
+                {
+                    Pump(window.ResumeRequestedOpenAsync(explicitRequest: true)); Pump(Task.Delay(750));
+                    Check(!window.Retired && window.IsVisible && window.RenderedNoteCount > 0,
+                        "a fresh shortcut reverses ordinary outside dismissal without waiting for process replacement");
+                }
+                Pump(window.CloseRopeAsync());
                 for (var cycle = 0; cycle < 3; cycle++)
                 {
                     window = new RopeWindow(cacheStore, preview: true, settings: new AppSettings { Animate = false }) { Width = 1200, Height = 1000, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };
@@ -762,6 +796,10 @@ internal static partial class Program
                     window.DiagnosticCompactSurface(); window.UpdateLayout();
                     var compactHeight = window.ActualHeight;
                     Check(compactHeight < 1000 && compactHeight >= ((System.Windows.Controls.Grid)window.FindName("Panel")).ActualHeight, "transparent surface follows measured content rather than a hardcoded desktop size");
+                    var measuredPanel = (System.Windows.Controls.Grid)window.FindName("Panel");
+                    var sidebar = (System.Windows.Controls.Border)window.FindName("SidebarHost");
+                    Check(compactHeight < measuredPanel.DesiredSize.Height + sidebar.Margin.Top + sidebar.Margin.Bottom,
+                        "closed sidebar margins do not enlarge the monitor-wide native render surface");
                     window.OpenSettings(); window.UpdateLayout();
                     Check(window.ActualHeight == compactHeight, "settings reuses surface without retaining resize buffers");
                     Check(window.RenderedNoteCount > 0 && !window.Retired, "fresh overlay opens after retirement " + cycle);

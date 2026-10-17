@@ -43,4 +43,13 @@ internal static class MemoryAvailability
         // Measured cost rather than a fixed per-machine RAM allowance. Separate
         // start/stop thresholds prevent restarting around a pressure boundary.
         => available > 0 && measuredPrivateBytes > 0 && measuredPrivateBytes <= available / (alreadyRunning ? 50 : 75);
+    internal static bool StartStandby(long available, long measuredRuntimeBytes, long bootstrapEstimate)
+        // Probe only a runtime, never a native surface. Once its actual cost is
+        // known, all later starts use the normal, tighter retention budget.
+        => measuredRuntimeBytes > 0 ? KeepStandby(available, measuredRuntimeBytes, false)
+            : available > 0 && bootstrapEstimate > 0 && bootstrapEstimate <= available / 8;
+    internal static bool PrepareControls(long available, long measuredControlsBytes, long bootstrapEstimate)
+        // Controls expand an already-running runtime; their measured total
+        // cost must fit the retention budget, not another process-start budget.
+        => KeepStandby(available, measuredControlsBytes > 0 ? measuredControlsBytes : bootstrapEstimate, true);
 }

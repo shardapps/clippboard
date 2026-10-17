@@ -30,7 +30,7 @@ public partial class App : Application
     private Icon? _trayIcon;
     private DispatcherTimer? _maintenance;
     private DispatcherTimer? _standbyMaintenance;
-    private long _standbyPrivateBytes;
+    private long _runtimePreparationBytes, _controlPreparationBytes;
     private bool _exiting;
     private ForegroundTracker? _foreground;
     private nint _target;
@@ -91,6 +91,7 @@ public partial class App : Application
             { _sessionWatchAvailable = false; _clipboard.Paused |= _settings.ClearOnLock; }
 
             _clipboard.ToggleRequested += ToggleRope;
+            _clipboard.ExitRequested += Shutdown;
             _clipboard.Notice += Notify;
             _foreground = new ForegroundTracker();
             CreateTray();
@@ -141,10 +142,21 @@ public partial class App : Application
         if (_toggling || _selecting || _store is null || _sessionLocked) return;
         if (_overlay is not null && !_overlay.Process.HasExited)
         {
-            if (_overlay.OpenRequested) { _closeOverlay = !_closeOverlay; ++_visibilityRevision; _overlay.NotifyVisibility(_closeOverlay, _visibilityRevision); return; }
+            if (_overlay.OpenRequested)
+            {
+                // A background or already retracting rope is an open request.
+                // Grant foreground activation on every reopen, not only launch.
+                _closeOverlay = !_closeOverlay && _overlay.OwnsForeground;
+                if (!_closeOverlay)
+                {
+                    if (!_overlay.OwnsForeground) _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
+                    _overlay.AllowActivation();
+                }
+                ++_visibilityRevision; _overlay.NotifyVisibility(_closeOverlay, _visibilityRevision); return;
+            }
             _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
             _closeOverlay = false; _restoredSequence = 0;
-            NativeMethods.AllowSetForegroundWindow((uint)_overlay.Process.Id);
+            _overlay.AllowActivation();
             _overlay.RequestOpen(); return;
         }
         StartOverlay(open: true);
@@ -152,22 +164,39 @@ public partial class App : Application
     private void MaintainStandby()
     {
         if (_exiting || _toggling || _store is null || _sessionLocked || _overlay is { OpenRequested: true }) return;
-        if (_standbyPrivateBytes <= 0)
-        {
-            using var listener = Process.GetCurrentProcess(); _standbyPrivateBytes = listener.PrivateMemorySize64;
-        }
         var running = _overlay is not null && !_overlay.Process.HasExited;
+        var available = MemoryAvailability.AvailableBytes();
+        var measured = 0L;
         if (running)
         {
-            try { _overlay!.Process.Refresh(); _standbyPrivateBytes = Math.Max(_standbyPrivateBytes, _overlay.Process.PrivateMemorySize64); }
+            try
+            {
+                _overlay!.Process.Refresh(); measured = _overlay.Process.PrivateMemorySize64;
+                if (_overlay.ControlsPrepared) _controlPreparationBytes = Math.Max(_controlPreparationBytes, measured);
+                else _runtimePreparationBytes = Math.Max(_runtimePreparationBytes, measured);
+            }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { return; }
         }
-        if (!_settings.FastOpen || !MemoryAvailability.KeepStandby(MemoryAvailability.AvailableBytes(), _standbyPrivateBytes, running))
+        if (!_settings.FastOpen || running && !MemoryAvailability.KeepStandby(available, measured, true))
         {
             if (running) { var standby = _overlay!; _overlay = null; if (_foreground is not null) _foreground.OverlayProcessId = 0; standby.Dispose(); }
-            return;
+            running = false;
+            if (!_settings.FastOpen) return;
         }
-        if (!running) StartOverlay(open: false);
+        if (!running)
+        {
+            using var listener = Process.GetCurrentProcess();
+            if (MemoryAvailability.StartStandby(available, _runtimePreparationBytes, listener.PrivateMemorySize64)) StartOverlay(open: false);
+        }
+    }
+    private long MeasuredStandbyBytes()
+    {
+        try
+        {
+            if (_overlay is null || _overlay.Process.HasExited) return 0;
+            _overlay.Process.Refresh(); return _overlay.Process.PrivateMemorySize64;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { return 0; }
     }
     private void StartOverlay(bool open)
     {

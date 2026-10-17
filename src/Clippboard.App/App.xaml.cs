@@ -149,13 +149,13 @@ public partial class App : Application
                 if (!_closeOverlay)
                 {
                     if (!_overlay.OwnsForeground) _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
-                    _overlay.ActivateSurface();
+                    _overlay.AllowActivation();
                 }
                 ++_visibilityRevision; _overlay.NotifyVisibility(_closeOverlay, _visibilityRevision); return;
             }
             _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
             _closeOverlay = false; _restoredSequence = 0;
-            _overlay.ActivateSurface();
+            _overlay.AllowActivation();
             _overlay.RequestOpen(); return;
         }
         StartOverlay(open: true);

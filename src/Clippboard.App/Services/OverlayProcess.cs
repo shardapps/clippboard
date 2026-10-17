@@ -24,13 +24,13 @@ internal sealed class OverlayProcess : IDisposable
             return !_disposed && owner == (uint)Process.Id;
         }
     }
-    internal void ActivateSurface()
+    internal void AllowActivation()
     {
         if (_disposed) return;
         Platform.NativeMethods.AllowSetForegroundWindow((uint)Process.Id);
-        if (_surface == 0) return;
-        Platform.NativeMethods.GetWindowThreadProcessId(_surface, out var owner);
-        if (owner == (uint)Process.Id) Platform.NativeMethods.SetForegroundWindow(_surface);
+        // The child activates its own window after the posted visibility signal.
+        // A cross-process SetForegroundWindow here can synchronously wait on
+        // the visual thread while that thread is awaiting the listener's IPC.
     }
     internal Process Process { get; }
     internal Task ServerTask { get; }

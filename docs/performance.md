@@ -1,5 +1,13 @@
 # Motion and process memory
 
+## Expanded images — October 18, 2026
+
+Expanded images previously loaded originals and launched decoders independently of the thumbnail workers. Canceling a task cannot interrupt WIC once native decoding begins, so rapid expansion could overlap several large source rasters. Details now acquire the same memory-aware slots as thumbnails **before** reading an original. The slot remains held until the read/decode finishes; canceled queued work reads no original, and canceled results cannot replace a newer panel. Encoded originals are wiped on all completion paths. Expanded output stays outside the thumbnail LRU and is released with its panel/overlay.
+
+The former fixed 1600×1000 output bound is replaced by the overlay's maximum physical size, including DPI. Smaller displays no longer retain detail pixels beyond their possible resize area; high-DPI displays can request the pixels they need. This changes only the displayed copy: restore, PNG export and OCR still use the original. Source dimension/encoded-size/headroom checks remain. No forced collection, working-set trim, renderer-default change or animation change is involved.
+
+`scripts/dev.ps1 decode` compares the old bound and two explicit display sizes against one synthetic PNG, alongside full-size decode samples. Pixel-buffer sizes isolate this improvement; they exclude source raster, temporary WIC storage, driver/compositor allocations and other app processes. WPF hardware/software rendering retains separate buffers and tradeoffs, as described in [Microsoft's hardware performance guidance](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/advanced/optimizing-performance-taking-advantage-of-hardware). The total active RAM limitation remains open; do not convert a reduction in decoded pixels into a claimed percentage reduction in app RAM.
+
 ## Next iteration — bounded image-encoding scratch
 
 PNG capture now writes to a bounded owned memory stream. Logical writes, seek/length changes and reserve capacity cannot exceed the existing 16 MiB encoded-image ceiling. Valid header rewrites remain supported; a translated WIC limit error discards the item rather than retrying a known oversized encoding. Replaced, truncated and disposed scratch buffers are wiped. Span writes use the owned buffer directly, avoiding MemoryStream's subclass temporary-array fallback. The copied final PNG remains intact for encryption/storage.

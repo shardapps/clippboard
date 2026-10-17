@@ -1,5 +1,13 @@
 # Beta candidate evidence
 
+## October 18 owner acceptance and next memory follow-up
+
+The owner reports the installed beta.2 is working after the shortcut, rail and outside-click fixes. A read-only process-version check confirmed `0.6.0-beta.2+d1fa598ac010ab577c30cdc5a6a9c9e5c84f8f4b`; one idle listener/prepared-child sample totaled 43.8 MiB private memory. This is a single snapshot, not an active renderer, leak, startup distribution or all-device result. No clipboard history or content was read.
+
+All six stages passed in [run 39024213813](https://github.com/shardapps/clippboard/actions/runs/39024213813), attempt 2. The first installer job exceeded its timeout without retained logs; an unchanged rerun passed on a fresh runner. Three real installed prepared shortcut activations took 101–205 ms to a visible foreground window, with six gap/background dismissal reopens retaining their HWND/process. Five-minute combined idle private samples were approximately 57–60 MiB. Installed synthetic first-content events took 133–148 ms prepared and 455–536 ms cold; these are not physical presentation latency. The verified candidate and merged source tree are `22687311d57ddd5eea856826c92af21eb6b6401a` (PR #48).
+
+Beta.3 puts expanded-image reads/decodes behind the same adaptive admission as thumbnails, before requesting the original, and sizes the output for the overlay's physical bounds. WIC cannot interrupt an in-flight decode; cancellation retains its slot until completion and suppresses the result. The original encoded image is wiped on success, failure and cancellation. This bounds concurrent image work; it does not eliminate WPF's native rendering baseline. Further device and Store acceptance gates remain open.
+
 ## 0.6.0-beta.2 follow-up
 
 The next evaluation build fixes the incomplete history rail, transparent-gap dismissal, renewed foreground activation and explicit shortcut reversal during outside dismissal. WPF regressions cover layout, input routing and stale/fresh opens; isolated native CI additionally exercises six alternating gap/background dismissals and shortcut reopens before the existing capture/paste and idle soak. Publication remains held for the owner’s next installed-build review.

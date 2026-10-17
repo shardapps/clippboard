@@ -1,6 +1,6 @@
 # Beta delivery and validation checklist
 
-The owner authorized this work on October 13, 2026. The source is being prepared as **0.6.0-beta.2**, Windows package **0.6.0.0**. The public **0.5.1 alpha** downloads and Store release remain unchanged. Code delivery and release acceptance are separate below; no zero-bug or all-hardware claim is made.
+The owner authorized this work on October 13, 2026. The source is being prepared as **0.6.0-beta.3**, Windows package **0.6.0.0**. The public **0.5.1 alpha** downloads and Store release remain unchanged. Code delivery and release acceptance are separate below; no zero-bug or all-hardware claim is made.
 
 ## Implemented with automated checks
 
@@ -21,7 +21,7 @@ The owner authorized this work on October 13, 2026. The source is being prepared
 - [x] Unicode grapheme boundaries for newly generated text/file previews (#44).
 - [x] Current servicing floor, NuGet graph audit and verified embedded/distributed third-party notices (#41).
 
-Local follow-up checks cover 492 assertions. The historical beta.1 candidate passed 499 assertions on isolated Windows CI; the follow-up adds rail layout, transparent input routing, explicit reopen and surface-bound checks, plus six native gap/background dismissal reopens. See the [candidate evidence](beta-validation.md) for the exact tested commits and limits. The [performance report](performance.md), [resource audit](resource-ownership.md), [dependency review](dependency-audit.md) and feature guides explain what was measured and what was not. The metadata comparison is an in-memory allocation experiment, not an installed search/IPC benchmark or a paging implementation.
+Local follow-up checks cover 495 assertions, including shared thumbnail/detail admission, cancellation and corrupt-image recovery. The historical beta.1 candidate passed 499 assertions on isolated Windows CI; the follow-up adds rail layout, transparent input routing, explicit reopen and surface-bound checks, plus six native gap/background dismissal reopens. See the [candidate evidence](beta-validation.md) for the exact tested commits and limits. The [performance report](performance.md), [resource audit](resource-ownership.md), [dependency review](dependency-audit.md) and feature guides explain what was measured and what was not. The metadata comparison is an in-memory allocation experiment, not an installed search/IPC benchmark or a paging implementation.
 
 ## Candidate automation gates
 
@@ -33,6 +33,7 @@ Local follow-up checks cover 492 assertions. The historical beta.1 candidate pas
 
 ## Release acceptance still requiring device/Store evidence
 
+- [x] Owner installed beta.2 and confirmed the shortcut/slider/background-dismissal fixes work on October 18. This closes that reported interaction regression, not the broader device matrix below.
 - [ ] Store-signed beta acquisition, first launch, OCR/languages, backup transfer, startup opt-in/disable, update/restart and uninstall.
 - [ ] Representative installed-build cold/prepared shortcut latency and combined private-memory trends. Fresh WPF surfaces still have startup cost; direct signaling removes polling delay from an existing surface, not that initialization cost.
 - [ ] Real Notepad, Paint, Explorer and browser destinations; restricted/elevated manual-paste fallback; moved/deleted/network originals.

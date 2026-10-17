@@ -101,6 +101,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Runtime-only control lifecycle failed.' }
           dotnet $app --metadata-diagnostics artifacts/metadata-diagnostics.json
           if ($LASTEXITCODE -ne 0) { throw 'Metadata profile failed.' }
+          dotnet $app --decode-diagnostics artifacts/decode-diagnostics.json
+          if ($LASTEXITCODE -ne 0) { throw 'Image decode profile failed.' }
           dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-hardware.json
           if ($LASTEXITCODE -ne 0) { throw 'Default renderer lifecycle failed.' }
           dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-software.json --software
@@ -118,6 +120,7 @@ jobs:
             artifacts/overlay-lifecycle*.json
             artifacts/motion-diagnostics.json
             artifacts/metadata-diagnostics.json
+            artifacts/decode-diagnostics.json
             artifacts/session-checks/report.json
           if-no-files-found: warn
           retention-days: 14

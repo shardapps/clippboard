@@ -29,6 +29,39 @@ internal sealed class PreviewCache(IHistoryAccess store)
     public long RetainedBytes => _bytes;
     public int Count => _images.Count;
 
+    // Share admission with thumbnails before reading the original. Cancellation
+    // cannot interrupt a WIC decode already in progress, so rapid expansion of
+    // different notes must not start an unbounded number of native decoders.
+    internal async Task<BitmapSource?> GetDetailAsync(string id, int width, int height, CancellationToken cancellation)
+    {
+        await _decodeSlots.WaitAsync(cancellation);
+        try
+        {
+            return await Task.Run(async () =>
+            {
+                var clip = await store.GetAsync(id);
+                try
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    var image = clip?.Kind == ClipKind.Image && clip.ImagePng is not null ? Decode(clip.ImagePng, width, height) : null;
+                    cancellation.ThrowIfCancellationRequested();
+                    return image;
+                }
+                finally { if (clip?.ImagePng is byte[] png) System.Security.Cryptography.CryptographicOperations.ZeroMemory(png); }
+            }, cancellation);
+        }
+        finally { _decodeSlots.Release(); }
+    }
+
+    internal static (int Width, int Height) DetailBounds(double width, double height, double dpiX, double dpiY)
+    {
+        // The expanded panel cannot grow beyond the overlay. Decode for that
+        // maximum physical size so resizing stays sharp without a second load.
+        static int Pixels(double dips, double scale) => double.IsFinite(dips) && double.IsFinite(scale) && dips > 0 && scale > 0
+            ? (int)Math.Clamp(Math.Ceiling(dips * scale), 1, ImageLimits.MaxPixels) : 1;
+        return (Pixels(width, dpiX), Pixels(height, dpiY));
+    }
+
     public async Task<BitmapSource?> GetAsync(string id, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();

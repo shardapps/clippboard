@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0-beta.3 — memory follow-up (not released)
+
+- Share memory-aware image admission between thumbnails and expanded originals before reading payloads. Rapid expansion and cancellation cannot create unlimited simultaneous native decoders.
+- Size expanded image output for the overlay's maximum physical display bounds, including DPI. Resizing stays sharp within the overlay without keeping an oversized fixed-resolution decode on smaller screens.
+- Add mixed thumbnail/detail cancellation and corrupt-image recovery checks, plus an explicit decode diagnostic in CI. No animation, renderer-default, storage-format or dependency change.
+- Record owner acceptance of beta.2's interaction fixes; broader device and Store release checks remain open.
+
 ## 0.6.0-beta.2 — validation candidate (not released)
 
 - Fill the history slider across its navigation pill, including the next-note button at the right edge.

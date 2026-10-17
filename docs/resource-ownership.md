@@ -1,6 +1,6 @@
 # Resource ownership in development builds
 
-Reviewed October 16, 2026. This records implementation and automated evidence, not all-device certification.
+Reviewed October 18, 2026. This records implementation and automated evidence, not all-device certification.
 
 | Resource | Owner and release rule |
 | --- | --- |
@@ -12,7 +12,7 @@ Reviewed October 16, 2026. This records implementation and automated evidence, n
 | Restore action | Captures both session and lock leases before fetching the original. Closing/locking cancels pending work. An active WIC decode finishes before its caller can wipe the PNG; cancellation prevents the clipboard setter. File probes can abandon the caller while their single underlying OS worker remains bounded. |
 | Clipboard setter | Runs on the listener STA. Its own reentrant OLE notifications are suppressed only during the synchronous setter; genuine copies during background decode can still be captured. |
 | PNG/IPC/password buffers | Owned buffers are wiped at their documented transfer boundary, including error paths. Immutable managed strings and OS/native buffers cannot be promised to be securely erased. |
-| Previews | Bounded derived files plus adaptive decoded LRU retention. Detail/original decode buffers are additional to the cache ceiling. |
+| Previews and expanded images | Bounded derived files plus adaptive decoded LRU retention. Thumbnail and original-detail reads/decodes share the overlay's memory-aware worker slots. A canceled in-flight WIC operation keeps its slot until it finishes; queued cancellations never read an original. Expanded images fit the maximum overlay size in physical pixels, remain outside the thumbnail LRU, and release their encoded originals after decoding. Source raster/scratch and displayed detail buffers are additional to the cache ceiling. |
 | File/shell/OCR/destination workers | Bounded slots and caller cancellation/deadlines. Some Windows calls cannot be interrupted; retrying cannot spawn unbounded replacement workers. |
 | Backup jobs | One background transfer/review; explicit commit and encrypted staging cleanup/recovery. External exported backups remain until the user deletes them. |
 

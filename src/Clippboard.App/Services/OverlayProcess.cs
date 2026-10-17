@@ -16,6 +16,22 @@ internal sealed class OverlayProcess : IDisposable
     private nint _surface;
     private bool _disposed;
     internal bool OpenRequested { get; private set; }
+    internal bool OwnsForeground
+    {
+        get
+        {
+            Platform.NativeMethods.GetWindowThreadProcessId(Platform.NativeMethods.GetForegroundWindow(), out var owner);
+            return !_disposed && owner == (uint)Process.Id;
+        }
+    }
+    internal void ActivateSurface()
+    {
+        if (_disposed) return;
+        Platform.NativeMethods.AllowSetForegroundWindow((uint)Process.Id);
+        if (_surface == 0) return;
+        Platform.NativeMethods.GetWindowThreadProcessId(_surface, out var owner);
+        if (owner == (uint)Process.Id) Platform.NativeMethods.SetForegroundWindow(_surface);
+    }
     internal Process Process { get; }
     internal Task ServerTask { get; }
     internal CancellationToken Cancellation => _lifetime.Token;

@@ -1,4 +1,12 @@
-# 0.6.0-beta.1 candidate evidence
+# Beta candidate evidence
+
+## 0.6.0-beta.2 follow-up
+
+The next evaluation build fixes the incomplete history rail, transparent-gap dismissal, renewed foreground activation and explicit shortcut reversal during outside dismissal. WPF regressions cover layout, input routing and stale/fresh opens; isolated native CI additionally exercises six alternating gap/background dismissals and shortcut reopens before the existing capture/paste and idle soak. Publication remains held for the owner’s next installed-build review.
+
+The native surface no longer reserves closed sidebar margins across the monitor width. Panels keep the same bounded surface while open, avoiding repeated native resizes. This reduces the reserved pixel area; it is not a fixed total-process RAM reduction or an all-device memory guarantee.
+
+## 0.6.0-beta.1 historical baseline
 
 The public 0.5.1 alpha is unchanged. This is a validation candidate for Windows 11 x64, not a stable release or an all-hardware guarantee.
 

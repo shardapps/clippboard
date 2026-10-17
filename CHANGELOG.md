@@ -1,6 +1,11 @@
 # Changelog
 
-## 0.6.0-beta.1 — validation candidate (not released)
+## 0.6.0-beta.2 — validation candidate (not released)
+
+- Fill the history slider across its navigation pill, including the next-note button at the right edge.
+- Dismiss on presses in transparent scroll areas and between notes. A fresh shortcut can reverse outside dismissal while stale visibility replies cannot revive it.
+- Renew Windows foreground permission on reopening, and treat the shortcut as open when the rope is behind another app.
+- Remove unused sidebar margin reservation from the full-width rendering surface; keep panel dimensions bounded without resizing the native surface for each panel.
 
 - Search full text and file paths; filter by date, kind or stars; organize with labels, combine selected text and save editable snippets.
 - Preview text transformations, preserve bounded HTML/RTF, use file-location/path and PNG-save actions, and extract editable text with on-demand Windows OCR.

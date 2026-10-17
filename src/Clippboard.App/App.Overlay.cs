@@ -84,7 +84,7 @@ public partial class App
             if (close) _ = _rope.RequestRetractionAsync();
             else
             {
-                try { await _rope.ResumeRequestedOpenAsync(); }
+                try { await _rope.ResumeRequestedOpenAsync(explicitRequest: true); }
                 catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException) { await _rope.CloseRopeAsync(); }
             }
         }

@@ -1,4 +1,4 @@
-<Window x:Class="Clippboard.App.Views.RopeWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:d="clr-namespace:Clippboard.App.Design" Title="Clippboard" WindowStyle="None" AllowsTransparency="True" Background="#01000000" ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize" PreviewKeyDown="OnKeyDown" PreviewMouseWheel="OnMouseWheel" MouseDown="OnOutsideClick" Deactivated="OnDeactivated" FontFamily="Segoe UI">
+<Window x:Class="Clippboard.App.Views.RopeWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:d="clr-namespace:Clippboard.App.Design" Title="Clippboard" WindowStyle="None" AllowsTransparency="True" Background="#01000000" ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize" PreviewKeyDown="OnKeyDown" PreviewMouseWheel="OnMouseWheel" PreviewMouseDown="OnBackgroundPress" Deactivated="OnDeactivated" FontFamily="Segoe UI">
   <Grid x:Name="Scene">
     <Grid x:Name="Panel" VerticalAlignment="Top">
       <Grid.RenderTransform><TranslateTransform x:Name="Slide" Y="-600"/></Grid.RenderTransform>
@@ -36,11 +36,12 @@
       </Grid>
       <StackPanel Grid.Row="2" HorizontalAlignment="Center" MouseDown="OnInsideClick">
         <Border x:Name="Navigation" Background="{DynamicResource Chrome}" CornerRadius="17" BorderBrush="{DynamicResource Outline}" BorderThickness="1" Padding="4">
-          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <Grid VerticalAlignment="Center">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <Button ToolTip="Previous notes" Click="OnPrevious" AutomationProperties.Name="Scroll left"><d:IconView Symbol="left" Width="18" Height="18"/></Button>
-            <ScrollBar x:Name="HistoryScroll" Width="190" Height="16" Orientation="Horizontal" VerticalAlignment="Center" ValueChanged="OnScrollbarChanged" SmallChange="100" ToolTip="Drag to browse clipboard history" AutomationProperties.Name="Browse clipboard history"/>
-            <Button ToolTip="Next notes" Click="OnNext" AutomationProperties.Name="Scroll right"><d:IconView Symbol="right" Width="18" Height="18"/></Button>
-          </StackPanel>
+            <ScrollBar x:Name="HistoryScroll" Grid.Column="1" MinWidth="190" Height="16" Orientation="Horizontal" VerticalAlignment="Center" ValueChanged="OnScrollbarChanged" SmallChange="100" ToolTip="Drag to browse clipboard history" AutomationProperties.Name="Browse clipboard history"/>
+            <Button Grid.Column="2" ToolTip="Next notes" Click="OnNext" AutomationProperties.Name="Scroll right"><d:IconView Symbol="right" Width="18" Height="18"/></Button>
+          </Grid>
         </Border>
         <Border x:Name="StatusBubble" Background="{DynamicResource Chrome}" CornerRadius="12" Padding="12,6" Margin="0,8,0,0" MaxWidth="650"><TextBlock x:Name="Status" AutomationProperties.LiveSetting="Polite" Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center"/></Border>
       </StackPanel>

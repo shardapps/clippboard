@@ -188,6 +188,7 @@ public partial class RopeWindow : Window
         if (Retired || !IsVisible) return Task.CompletedTask;
         if (_closing) { if (!reversible) { _reversibleClose = false; _ = NotifyDismissAsync(); } return _closeTask; }
         _closing = true; _reversibleClose = reversible; _dismissNotification = null;
+        System.Windows.Automation.AutomationProperties.SetItemStatus(this, "Retracting");
         var delay = _closeDelay = new CancellationTokenSource();
         return _closeTask = RetractAsync(delay, reversible);
     }
@@ -213,10 +214,13 @@ public partial class RopeWindow : Window
         finally { if (ReferenceEquals(_closeDelay, delay)) _closeDelay = null; delay.Dispose(); }
     }
     private Task NotifyDismissAsync() => _dismissNotification ??= DismissRequested?.Invoke() ?? Task.CompletedTask;
-    internal async Task ResumeRequestedOpenAsync()
+    internal async Task ResumeRequestedOpenAsync(bool explicitRequest = false)
     {
-        if (Retired || !_closing || !_reversibleClose) return;
+        if (Retired) return;
+        if (!_closing) { if (explicitRequest) Activate(); return; }
+        if (!_reversibleClose && !explicitRequest) return;
         _closeDelay?.Cancel(); _closeDelay = null; _closing = _reversibleClose = false;
+        System.Windows.Automation.AutomationProperties.SetItemStatus(this, "Open");
         SmoothMotion.Move(Slide, TranslateTransform.YProperty, 0, Animated, 650);
         SmoothMotion.Move(Rope, RopeVisual.SagProperty, 24, Animated, 600, _appearance.PlayfulMotion ? .72 : 1);
         _memoryTimer.Start(); Activate();
@@ -475,7 +479,25 @@ public partial class RopeWindow : Window
         _kind = _kind switch { null => ClipKind.Text, ClipKind.Text => ClipKind.Image, ClipKind.Image => ClipKind.Files, _ => null };
         TypeFilterButton.Content = _kind?.ToString() ?? "All types"; RebuildNotes(); ScrollTo(0);
     }
-    private async void OnOutsideClick(object sender, MouseButtonEventArgs e) => await CloseRopeAsync();
+    internal bool IsInteractiveSource(DependencyObject? source)
+    {
+        // Only painted controls/paper count as inside. ScrollViewer consumes
+        // bubbling mouse events even when its transparent viewport was clicked.
+        for (var node = source; node is not null && !ReferenceEquals(node, this);)
+        {
+            if (ReferenceEquals(node, Toolbar) || ReferenceEquals(node, Navigation) || ReferenceEquals(node, StatusBubble)
+                || ReferenceEquals(node, EmptyState) || ReferenceEquals(node, SidebarHost) || ReferenceEquals(node, DetailHost)) return true;
+            if (node is Border paper && paper.Parent is Grid card && _bindings.ContainsKey(card) && ReferenceEquals(card.Children[1], paper)) return true;
+            node = node is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node);
+        }
+        return false;
+    }
+    private async void OnBackgroundPress(object sender, MouseButtonEventArgs e)
+    {
+        if (_externalDialog || IsInteractiveSource(e.OriginalSource as DependencyObject)) return;
+        e.Handled = true;
+        await CloseRopeAsync();
+    }
     private void OnInsideClick(object sender, MouseButtonEventArgs e) => e.Handled = true;
     private async void OnClose(object sender, RoutedEventArgs e) => await CloseRopeAsync();
     private async void OnDeactivated(object? sender, EventArgs e) { if (!_preview && !_externalDialog) await CloseRopeAsync(); }

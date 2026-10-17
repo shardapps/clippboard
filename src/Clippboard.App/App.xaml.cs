@@ -141,10 +141,21 @@ public partial class App : Application
         if (_toggling || _selecting || _store is null || _sessionLocked) return;
         if (_overlay is not null && !_overlay.Process.HasExited)
         {
-            if (_overlay.OpenRequested) { _closeOverlay = !_closeOverlay; ++_visibilityRevision; _overlay.NotifyVisibility(_closeOverlay, _visibilityRevision); return; }
+            if (_overlay.OpenRequested)
+            {
+                // A background or already retracting rope is an open request.
+                // Grant foreground activation on every reopen, not only launch.
+                _closeOverlay = !_closeOverlay && _overlay.OwnsForeground;
+                if (!_closeOverlay)
+                {
+                    if (!_overlay.OwnsForeground) _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
+                    _overlay.ActivateSurface();
+                }
+                ++_visibilityRevision; _overlay.NotifyVisibility(_closeOverlay, _visibilityRevision); return;
+            }
             _target = _foreground?.LastWindow ?? NativeMethods.GetForegroundWindow();
             _closeOverlay = false; _restoredSequence = 0;
-            NativeMethods.AllowSetForegroundWindow((uint)_overlay.Process.Id);
+            _overlay.ActivateSurface();
             _overlay.RequestOpen(); return;
         }
         StartOverlay(open: true);

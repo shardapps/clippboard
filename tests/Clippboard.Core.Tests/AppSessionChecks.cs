@@ -43,6 +43,8 @@ internal static class AppSessionChecks
                     Directory.CreateDirectory(dataRoot);
                     fixture.Show(); fixture.Activate(); textbox.Focus();
                     Task? listenerReady = null;
+                    var preparedChildren = new System.Collections.Concurrent.ConcurrentQueue<(int Process, string Tier)>();
+                    var preparationTiers = new List<string>();
                     Process StartListener()
                     {
                         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -57,6 +59,12 @@ internal static class AppSessionChecks
                             if (line.Data is null) return;
                             Console.Error.WriteLine("Listener: " + line.Data);
                             if (line.Data == "Clipboard listener ready") ready.TrySetResult();
+                            const string prefix = "Overlay preparation ready: ";
+                            if (line.Data.StartsWith(prefix, StringComparison.Ordinal))
+                            {
+                                var fields = line.Data[prefix.Length..].Split(' ');
+                                if (fields.Length == 2 && int.TryParse(fields[0], out var child)) preparedChildren.Enqueue((child, fields[1]));
+                            }
                         };
                         process.BeginErrorReadLine();
                         return process;
@@ -80,6 +88,10 @@ internal static class AppSessionChecks
                         else Clipboard.SetText(expected);
                         Console.WriteLine($"Fixture sequence {NativeMethods.GetClipboardSequenceNumber()}, Unicode format {Clipboard.ContainsText(TextDataFormat.UnicodeText)}");
                         await Until(() => Directory.GetFiles(Path.Combine(dataRoot, "history"), "*.meta").Length == cycle + 1, "real clipboard capture");
+                        (int Process, string Tier) prepared = default;
+                        await Until(() => preparedChildren.TryDequeue(out prepared), "installed background runtime prepared before shortcut");
+                        if (prepared.Process <= 0 || prepared.Tier is not ("controls" or "runtime")) throw new IOException("Invalid preparation acknowledgement.");
+                        preparationTiers.Add(prepared.Tier);
                         textbox.Clear(); fixture.Activate(); textbox.Focus(); NativeMethods.SetForegroundWindow(fixtureHandle);
                         if (NativeMethods.GetForegroundWindow() != fixtureHandle) throw new IOException("Fixture cannot acquire foreground; paste acceptance is untested.");
                         NativeMethods.AllowSetForegroundWindow((uint)listener.Id);
@@ -87,6 +99,8 @@ internal static class AppSessionChecks
                         var invocation = Stopwatch.StartNew(); InputChord();
                         nint overlay = 0;
                         await Until(() => (overlay = FindWindow(0, "Clippboard", visible: true)) != 0, "real overlay startup");
+                        NativeMethods.GetWindowThreadProcessId(overlay, out var activatedOwner);
+                        if (activatedOwner != prepared.Process) throw new IOException("Shortcut ignored the prepared child and cold-launched another process.");
                         visibleLatencies.Add(invocation.Elapsed.TotalMilliseconds);
                         await Task.Delay(1500);
                         if (cycle == 0)
@@ -188,8 +202,12 @@ internal static class AppSessionChecks
                     await listenerReady!.WaitAsync(TimeSpan.FromSeconds(15));
                     if (FixturePayloads(historyDirectory).Count() != persisted) throw new IOException("History did not persist through restart.");
                     await Task.Delay(10000); listener.Refresh();
+                    var restartedPrivate = listener.PrivateMemorySize64; var restartedWorking = listener.WorkingSet64;
+                    if (!NativeMethods.PostMessage(FindOwnedMessageWindow(listener.Id, "Clippboard listener"), 0x0010, 0, 0)) throw new IOException("Could not request graceful installed-listener shutdown.");
+                    await listener.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+                    if (listener.ExitCode != 0) throw new IOException("Installed listener failed graceful window-close shutdown.");
                     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
-                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; six gap/background dismissal reopens; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, WindowsClientAreaAnimations = SystemParameters.ClientAreaAnimation, RapidShortcutReversals = 3, OutsideDismissReopens = reopenLatencies.Count, OutsideDismissReopenMs = reopenLatencies, HotkeyToVisibleWindowMs = visibleLatencies, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
+                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; six gap/background dismissal reopens; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, WindowsClientAreaAnimations = SystemParameters.ClientAreaAnimation, PreparationTiers = preparationTiers, RapidShortcutReversals = 3, OutsideDismissReopens = reopenLatencies.Count, OutsideDismissReopenMs = reopenLatencies, HotkeyToVisibleWindowMs = visibleLatencies, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = restartedWorking, PrivateBytes = restartedPrivate, GracefulWindowClosePassed = true, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
                     Console.WriteLine("PASS: native capture/paste, bursts, large images, file reference, bounded history, five-minute idle without crash, and restart persistence.");
                     result.TrySetResult(0);
                 }

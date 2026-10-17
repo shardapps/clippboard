@@ -170,8 +170,13 @@ public partial class App
                     return new(PrepareControls: _overlay.ControlsPrepared);
                 }
             case "standby-prepared":
-                if (_overlay is not null && !_overlay.OpenRequested && request.Flag && request.Id == "controls")
-                { _overlay.ControlsPrepared = true; _controlPreparationBytes = Math.Max(_controlPreparationBytes, MeasuredStandbyBytes()); }
+                if (_overlay is not null && !_overlay.OpenRequested && request.Flag && request.Id is "controls" or "runtime")
+                {
+                    _overlay.ControlsPrepared = request.Id == "controls";
+                    if (_overlay.ControlsPrepared) _controlPreparationBytes = Math.Max(_controlPreparationBytes, MeasuredStandbyBytes());
+                    if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true" && Environment.GetEnvironmentVariable("CLIPPBOARD_SESSION_DIAGNOSTICS") == "1")
+                        Console.Error.WriteLine($"Overlay preparation ready: {_overlay.Process.Id} {request.Id}");
+                }
                 return new();
             case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, VisibilityRevision: _visibilityRevision, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false }, CaptureSuspended: _transfers?.HoldsCapture == true || _clipboard?.SessionLocked == true || (_settings.ClearOnLock && !_sessionWatchAvailable));
             case "list": return new(Entries: await Task.Run(() => _store!.ListAsync()));

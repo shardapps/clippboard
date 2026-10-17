@@ -91,6 +91,7 @@ public partial class App : Application
             { _sessionWatchAvailable = false; _clipboard.Paused |= _settings.ClearOnLock; }
 
             _clipboard.ToggleRequested += ToggleRope;
+            _clipboard.ExitRequested += Shutdown;
             _clipboard.Notice += Notify;
             _foreground = new ForegroundTracker();
             CreateTray();

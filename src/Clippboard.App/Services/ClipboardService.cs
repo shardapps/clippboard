@@ -54,6 +54,7 @@ internal sealed class ClipboardService : IDisposable
     private int _hotkeyId = 1;
     private ShortcutChoice _shortcut;
     public event Action? ToggleRequested;
+    public event Action? ExitRequested;
     public event Action<string>? Notice;
     private static void SessionTrace(string message)
     {
@@ -76,6 +77,10 @@ internal sealed class ClipboardService : IDisposable
     private bool WndProc(int message, nint wParam, nint lParam)
     {
         if (_disposed) return false;
+        // A close request must stop the application. Letting DefWindowProc
+        // destroy only this HWND leaves a tray process whose
+        // clipboard listener and registered shortcut no longer exist.
+        if (message == 0x0010) { ExitRequested?.Invoke(); return true; }
         if (message == 0x0312 && wParam == _hotkeyId) { ToggleRequested?.Invoke(); return true; }
         if (message == 0x031D && !CaptureBlocked)
         {

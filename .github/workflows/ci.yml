@@ -125,7 +125,7 @@ jobs:
   native:
     needs: compile
     runs-on: windows-2025
-    timeout-minutes: 9
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -141,9 +141,9 @@ jobs:
           name: validation-input
       - name: Enable production animation path on isolated desktop
         run: ./scripts/test-animation-preference.ps1 -Mode Enable
-      - name: Native listener, hotkey, overlay, accepted paste and restart
-        timeout-minutes: 7
-        run: dotnet tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/Clippboard.Core.Tests.dll --session artifacts/portable/win-x64/Clippboard.exe artifacts/session-checks/report.json
+      - name: Installed listener, prepared hotkey, animated dismissal, paste and restart
+        timeout-minutes: 8
+        run: ./scripts/test-installed-runtime.ps1
       - name: Restore isolated desktop animation preference
         if: always()
         run: ./scripts/test-animation-preference.ps1 -Mode Restore

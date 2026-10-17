@@ -7,6 +7,7 @@
 - Renew Windows foreground permission on reopening, and treat the shortcut as open when the rope is behind another app.
 - Remove unused sidebar margin reservation from the full-width rendering surface; keep panel dimensions bounded without resizing the native surface for each panel.
 - Learn runtime/control preparation costs separately. Retain the smaller idle runtime when empty UI controls cannot fit the memory budget, instead of rejecting all preparation using the listener's larger footprint.
+- Close the application when its message-only listener receives a close request, preserving orderly tray/hotkey cleanup. Native CI now installs the real setup at its default location and tests prepared shortcuts, animated outside-dismissal reversals and graceful close.
 
 - Search full text and file paths; filter by date, kind or stars; organize with labels, combine selected text and save editable snippets.
 - Preview text transformations, preserve bounded HTML/RTF, use file-location/path and PNG-save actions, and extract editable text with on-demand Windows OCR.

@@ -95,7 +95,7 @@ internal sealed class SettingsView : UserControl
             Toggle("Use less RAM while browsing", _draft.LowMemoryRendering, v => _draft = _draft with { LowMemoryRendering = v });
             Hint("Uses software rendering. It can use more CPU and make motion less smooth. Save, then reopen the rope to change rendering mode.");
             Toggle("Prepare faster opening", _draft.FastOpen, v => _draft = _draft with { FastOpen = v });
-            Hint("Uses extra idle RAM to prepare the rope. Preparation stops when memory is tight; saved note contents stay unloaded. Turn this off for the lowest idle RAM. Save to apply.");
+            Hint("Uses extra idle RAM to prepare the rope. Keeps only the smaller runtime when full controls cost too much, and stops when memory is tight. Saved contents stay unloaded. Turn this off for the lowest idle RAM. Save to apply.");
             Hint("Only short history summaries remain while hidden. Images load when needed and the preview cache clears on close. Large images can be skipped or declined when Windows has little memory. Lower limits can remove older unstarred notes.");
             var transfers = new WrapPanel { Margin = new Thickness(0, 8, 0, 8) };
             var export = new Button { Content = "Encrypted backup…" }; export.Click += (_, _) => TransferRequested?.Invoke(false); transfers.Children.Add(export);

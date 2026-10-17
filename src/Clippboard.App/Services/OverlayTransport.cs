@@ -17,7 +17,7 @@ internal sealed record OverlayRequest(string Command, string? Id = null, bool Fl
     string? Path = null, byte[]? Secret = null, FileActions.DestinationRevision? Destination = null, long VisibilityRevision = 0, long Surface = 0);
 internal sealed record OverlayReply(string? Error = null, AppSettings? Settings = null, long Target = 0, long Version = 0, bool Close = false,
     bool StartupAvailable = true, IReadOnlyList<ClipSummary>? Entries = null, Clip? Clip = null, bool Demo = false, int ListenerProcess = 0, bool Standby = false,
-    IReadOnlyList<string>? Matches = null, bool CaptureSuspended = false, bool Saved = false, BackupState? Transfer = null, string? Diagnostics = null, long VisibilityRevision = 0);
+    IReadOnlyList<string>? Matches = null, bool CaptureSuspended = false, bool Saved = false, BackupState? Transfer = null, string? Diagnostics = null, long VisibilityRevision = 0, bool PrepareControls = false);
 
 internal static class OverlayTransport
 {

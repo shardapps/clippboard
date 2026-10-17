@@ -40,6 +40,8 @@ jobs:
         run: ./scripts/audit-dependencies.ps1
       - name: Compile with warnings as errors
         run: dotnet build Clippboard.slnx -c Release --no-restore -p:ContinuousIntegrationBuild=true
+      - name: Exercise Windows reduced-motion preference on isolated desktop
+        run: ./scripts/test-animation-preference.ps1 -Mode Disable
       - name: Storage, format and WPF regression checks
         run: ./scripts/dev.ps1 test
       - name: Signing and packaging failure guards
@@ -67,6 +69,9 @@ jobs:
             artifacts/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 3
+      - name: Restore isolated desktop animation preference
+        if: always()
+        run: ./scripts/test-animation-preference.ps1 -Mode Restore
 
   motion:
     needs: compile
@@ -88,6 +93,7 @@ jobs:
       - name: Scroll and lifecycle profiles from exact compiled binaries
         timeout-minutes: 5
         run: |
+          ./scripts/test-animation-preference.ps1 -Mode Enable
           $app = 'src/Clippboard.App/bin/Release/net10.0-windows10.0.22000.0/Clippboard.dll'
           dotnet $app --diagnostics artifacts/motion-diagnostics.json --scroll-only
           if ($LASTEXITCODE -ne 0) { throw 'Scroll profile failed.' }
@@ -99,6 +105,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Default renderer lifecycle failed.' }
           dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-software.json --software
           if ($LASTEXITCODE -ne 0) { throw 'Software renderer lifecycle failed.' }
+      - name: Restore isolated desktop animation preference
+        if: always()
+        run: ./scripts/test-animation-preference.ps1 -Mode Restore
       - name: Preserve reports even on failure
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -130,9 +139,14 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: validation-input
+      - name: Enable production animation path on isolated desktop
+        run: ./scripts/test-animation-preference.ps1 -Mode Enable
       - name: Native listener, hotkey, overlay, accepted paste and restart
         timeout-minutes: 7
         run: dotnet tests/Clippboard.Core.Tests/bin/Release/net10.0-windows10.0.22000.0/Clippboard.Core.Tests.dll --session artifacts/portable/win-x64/Clippboard.exe artifacts/session-checks/report.json
+      - name: Restore isolated desktop animation preference
+        if: always()
+        run: ./scripts/test-animation-preference.ps1 -Mode Restore
       - name: Preserve reports even on failure
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

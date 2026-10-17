@@ -299,6 +299,14 @@ internal static partial class Program
             Check(!MemoryAvailability.KeepStandby(-1, 10, false) && !MemoryAvailability.KeepStandby(0, 10, true), "unknown or exhausted memory never creates a standby overlay");
             Check(MemoryAvailability.KeepStandby(10000, 150, true) && !MemoryAvailability.KeepStandby(10000, 150, false), "standby memory pressure thresholds have hysteresis");
             Check(!MemoryAvailability.KeepStandby(10000, 250, true), "standby released when its measured private bytes exceed headroom");
+            Check(MemoryAvailability.StartStandby(10000, 0, 1000) && !MemoryAvailability.StartStandby(10000, 0, 1500)
+                && !MemoryAvailability.StartStandby(-1, 0, 1), "first runtime probe requires known headroom and a bounded bootstrap estimate");
+            Check(MemoryAvailability.StartStandby(10000, 100, 1000) && !MemoryAvailability.StartStandby(10000, 150, 1),
+                "later standby starts use measured child cost rather than listener cost or a fresh relaxed probe");
+            Check(!MemoryAvailability.PrepareControls(10000, 0, 1000) && MemoryAvailability.StartStandby(10000, 100, 1000),
+                "lower-memory runtime preparation survives when full controls cannot fit the budget");
+            Check(MemoryAvailability.PrepareControls(10000, 100, 1000) && !MemoryAvailability.PrepareControls(10000, 201, 1),
+                "control preparation follows actual learned cost after the initial estimate");
             await File.WriteAllTextAsync(settingsFile, "broken json");
             Check((await settingsStore.LoadAsync()).RetentionDays == 30, "settings corruption fallback");
             Check(!new AppSettings { CaptureImages = false }.Captures(ClipKind.Image), "format opt out");

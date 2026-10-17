@@ -21,7 +21,7 @@ The owner authorized this work on October 13, 2026. The source is being prepared
 - [x] Unicode grapheme boundaries for newly generated text/file previews (#44).
 - [x] Current servicing floor, NuGet graph audit and verified embedded/distributed third-party notices (#41).
 
-Local follow-up checks cover 488 assertions. The historical beta.1 candidate passed 499 assertions on isolated Windows CI; the follow-up adds rail layout, transparent input routing, explicit reopen and surface-bound checks, plus six native gap/background dismissal reopens. See the [candidate evidence](beta-validation.md) for the exact tested commits and limits. The [performance report](performance.md), [resource audit](resource-ownership.md), [dependency review](dependency-audit.md) and feature guides explain what was measured and what was not. The metadata comparison is an in-memory allocation experiment, not an installed search/IPC benchmark or a paging implementation.
+Local follow-up checks cover 492 assertions. The historical beta.1 candidate passed 499 assertions on isolated Windows CI; the follow-up adds rail layout, transparent input routing, explicit reopen and surface-bound checks, plus six native gap/background dismissal reopens. See the [candidate evidence](beta-validation.md) for the exact tested commits and limits. The [performance report](performance.md), [resource audit](resource-ownership.md), [dependency review](dependency-audit.md) and feature guides explain what was measured and what was not. The metadata comparison is an in-memory allocation experiment, not an installed search/IPC benchmark or a paging implementation.
 
 ## Candidate automation gates
 

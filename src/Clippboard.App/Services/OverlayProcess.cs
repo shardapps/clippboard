@@ -16,6 +16,7 @@ internal sealed class OverlayProcess : IDisposable
     private nint _surface;
     private bool _disposed;
     internal bool OpenRequested { get; private set; }
+    internal bool ControlsPrepared { get; set; }
     internal bool OwnsForeground
     {
         get

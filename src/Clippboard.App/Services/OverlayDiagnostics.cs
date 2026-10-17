@@ -27,9 +27,9 @@ internal static class OverlayDiagnostics
             {
                 if (request.Command == "diagnostic-renderer") renderer = request.Id;
                 if (request.Command == "diagnostic-first-frame") firstFrameMs ??= watch.Elapsed.TotalMilliseconds;
-                if (request.Command == "standby-ready") ready.TrySetResult(request.Flag);
+                if (request.Command == "standby-prepared") ready.TrySetResult(request.Flag);
                 if (request.Command == "wait-open") await child!.WaitForOpenAsync();
-                return new OverlayReply(Settings: new AppSettings { LowMemoryRendering = preferencePath }, StartupAvailable: false, Demo: true, Standby: standby && child?.OpenRequested != true);
+                return new OverlayReply(Settings: new AppSettings { LowMemoryRendering = preferencePath }, StartupAvailable: false, Demo: true, Standby: standby && child?.OpenRequested != true, PrepareControls: true);
             }, software && !preferencePath, standby, runtimeOnlyPreparation);
             double? prepareMs = null; long? preparedPrivate = null; long? preparedWorkingSet = null;
             if (standby)
@@ -59,7 +59,7 @@ internal static class OverlayDiagnostics
         OverlayProcess? pending = null;
         using (var standby = pending = new OverlayProcess(async request =>
         {
-            if (request.Command == "standby-ready") idleReady.TrySetResult(request.Flag);
+            if (request.Command == "standby-prepared") idleReady.TrySetResult(request.Flag && request.Id == "runtime");
             if (request.Command == "wait-open") await pending!.WaitForOpenAsync();
             return new OverlayReply(Standby: true);
         }, standby: true, runtimeOnlyPreparation: runtimeOnlyPreparation))
@@ -71,7 +71,7 @@ internal static class OverlayDiagnostics
         }
         var cpu = current.TotalProcessorTime; var idle = Stopwatch.StartNew(); await Task.Delay(10000); current.Refresh();
         var report = new { Scenario = "Eight disposable overlay processes, alternating cold/prepared launch; synthetic 1000 notes, scroll and settings; no clipboard, forced GC or working-set trim. Prepared startup has no native surface. First-content event is not physical presentation latency.", SoftwareRendering = software, RuntimeOnlyPreparation = runtimeOnlyPreparation,
-            Runtime = Environment.Version.ToString(), Before = before, Cycles = cycles, StandbyReleasePassed = true, Idle = Sample(), IdleCpuPercentOneCore = Math.Round((current.TotalProcessorTime - cpu).TotalSeconds / idle.Elapsed.TotalSeconds * 100, 3) };
+            Runtime = Environment.Version.ToString(), WindowsClientAreaAnimations = System.Windows.SystemParameters.ClientAreaAnimation, Before = before, Cycles = cycles, StandbyReleasePassed = true, Idle = Sample(), IdleCpuPercentOneCore = Math.Round((current.TotalProcessorTime - cpu).TotalSeconds / idle.Elapsed.TotalSeconds * 100, 3) };
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
         await File.WriteAllTextAsync(output, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
     }

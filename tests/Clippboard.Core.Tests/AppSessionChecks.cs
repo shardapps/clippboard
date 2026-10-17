@@ -39,6 +39,7 @@ internal static class AppSessionChecks
                 try
                 {
                     if (Directory.Exists(dataRoot)) throw new IOException("Session data must be fresh.");
+                    if (!SystemParameters.ClientAreaAnimation) throw new IOException("Native session CI must enable Windows client-area animations; reduced motion is tested separately.");
                     Directory.CreateDirectory(dataRoot);
                     fixture.Show(); fixture.Activate(); textbox.Focus();
                     Task? listenerReady = null;
@@ -124,11 +125,14 @@ internal static class AppSessionChecks
                                 }
                                 var reopen = Stopwatch.StartNew(); InputChord();
                                 var priorOverlay = overlay;
+                                NativeMethods.GetWindowThreadProcessId(priorOverlay, out var priorOwner);
                                 await Until(() => (overlay = FindWindow(0, "Clippboard", visible: true)) != 0 && NativeMethods.GetForegroundWindow() == overlay, "foreground reopen after outside dismissal");
                                 reopenLatencies.Add(reopen.Elapsed.TotalMilliseconds);
                                 await Task.Delay(750);
                                 if (!NativeMethods.IsWindow(overlay) || !IsWindowVisible(overlay)) throw new IOException("Canceled outside dismissal destroyed the reopened surface.");
                                 if (SystemParameters.ClientAreaAnimation && overlay != priorOverlay) throw new IOException("Fresh shortcut did not reverse the live dismissal.");
+                                NativeMethods.GetWindowThreadProcessId(overlay, out var reopenedOwner);
+                                if (reopenedOwner != priorOwner) throw new IOException("A fresh shortcut replaced the child instead of reversing the live dismissal.");
                             }
                         }
                         await Task.Run(() =>
@@ -185,7 +189,7 @@ internal static class AppSessionChecks
                     if (FixturePayloads(historyDirectory).Count() != persisted) throw new IOException("History did not persist through restart.");
                     await Task.Delay(10000); listener.Refresh();
                     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
-                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; six gap/background dismissal reopens; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, RapidShortcutReversals = 3, OutsideDismissReopens = reopenLatencies.Count, OutsideDismissReopenMs = reopenLatencies, HotkeyToVisibleWindowMs = visibleLatencies, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
+                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; six gap/background dismissal reopens; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, WindowsClientAreaAnimations = SystemParameters.ClientAreaAnimation, RapidShortcutReversals = 3, OutsideDismissReopens = reopenLatencies.Count, OutsideDismissReopenMs = reopenLatencies, HotkeyToVisibleWindowMs = visibleLatencies, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = listener.WorkingSet64, PrivateBytes = listener.PrivateMemorySize64, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
                     Console.WriteLine("PASS: native capture/paste, bursts, large images, file reference, bounded history, five-minute idle without crash, and restart persistence.");
                     result.TrySetResult(0);
                 }

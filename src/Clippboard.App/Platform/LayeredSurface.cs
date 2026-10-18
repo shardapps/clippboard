@@ -30,6 +30,7 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
     [DllImport("user32.dll", SetLastError = true)] private static extern bool UpdateLayeredWindow(nint window, nint destination, ref PointI point, ref SizeI size, nint source, ref PointI origin, uint color, ref Blend blend, uint flags);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll", EntryPoint = "SendMessageW")] private static extern nint SendMessage(nint window, int message, nint wParam, nint lParam);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(nint window, int command);
 
     private sealed class PixelsBuffer : IDisposable
     {
@@ -68,6 +69,7 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
     private readonly nint _owner;
     private PixelsBuffer? _rotated;
     private bool _disposed;
+    private bool _shown;
     private (int Left, int Top, int Right, int Bottom)? _clip;
     private (int X, int Y)? _position;
     private (double A, double B, double C, double D)? _matrix;
@@ -111,7 +113,7 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
             CreateHandle(new Forms.CreateParams
             {
                 Parent = owner, Caption = "", X = -20000, Y = -20000, Width = width, Height = height,
-                Style = unchecked((int)0x90000000), // WS_POPUP | WS_VISIBLE
+                Style = unchecked((int)0x80000000), // WS_POPUP; show only after pixels are ready
                 ExStyle = 0x00080000 | 0x00000080 | 0x08000000 // LAYERED | TOOLWINDOW | NOACTIVATE
             });
         }
@@ -163,6 +165,7 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
             var point = new PointI(x, y); var size = new SizeI(buffer.Width, buffer.Height); var origin = new PointI(0, 0); var blend = new Blend { Alpha = alpha, Format = 1 };
             if (!UpdateLayeredWindow(Handle, 0, ref point, ref size, buffer.Dc, ref origin, 0, ref blend, 2)) throw new Win32Exception(Marshal.GetLastWin32Error());
             _matrix = matrix; _alpha = alpha; _uploadedRevision = _revision; _position = (x, y); ++Uploads;
+            if (!_shown) { ShowWindow(Handle, 4); _shown = true; } // SW_SHOWNOACTIVATE
         }
         else if (_position != (x, y))
         {

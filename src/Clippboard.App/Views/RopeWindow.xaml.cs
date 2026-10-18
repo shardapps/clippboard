@@ -510,7 +510,26 @@ public partial class RopeWindow : Window
     }
     private void OnInsideClick(object sender, MouseButtonEventArgs e) => e.Handled = true;
     private async void OnClose(object sender, RoutedEventArgs e) => await CloseRopeAsync();
-    private async void OnDeactivated(object? sender, EventArgs e) { if (!_preview && !_externalDialog) await CloseRopeAsync(); }
+    private async void OnDeactivated(object? sender, EventArgs e)
+    {
+        if (_preview || _externalDialog || Retired) return;
+        // Owned native windows can transiently change activation while being
+        // created/repositioned. Resolve foreground after that message sequence;
+        // an internal surface is not an outside click or an app switch.
+        try { await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Input); }
+        catch (OperationCanceledException) when (Retired || Dispatcher.HasShutdownStarted) { return; }
+        if (_externalDialog || Retired || !IsVisible) return;
+        var foreground = NativeMethods.GetForegroundWindow();
+        NativeMethods.GetWindowThreadProcessId(foreground, out var owner);
+        SessionTrace("Overlay deactivated: " + (owner == (uint)Environment.ProcessId ? "internal" : "external"));
+        if (owner == (uint)Environment.ProcessId)
+        { if (foreground != new WindowInteropHelper(this).Handle) Activate(); return; }
+        await CloseRopeAsync();
+    }
+    private static void SessionTrace(string message)
+    {
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true" && Environment.GetEnvironmentVariable("CLIPPBOARD_SESSION_DIAGNOSTICS") == "1") Console.Error.WriteLine(message);
+    }
     private void OnPause(object sender, RoutedEventArgs e) => PauseRequested?.Invoke();
     private async void OnKeyDown(object sender, KeyEventArgs e)
     {

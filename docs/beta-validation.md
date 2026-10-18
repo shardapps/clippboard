@@ -1,10 +1,16 @@
 # Beta candidate evidence
 
+## 0.6.0-beta.5 retained-note renderer
+
+Balanced rendering is the new default for this evaluation candidate. Existing WPF controls retain hit testing, keyboard and automation behavior; cached native note surfaces avoid the hardware-renderer's larger memory baseline on the development host. Settings/detail panels restore the live WPF note view beneath them. Hardware and software compatibility modes apply after saving and reopening; the old explicit software preference is preserved.
+
+The local comparison and limitations are recorded in [performance](performance.md). Regression coverage includes actual opaque cached pixels, accessible invoke and bounds, transparent-control hit testing, scroll without per-frame text rasterization, theme/selection changes, resizing, hover, reversible entrance/retraction, frame unsubscription and destruction of owned native windows. Synthetic zero-headroom tests exercise initial and active-session fallback. Isolated installed CI also clicks a note through the native surfaces and records combined listener/overlay active samples. Fresh complete CI and artifact verification are required before delivery; this paragraph does not claim they have passed. Public release and the remaining physical-device/Store checks stay held.
+
 ## 0.6.0-beta.4 active-use follow-up
 
 This candidate moves pipe/JSON exchange off the UI dispatcher, sends revision-checked incremental metadata after the initial catalog, and retains unchanged labelled note controls across refreshes. Unit checks cover concurrent real-pipe catalog callers, lost-reply resynchronization, exact order, removals and malformed-update atomicity. No persistent storage migration is introduced.
 
-The local synthetic fifty-update allocation/wire comparison and fifty-refresh WPF check are documented in [performance](performance.md). Their results concern metadata allocation/control reuse; active WPF/native graphics RAM remains an acceptance item. The software bitmap-cache trial was rejected after poorer scrolling results. The default renderer and existing motion were preserved. Required installer/native/Store-package CI checks and verified evaluation assets remain necessary before delivering this candidate; public release remains held.
+The local synthetic fifty-update allocation/wire comparison and fifty-refresh WPF check are documented in [performance](performance.md). Their results concern metadata allocation/control reuse; active WPF/native graphics RAM remained an acceptance item. The software bitmap-cache trial was rejected after poorer scrolling results. This historical candidate preserved the default renderer. All six stages passed in [run 39112363097](https://github.com/shardapps/clippboard/actions/runs/39112363097), attempt 2; the unchanged installer rerun passed on a fresh runner after its first runner timed out. PR #52 head `60915c05b6fda1e7a0747d7c61316d7f3c432e05` and merged main share tree `4dbad5883295fdffb53c74a92bc4b7f2e1557b48`. The verified beta.4 setup is an unsigned evaluation asset; public beta release remains held.
 
 ## October 18 owner acceptance and next memory follow-up
 

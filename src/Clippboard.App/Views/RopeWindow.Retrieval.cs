@@ -116,8 +116,12 @@ public partial class RopeWindow
             if (card.Children[1] is Border paper)
             {
                 var binding = _bindings[card]; var combined = _combinationIds.Contains(binding.Entry.Id);
+                var state = (binding.Entry.Id == _selectedId, combined);
+                if (binding.AccentState == state) continue;
+                binding.AccentState = state;
                 paper.SetResourceReference(Border.BorderBrushProperty, binding.Entry.Id == _selectedId || combined ? "Accent" : "Outline");
                 paper.BorderThickness = new Thickness(combined ? 2 : 1);
+                InvalidateNativeNote(card);
                 if (binding.Combine is not null)
                 { binding.Combine.Content = combined ? "✓" : "+"; System.Windows.Automation.AutomationProperties.SetName(binding.Combine, combined ? "Remove text from combination" : "Select text for combination"); }
             }

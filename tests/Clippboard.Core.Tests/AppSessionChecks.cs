@@ -45,6 +45,7 @@ internal static class AppSessionChecks
                     Task? listenerReady = null;
                     var preparedChildren = new System.Collections.Concurrent.ConcurrentQueue<(int Process, string Tier)>();
                     var preparationTiers = new List<string>();
+                    var openMemory = new List<RuntimeMemory>();
                     Process StartListener()
                     {
                         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -103,6 +104,7 @@ internal static class AppSessionChecks
                         if (activatedOwner != prepared.Process) throw new IOException("Shortcut ignored the prepared child and cold-launched another process.");
                         visibleLatencies.Add(invocation.Elapsed.TotalMilliseconds);
                         await Task.Delay(1500);
+                        openMemory.Add(SampleRuntime(executable));
                         if (cycle == 0)
                         {
                             for (var reversal = 0; reversal < 3; reversal++)
@@ -154,7 +156,12 @@ internal static class AppSessionChecks
                             var surface = AutomationElement.FromHandle(overlay);
                             var note = surface.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "Restore Text: " + expected));
                             if (note is null) throw new IOException("Captured note is missing from the real overlay.");
-                            ((InvokePattern)note.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+                            if (cycle == 1)
+                            {
+                                var bounds = note.Current.BoundingRectangle;
+                                ClickAt(bounds.Left + Math.Min(12, bounds.Width / 2), bounds.Top + Math.Min(12, bounds.Height / 2));
+                            }
+                            else ((InvokePattern)note.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
                         }).WaitAsync(TimeSpan.FromSeconds(10));
                         await Until(() => textbox.Text.Replace("\r\n", "\n") == expected, "native restore, focus return and paste acceptance");
                         if (formattedHtml is not null && (Clipboard.GetDataObject() is not { } restoredFormats
@@ -207,7 +214,7 @@ internal static class AppSessionChecks
                     await listener.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
                     if (listener.ExitCode != 0) throw new IOException("Installed listener failed graceful window-close shutdown.");
                     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
-                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; six gap/background dismissal reopens; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, WindowsClientAreaAnimations = SystemParameters.ClientAreaAnimation, PreparationTiers = preparationTiers, RapidShortcutReversals = 3, OutsideDismissReopens = reopenLatencies.Count, OutsideDismissReopenMs = reopenLatencies, HotkeyToVisibleWindowMs = visibleLatencies, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = restartedWorking, PrivateBytes = restartedPrivate, GracefulWindowClosePassed = true, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
+                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; six gap/background dismissal reopens; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, WindowsClientAreaAnimations = SystemParameters.ClientAreaAnimation, PreparationTiers = preparationTiers, RapidShortcutReversals = 3, OutsideDismissReopens = reopenLatencies.Count, OutsideDismissReopenMs = reopenLatencies, HotkeyToVisibleWindowMs = visibleLatencies, OpenMemorySamples = openMemory, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = restartedWorking, PrivateBytes = restartedPrivate, GracefulWindowClosePassed = true, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
                     Console.WriteLine("PASS: native capture/paste, bursts, large images, file reference, bounded history, five-minute idle without crash, and restart persistence.");
                     result.TrySetResult(0);
                 }
@@ -222,10 +229,10 @@ internal static class AppSessionChecks
         });
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); return result.Task;
     }
-    private sealed record RuntimeMemory(long WorkingSetBytes, long PrivateBytes, int Processes);
+    private sealed record RuntimeMemory(long WorkingSetBytes, long PrivateBytes, int Processes, long? PrivateWorkingSetBytes);
     private static RuntimeMemory SampleRuntime(string executable)
     {
-        long working = 0, committed = 0; var count = 0;
+        long working = 0, committed = 0; long? resident = 0; var count = 0;
         // Only the exact isolated executable, never the owner's installed app.
         foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(executable)))
         using (process)
@@ -234,10 +241,11 @@ internal static class AppSessionChecks
             {
                 if (!string.Equals(process.MainModule?.FileName, Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase)) continue;
                 process.Refresh(); working += process.WorkingSet64; committed += process.PrivateMemorySize64; count++;
+                resident = resident is long total && ProcessMemory.PrivateWorkingSet(process) is long current ? total + current : null;
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
         }
-        return new(working, committed, count);
+        return new(working, committed, count, resident);
     }
     private static async Task Until(Func<bool> condition, string stage)
     {

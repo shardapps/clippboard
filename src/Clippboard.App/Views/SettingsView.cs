@@ -92,8 +92,28 @@ internal sealed class SettingsView : UserControl
             Number("Maximum notes", _draft.MaxEntries, 50, 1000, "notes", v => _draft = _draft with { MaxEntries = v });
             Number("History on disk", _draft.StorageMiB, 32, 512, "MiB", v => _draft = _draft with { StorageMiB = v });
             Number("Image preview cache", _draft.PreviewCacheMiB, 4, 64, "MiB", v => _draft = _draft with { PreviewCacheMiB = v });
-            Toggle("Use less RAM while browsing", _draft.LowMemoryRendering, v => _draft = _draft with { LowMemoryRendering = v });
-            Hint("Uses software rendering. It can use more CPU and make motion less smooth. Save, then reopen the rope to change rendering mode.");
+            Hint("Rendering · save, then reopen the rope to apply.");
+            var rendering = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
+            foreach (var mode in Enum.GetValues<NoteRendering>())
+            {
+                var choice = new Button { Content = mode == NoteRendering.Retained ? "Balanced" : mode.ToString(), Tag = mode, Padding = new Thickness(9, 7, 9, 7) };
+                System.Windows.Automation.AutomationProperties.SetName(choice, "Note rendering: " + choice.Content);
+                choice.SetResourceReference(BackgroundProperty, _draft.EffectiveRendering == mode ? "SelectedSurface" : "Chrome");
+                System.Windows.Automation.AutomationProperties.SetItemStatus(choice, _draft.EffectiveRendering == mode ? "Selected" : "");
+                choice.Click += (_, _) =>
+                {
+                    _draft = _draft with { LowMemoryRendering = false, Rendering = mode };
+                    foreach (Button button in rendering.Children)
+                    {
+                        var selected = (NoteRendering)button.Tag == mode;
+                        button.SetResourceReference(BackgroundProperty, selected ? "SelectedSurface" : "Chrome");
+                        System.Windows.Automation.AutomationProperties.SetItemStatus(button, selected ? "Selected" : "");
+                    }
+                };
+                rendering.Children.Add(choice);
+            }
+            _content.Children.Add(rendering);
+            Hint("Balanced is recommended for lower memory. Try a compatibility mode if your display has issues. Hardware can use more RAM; software can make movement slower.");
             Toggle("Prepare faster opening", _draft.FastOpen, v => _draft = _draft with { FastOpen = v });
             Hint("Uses extra idle RAM to prepare the rope. Keeps only the smaller runtime when full controls cost too much, and stops when memory is tight. Saved contents stay unloaded. Turn this off for the lowest idle RAM. Save to apply.");
             Hint("Only short history summaries remain while hidden. Images load when needed and the preview cache clears on close. Large images can be skipped or declined when Windows has little memory. Lower limits can remove older unstarred notes.");

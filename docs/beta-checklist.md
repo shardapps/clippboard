@@ -1,6 +1,6 @@
 # Beta delivery and validation checklist
 
-The owner authorized this work on October 13, 2026. The source is being prepared as **0.6.0-beta.4**, Windows package **0.6.0.0**. The public **0.5.1 alpha** downloads and Store release remain unchanged. Code delivery and release acceptance are separate below; no zero-bug or all-hardware claim is made.
+The owner authorized this work on October 13, 2026. The source is being prepared as **0.6.0-beta.5**, Windows package **0.6.0.0**. The public **0.5.1 alpha** downloads and Store release remain unchanged. Code delivery and release acceptance are separate below; no zero-bug or all-hardware claim is made.
 
 ## Implemented with automated checks
 
@@ -9,6 +9,7 @@ The owner authorized this work on October 13, 2026. The source is being prepared
 - [x] Encrypted derived thumbnails, detached native image copies, adaptive cache/worker/image admission using physical and commit headroom (#27, #40, #43).
 - [x] Cached read-only metadata, unchanged-visual/search-result reuse and a bounded 1,000-summary allocation comparison (#32; performance report).
 - [x] Incremental, revision-checked catalog updates; background pipe/JSON processing; unchanged labelled-note reuse and malformed/lost-update recovery (beta.4 follow-up).
+- [x] Balanced retained-note rendering with shared raster scratch, bounded native surfaces, existing input/accessibility semantics, compatible fallback, and frame/window cleanup regressions (beta.5 follow-up; fresh candidate CI still required).
 - [x] Resource ownership audit, session-bound restores, late-result rejection and drained single-worker pipe shutdown (#42).
 - [x] Full-text/file-path search, date/type/star filters, keyboard selection and canceled stale queries (#28).
 - [x] Executable exclusions, timed pause, optional recoverable clear-on-lock and existing private-clipboard formats (#29).
@@ -22,9 +23,11 @@ The owner authorized this work on October 13, 2026. The source is being prepared
 - [x] Unicode grapheme boundaries for newly generated text/file previews (#44).
 - [x] Current servicing floor, NuGet graph audit and verified embedded/distributed third-party notices (#41).
 
-Local follow-up checks cover 523 assertions, including UI-context-free pipe replies, queued cancellation, labelled-note reuse, shared thumbnail/detail admission and corrupt-image recovery. The historical beta.1 candidate passed 499 assertions on isolated Windows CI; the follow-up adds rail layout, transparent input routing, explicit reopen and surface-bound checks, plus six native gap/background dismissal reopens. See the [candidate evidence](beta-validation.md) for the exact tested commits and limits. The [performance report](performance.md), [resource audit](resource-ownership.md), [dependency review](dependency-audit.md) and feature guides explain what was measured and what was not. The metadata comparison is an in-memory allocation experiment, not an installed search/IPC benchmark or a paging implementation.
+Local follow-up checks cover 554 assertions, including retained-note input, pixels and disposal, UI-context-free pipe replies, queued cancellation, labelled-note reuse, shared thumbnail/detail admission and corrupt-image recovery. The historical beta.1 candidate passed 499 assertions on isolated Windows CI; follow-ups add rail layout, transparent input routing, explicit reopen and surface-bound checks, plus six native gap/background dismissal reopens. See the [candidate evidence](beta-validation.md) for the exact tested commits and limits. The [performance report](performance.md), [resource audit](resource-ownership.md), [dependency review](dependency-audit.md) and feature guides explain what was measured and what was not. The metadata comparison is an in-memory allocation experiment, not an installed search/IPC benchmark or a paging implementation.
 
 ## Candidate automation gates
+
+The completed gates below describe the last validated candidate. Beta.5 changes the default note renderer and must pass a fresh complete run before its evaluation installer is delivered. See [candidate evidence](beta-validation.md) and its PR checks for the current build.
 
 - [x] Final candidate CI: warnings-as-errors, locked restore/audit, full storage/format/WPF checks and corrupt/oversize/cancellation regressions.
 - [x] Repeated hardware/default and software lifecycle plus precision scrolling, with private memory, CPU and callback-gap reports.

@@ -34,6 +34,7 @@ public partial class RopeWindow : Window
     {
         internal ClipSummary Entry { get; set; } = null!;
         internal Button? Combine { get; set; }
+        internal (bool Selected, bool Combined)? AccentState { get; set; }
     }
     private readonly Dictionary<Grid, NoteBinding> _bindings = new();
     private readonly Stack<Grid> _spareCards = new();
@@ -81,7 +82,7 @@ public partial class RopeWindow : Window
         SystemParameters.StaticPropertyChanged += OnSystemAppearanceChanged;
         Closed += (_, _) => SystemParameters.StaticPropertyChanged -= OnSystemAppearanceChanged;
         Rope.ShapeChanged += PositionNotes;
-        _memoryTimer.Tick += (_, _) => { if (!_scrollRunning) UpdatePreviewBudget(); };
+        _memoryTimer.Tick += (_, _) => { CheckNativeBudget(); if (!_scrollRunning) UpdatePreviewBudget(); };
         IsVisibleChanged += (_, _) => { if (IsVisible && !_closing) _memoryTimer.Start(); else _memoryTimer.Stop(); };
         Closed += (_, _) => _memoryTimer.Stop();
         SettingsRequested += () => OpenSettings();
@@ -106,6 +107,7 @@ public partial class RopeWindow : Window
         var next = draft.Normalize();
         if (_appearance.Theme != next.Theme || !Resources.Contains("Foreground")) ThemeManager.Apply(next.Theme, Resources);
         _appearance = next; Interaction.SetEnabled(this, _appearance.Animate);
+        InvalidateNativeNotes();
         if (Notes is null || Retired) return;
         if (!Animated && IsVisible && !_closing)
         {
@@ -324,6 +326,7 @@ public partial class RopeWindow : Window
             var center = 24 + index * Pitch + _appearance.NoteWidth / 2 - ScrollOffset;
             if (card.RenderTransform is TransformGroup transforms && transforms.Children[2] is TranslateTransform anchor) anchor.Y = Rope.HeightAt(center) - 8;
         }
+        RequestNativeFrame();
     }
     private void PlaceCard(Grid card, double left, bool animate)
     {
@@ -336,6 +339,7 @@ public partial class RopeWindow : Window
     }
     private void ResetCard(Grid card)
     {
+        InvalidateNativeNote(card);
         if (card.IsKeyboardFocusWithin) { if (!_focusSelection) _selectedId = null; Board.Focus(); }
         if (_thumbnailLoads.Remove(card, out var source)) { source.Cancel(); source.Dispose(); }
         SmoothMotion.CancelTree(card);
@@ -355,9 +359,10 @@ public partial class RopeWindow : Window
     }
     private void BindNote(Grid card, ClipSummary entry)
     {
+        InvalidateNativeNote(card);
         var binding = _bindings[card]; binding.Entry = entry;
         if (card.Children[1] is Border paper)
-        { var combined = _combinationIds.Contains(entry.Id); paper.SetResourceReference(Border.BorderBrushProperty, entry.Id == _selectedId || combined ? "Accent" : "Outline"); paper.BorderThickness = new Thickness(combined ? 2 : 1); }
+        { var combined = _combinationIds.Contains(entry.Id); binding.AccentState = (entry.Id == _selectedId, combined); paper.SetResourceReference(Border.BorderBrushProperty, entry.Id == _selectedId || combined ? "Accent" : "Outline"); paper.BorderThickness = new Thickness(combined ? 2 : 1); }
         binding.Label.Text = entry.IsSnippet ? (string.IsNullOrWhiteSpace(entry.Title) ? "SNIPPET" : entry.Title) : entry.HasRichText ? "TEXT · FORMATTED" : entry.Kind.ToString().ToUpperInvariant();
         binding.Label.ToolTip = string.IsNullOrWhiteSpace(entry.Title) ? null : entry.Title;
         binding.Date.Text = entry.CopiedAt.ToLocalTime().ToString("MMM d · HH:mm");
@@ -390,7 +395,7 @@ public partial class RopeWindow : Window
             var bitmap = _demoImages.GetValueOrDefault(entry.Id) ?? await _cache.GetAsync(entry.Id, cancellation);
             cancellation.ThrowIfCancellationRequested();
             if (!Notes.Children.Contains(card)) return;
-            if (card.Tag is Button select && bitmap is not null) select.Content = new Image { Source = bitmap, Stretch = Stretch.Uniform, MaxHeight = 215 };
+            if (card.Tag is Button select && bitmap is not null) { select.Content = new Image { Source = bitmap, Stretch = Stretch.Uniform, MaxHeight = 215 }; InvalidateNativeNote(card); }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException or NotSupportedException or ArgumentException or System.Security.Cryptography.CryptographicException)

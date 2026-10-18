@@ -76,7 +76,7 @@ jobs:
   motion:
     needs: compile
     runs-on: windows-2025
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -91,12 +91,14 @@ jobs:
         with:
           name: validation-input
       - name: Scroll and lifecycle profiles from exact compiled binaries
-        timeout-minutes: 5
+        timeout-minutes: 7
         run: |
           ./scripts/test-animation-preference.ps1 -Mode Enable
           $app = 'src/Clippboard.App/bin/Release/net10.0-windows10.0.22000.0/Clippboard.dll'
           dotnet $app --diagnostics artifacts/motion-diagnostics.json --scroll-only
           if ($LASTEXITCODE -ne 0) { throw 'Scroll profile failed.' }
+          dotnet $app --diagnostics artifacts/retained-motion-diagnostics.json --scroll-only --native-notes
+          if ($LASTEXITCODE -ne 0) { throw 'Retained-note scroll profile failed.' }
           dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-runtime-only.json --runtime-only-preparation
           if ($LASTEXITCODE -ne 0) { throw 'Runtime-only control lifecycle failed.' }
           dotnet $app --metadata-diagnostics artifacts/metadata-diagnostics.json
@@ -105,8 +107,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Unchanged-note reuse profile failed.' }
           dotnet $app --decode-diagnostics artifacts/decode-diagnostics.json
           if ($LASTEXITCODE -ne 0) { throw 'Image decode profile failed.' }
-          dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-hardware.json
-          if ($LASTEXITCODE -ne 0) { throw 'Default renderer lifecycle failed.' }
+          dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-retained.json
+          if ($LASTEXITCODE -ne 0) { throw 'Balanced renderer lifecycle failed.' }
+          dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-hardware.json --hardware
+          if ($LASTEXITCODE -ne 0) { throw 'Hardware renderer lifecycle failed.' }
           dotnet $app --lifecycle-diagnostics artifacts/overlay-lifecycle-software.json --software
           if ($LASTEXITCODE -ne 0) { throw 'Software renderer lifecycle failed.' }
       - name: Restore isolated desktop animation preference
@@ -121,6 +125,7 @@ jobs:
             artifacts/installer-tests/**
             artifacts/overlay-lifecycle*.json
             artifacts/motion-diagnostics.json
+            artifacts/retained-motion-diagnostics.json
             artifacts/metadata-diagnostics.json
             artifacts/refresh-diagnostics.json
             artifacts/decode-diagnostics.json

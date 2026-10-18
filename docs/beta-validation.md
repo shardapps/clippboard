@@ -1,5 +1,11 @@
 # Beta candidate evidence
 
+## 0.6.0-beta.4 active-use follow-up
+
+This candidate moves pipe/JSON exchange off the UI dispatcher, sends revision-checked incremental metadata after the initial catalog, and retains unchanged labelled note controls across refreshes. Unit checks cover concurrent real-pipe catalog callers, lost-reply resynchronization, exact order, removals and malformed-update atomicity. No persistent storage migration is introduced.
+
+The local synthetic fifty-update allocation/wire comparison and fifty-refresh WPF check are documented in [performance](performance.md). Their results concern metadata allocation/control reuse; active WPF/native graphics RAM remains an acceptance item. The software bitmap-cache trial was rejected after poorer scrolling results. The default renderer and existing motion were preserved. Required installer/native/Store-package CI checks and verified evaluation assets remain necessary before delivering this candidate; public release remains held.
+
 ## October 18 owner acceptance and next memory follow-up
 
 The owner reports the installed beta.2 is working after the shortcut, rail and outside-click fixes. A read-only process-version check confirmed `0.6.0-beta.2+d1fa598ac010ab577c30cdc5a6a9c9e5c84f8f4b`; one idle listener/prepared-child sample totaled 43.8 MiB private memory. This is a single snapshot, not an active renderer, leak, startup distribution or all-device result. No clipboard history or content was read.

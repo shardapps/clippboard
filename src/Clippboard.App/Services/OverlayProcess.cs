@@ -17,6 +17,7 @@ internal sealed class OverlayProcess : IDisposable
     private bool _disposed;
     internal bool OpenRequested { get; private set; }
     internal bool ControlsPrepared { get; set; }
+    internal CatalogSender Catalog { get; } = new();
     internal bool OwnsForeground
     {
         get

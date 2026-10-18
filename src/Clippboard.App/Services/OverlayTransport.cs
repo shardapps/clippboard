@@ -14,10 +14,10 @@ namespace Clippboard.App.Services;
 
 internal sealed record OverlayRequest(string Command, string? Id = null, bool Flag = false, AppSettings? Settings = null,
     string? Query = null, IReadOnlyList<string>? Ids = null, string? Text = null, string? Title = null, string[]? Labels = null,
-    string? Path = null, byte[]? Secret = null, FileActions.DestinationRevision? Destination = null, long VisibilityRevision = 0, long Surface = 0);
+    string? Path = null, byte[]? Secret = null, FileActions.DestinationRevision? Destination = null, long VisibilityRevision = 0, long Surface = 0, long CatalogVersion = 0);
 internal sealed record OverlayReply(string? Error = null, AppSettings? Settings = null, long Target = 0, long Version = 0, bool Close = false,
     bool StartupAvailable = true, IReadOnlyList<ClipSummary>? Entries = null, Clip? Clip = null, bool Demo = false, int ListenerProcess = 0, bool Standby = false,
-    IReadOnlyList<string>? Matches = null, bool CaptureSuspended = false, bool Saved = false, BackupState? Transfer = null, string? Diagnostics = null, long VisibilityRevision = 0, bool PrepareControls = false);
+    IReadOnlyList<string>? Matches = null, bool CaptureSuspended = false, bool Saved = false, BackupState? Transfer = null, string? Diagnostics = null, long VisibilityRevision = 0, bool PrepareControls = false, CatalogUpdate? Catalog = null);
 
 internal static class OverlayTransport
 {
@@ -115,25 +115,43 @@ internal static class OverlayTransport
 internal sealed class OverlayClient(string pipeName) : IHistoryAccess, IHistoryTransfer, IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _catalogGate = new(1, 1);
+    private readonly CatalogReplica _catalog = new();
     private readonly CancellationTokenSource _lifetime = new();
     internal async Task<OverlayReply> CallAsync(OverlayRequest request, CancellationToken cancellation = default)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, cancellation); deadline.CancelAfter(TimeSpan.FromSeconds(30));
-        await _gate.WaitAsync(deadline.Token);
+        await _gate.WaitAsync(deadline.Token).ConfigureAwait(false);
         try
         {
-            using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-            await pipe.ConnectAsync(3000, deadline.Token);
-            await OverlayTransport.WriteAsync(pipe, request, OverlayTransport.RequestLimit, deadline.Token);
-            var reply = await OverlayTransport.ReadReplyAsync(pipe, OverlayTransport.ReplyLimit, deadline.Token);
-            if (reply.Error is not null) throw new IOException(reply.Error);
-            return reply;
+            // Acquire admission before queuing work. Even synchronous pipe/JSON
+            // completions must stay off the UI dispatcher; async I/O does not
+            // occupy a worker while waiting. One exchange per client at a time.
+            return await Task.Run(async () =>
+            {
+                using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                await pipe.ConnectAsync(3000, deadline.Token).ConfigureAwait(false);
+                await OverlayTransport.WriteAsync(pipe, request, OverlayTransport.RequestLimit, deadline.Token).ConfigureAwait(false);
+                var reply = await OverlayTransport.ReadReplyAsync(pipe, OverlayTransport.ReplyLimit, deadline.Token).ConfigureAwait(false);
+                if (reply.Error is not null) throw new IOException(reply.Error);
+                return reply;
+            }, deadline.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or JsonException or InvalidDataException) { throw new IOException("The clipboard listener is unavailable. Open the rope again.", ex); }
         finally { _gate.Release(); }
     }
-    public async Task<IReadOnlyList<ClipSummary>> ListAsync() => (await CallAsync(new("list"))).Entries ?? [];
+    public async Task<IReadOnlyList<ClipSummary>> ListAsync()
+    {
+        await _catalogGate.WaitAsync(_lifetime.Token).ConfigureAwait(false);
+        try
+        {
+            var reply = await CallAsync(new("catalog", CatalogVersion: _catalog.Version)).ConfigureAwait(false);
+            return _catalog.Apply(reply.Catalog ?? throw new InvalidDataException("Missing catalog update."));
+        }
+        catch { _catalog.Reset(); throw; }
+        finally { _catalogGate.Release(); }
+    }
     public async Task<Clip?> GetAsync(string id) => (await CallAsync(new("get", id))).Clip;
     public async Task<byte[]?> GetPreviewAsync(string id) => (await CallAsync(new("preview", id))).Clip?.ImagePng;
     public async Task<IReadOnlyList<string>> SearchBatchAsync(string query, IReadOnlyList<string> ids, CancellationToken cancellation = default)

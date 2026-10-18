@@ -73,7 +73,16 @@ public sealed record Clip
 }
 
 public sealed record ClipSummary(string Id, ClipKind Kind, DateTimeOffset CopiedAt,
-    bool Pinned, string Preview, string Fingerprint, long StoredBytes, bool IsSnippet = false, string? Title = null, string[]? Labels = null, bool HasRichText = false);
+    bool Pinned, string Preview, string Fingerprint, long StoredBytes, bool IsSnippet = false, string? Title = null, string[]? Labels = null, bool HasRichText = false)
+{
+    // Arrays are recreated by IPC. Value comparison preserves unchanged
+    // metadata/visuals without changing the record's ordinary equality rules.
+    public bool ContentEquals(ClipSummary other)
+        => ReferenceEquals(this, other) || (Id == other.Id && Kind == other.Kind && CopiedAt == other.CopiedAt
+            && Pinned == other.Pinned && Preview == other.Preview && Fingerprint == other.Fingerprint
+            && StoredBytes == other.StoredBytes && IsSnippet == other.IsSnippet && Title == other.Title
+            && HasRichText == other.HasRichText && (Labels ?? []).SequenceEqual(other.Labels ?? [], StringComparer.Ordinal));
+}
 
 public sealed record HistoryLimits(int MaxEntries = 500, long MaxBytes = 256L * 1024 * 1024,
     int RetentionDays = 30, int MaxEntryBytes = 24 * 1024 * 1024);

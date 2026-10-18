@@ -48,7 +48,7 @@ public partial class App : Application
         {
             // Only disposable visual processes need the control/style tree.
             // The long-lived tray listener keeps no application UI dictionary.
-            if (e.Args.Contains("--overlay") || e.Args.Contains("--preview") || e.Args.Contains("--diagnostics"))
+            if (e.Args.Contains("--overlay") || e.Args.Contains("--preview") || e.Args.Contains("--diagnostics") || e.Args.Contains("--refresh-diagnostics"))
                 Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Clippboard;component/Design/Controls.xaml", UriKind.Relative) });
             var lifecycleIndex = Array.IndexOf(e.Args, "--lifecycle-diagnostics");
             if (lifecycleIndex >= 0) { if (lifecycleIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await OverlayDiagnostics.RunAsync(e.Args[lifecycleIndex + 1], e.Args.Contains("--software"), e.Args.Contains("--runtime-only-preparation")); Shutdown(); return; }
@@ -56,6 +56,8 @@ public partial class App : Application
             if (decodeIndex >= 0) { if (decodeIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await PerformanceDiagnostics.RunDecodeAsync(e.Args[decodeIndex + 1]); Shutdown(); return; }
             var metadataIndex = Array.IndexOf(e.Args, "--metadata-diagnostics");
             if (metadataIndex >= 0) { if (metadataIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await PerformanceDiagnostics.RunMetadataAsync(e.Args[metadataIndex + 1]); Shutdown(); return; }
+            var refreshIndex = Array.IndexOf(e.Args, "--refresh-diagnostics");
+            if (refreshIndex >= 0) { if (refreshIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await PerformanceDiagnostics.RunRefreshAsync(e.Args[refreshIndex + 1]); Shutdown(); return; }
             var overlayIndex = Array.IndexOf(e.Args, "--overlay");
             if (overlayIndex >= 0) { if (overlayIndex + 1 >= e.Args.Length) throw new ArgumentException("Overlay session required."); await RunOverlayAsync(e.Args[overlayIndex + 1], e.Args.Contains("--software"), e.Args.Contains("--runtime-only-preparation")); return; }
             _development = e.Args.Contains("--dev");
@@ -115,7 +117,8 @@ public partial class App : Application
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException or InvalidOperationException or System.Security.Cryptography.CryptographicException or ArgumentException)
         {
-            if (!e.Args.Contains("--overlay") && !e.Args.Contains("--lifecycle-diagnostics"))
+            if (!e.Args.Any(arg => arg is "--overlay" or "--lifecycle-diagnostics" or "--metadata-diagnostics"
+                or "--decode-diagnostics" or "--refresh-diagnostics" or "--diagnostics"))
                 MessageBox.Show("Clippboard could not start. Check storage permissions and whether another copy is running.", "Clippboard", MessageBoxButton.OK, MessageBoxImage.Error);
             else Console.Error.WriteLine("Clippboard process could not start: " + ex.GetType().Name);
             Shutdown(1);

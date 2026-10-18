@@ -1,6 +1,6 @@
 # Beta delivery and validation checklist
 
-The owner authorized this work on October 13, 2026. The source is being prepared as **0.6.0-beta.3**, Windows package **0.6.0.0**. The public **0.5.1 alpha** downloads and Store release remain unchanged. Code delivery and release acceptance are separate below; no zero-bug or all-hardware claim is made.
+The owner authorized this work on October 13, 2026. The source is being prepared as **0.6.0-beta.4**, Windows package **0.6.0.0**. The public **0.5.1 alpha** downloads and Store release remain unchanged. Code delivery and release acceptance are separate below; no zero-bug or all-hardware claim is made.
 
 ## Implemented with automated checks
 
@@ -8,6 +8,7 @@ The owner authorized this work on October 13, 2026. The source is being prepared
 - [x] Binary image IPC, bounded encoding scratch and binary original-image storage (#25–26, #32).
 - [x] Encrypted derived thumbnails, detached native image copies, adaptive cache/worker/image admission using physical and commit headroom (#27, #40, #43).
 - [x] Cached read-only metadata, unchanged-visual/search-result reuse and a bounded 1,000-summary allocation comparison (#32; performance report).
+- [x] Incremental, revision-checked catalog updates; background pipe/JSON processing; unchanged labelled-note reuse and malformed/lost-update recovery (beta.4 follow-up).
 - [x] Resource ownership audit, session-bound restores, late-result rejection and drained single-worker pipe shutdown (#42).
 - [x] Full-text/file-path search, date/type/star filters, keyboard selection and canceled stale queries (#28).
 - [x] Executable exclusions, timed pause, optional recoverable clear-on-lock and existing private-clipboard formats (#29).
@@ -21,7 +22,7 @@ The owner authorized this work on October 13, 2026. The source is being prepared
 - [x] Unicode grapheme boundaries for newly generated text/file previews (#44).
 - [x] Current servicing floor, NuGet graph audit and verified embedded/distributed third-party notices (#41).
 
-Local follow-up checks cover 495 assertions, including shared thumbnail/detail admission, cancellation and corrupt-image recovery. The historical beta.1 candidate passed 499 assertions on isolated Windows CI; the follow-up adds rail layout, transparent input routing, explicit reopen and surface-bound checks, plus six native gap/background dismissal reopens. See the [candidate evidence](beta-validation.md) for the exact tested commits and limits. The [performance report](performance.md), [resource audit](resource-ownership.md), [dependency review](dependency-audit.md) and feature guides explain what was measured and what was not. The metadata comparison is an in-memory allocation experiment, not an installed search/IPC benchmark or a paging implementation.
+Local follow-up checks cover 523 assertions, including UI-context-free pipe replies, queued cancellation, labelled-note reuse, shared thumbnail/detail admission and corrupt-image recovery. The historical beta.1 candidate passed 499 assertions on isolated Windows CI; the follow-up adds rail layout, transparent input routing, explicit reopen and surface-bound checks, plus six native gap/background dismissal reopens. See the [candidate evidence](beta-validation.md) for the exact tested commits and limits. The [performance report](performance.md), [resource audit](resource-ownership.md), [dependency review](dependency-audit.md) and feature guides explain what was measured and what was not. The metadata comparison is an in-memory allocation experiment, not an installed search/IPC benchmark or a paging implementation.
 
 ## Candidate automation gates
 

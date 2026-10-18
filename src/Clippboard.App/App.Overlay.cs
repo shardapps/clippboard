@@ -180,6 +180,13 @@ public partial class App
                 return new();
             case "init": case "state": return new(Settings: _settings, Target: (long)_target, Version: _historyVersion, Close: _closeOverlay, VisibilityRevision: _visibilityRevision, StartupAvailable: !_development && !PackageIdentity.IsPackaged, ListenerProcess: Environment.ProcessId, Standby: _overlay is { OpenRequested: false }, CaptureSuspended: _transfers?.HoldsCapture == true || _clipboard?.SessionLocked == true || (_settings.ClearOnLock && !_sessionWatchAvailable));
             case "list": return new(Entries: await Task.Run(() => _store!.ListAsync()));
+            case "catalog":
+                var catalogSession = _overlay ?? throw new IOException("This rope session has closed.");
+                return new(Catalog: await Task.Run(async () =>
+                {
+                    var rows = await _store!.ListAsync(); catalogSession.Cancellation.ThrowIfCancellationRequested();
+                    return catalogSession.Catalog.Create(rows, request.CatalogVersion);
+                }));
             case "search": return new(Matches: await Task.Run(() => HistorySearch.MatchBatchAsync(_store!,
                 request.Query ?? throw new ArgumentException("Search query required."), request.Ids ?? throw new ArgumentException("Search IDs required."))));
             case "get": return new(Clip: await Task.Run(() => _store!.GetAsync(request.Id ?? "")));

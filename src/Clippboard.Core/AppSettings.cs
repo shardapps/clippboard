@@ -12,6 +12,7 @@ public enum ShortcutChoice { CtrlShiftV, AltV, CtrlAltV }
 
 public sealed record AppSettings
 {
+    public const int MaximumEntries = 1000;
     public AppTheme Theme { get; init; } = AppTheme.Cloud;
     public int RetentionDays { get; init; } = 30;
     public int MaxEntries { get; init; } = 500;
@@ -47,7 +48,7 @@ public sealed record AppSettings
         ExcludedApps = CapturePolicy.NormalizeExclusions(ExcludedApps),
         PauseUntil = PauseUntil > DateTimeOffset.UtcNow ? (PauseUntil > DateTimeOffset.UtcNow.AddDays(1) ? DateTimeOffset.UtcNow.AddDays(1) : PauseUntil) : null,
         RetentionDays = Math.Clamp(RetentionDays, 1, 30),
-        MaxEntries = Math.Clamp(MaxEntries, 50, 1000),
+        MaxEntries = Math.Clamp(MaxEntries, 50, MaximumEntries),
         StorageMiB = Math.Clamp(StorageMiB, 32, 512),
         PreviewCacheMiB = Math.Clamp(PreviewCacheMiB, 4, 64),
         NoteWidth = Math.Clamp(NoteWidth, 250, 400),

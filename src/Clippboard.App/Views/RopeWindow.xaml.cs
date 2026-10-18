@@ -263,10 +263,11 @@ public partial class RopeWindow : Window
         var range = MotionMath.VisibleRange(_visible.Count, Math.Max(0, ScrollOffset - 24), NoteScroll.ViewportWidth, Pitch);
         for (var i = range.First; i <= range.Last; i++)
         {
-            if (!reusable.TryGetValue(_visible[i].Id, out var prior) || prior.Entry != _visible[i]) continue;
+            if (!reusable.TryGetValue(_visible[i].Id, out var prior) || !SameNote(prior.Entry, _visible[i])) continue;
             // Preserve unchanged visuals and decoded sources when capture/pinning
             // changes the list. Only changed/new summaries need new controls.
             _cards[i] = prior.Card; reusable.Remove(_visible[i].Id);
+            _bindings[prior.Card].Entry = _visible[i];
             PlaceCard(prior.Card, 24 + i * Pitch, Animated);
         }
         foreach (var prior in reusable.Values) RetireCard(prior.Card);
@@ -275,6 +276,10 @@ public partial class RopeWindow : Window
         SetStatus($"{_visible.Count} {(_starredOnly ? "starred clips" : "clips")} · {(_searchRunning ? "Searching…" : "Arrows to select · Enter to paste · Shift + Enter to copy")} · Esc to tuck away");
         RenderVisible(); UpdateSelectionVisuals(); SyncScroll();
     }
+    internal static bool SameNote(ClipSummary left, ClipSummary right)
+        // IPC recreates arrays. Record equality alone would rebuild every
+        // labelled note even when its displayed content has not changed.
+        => left.ContentEquals(right);
     private void RenderVisible()
     {
         if (!IsVisible || _closing || NoteScroll.ViewportWidth <= 0) return;

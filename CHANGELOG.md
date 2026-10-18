@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0-beta.4 — active-rope responsiveness (not released)
+
+- Keep named-pipe exchange and JSON processing off the UI dispatcher, with one admitted exchange per client and cancellation for queued work.
+- Send incremental catalog metadata after the initial bounded snapshot: changed entries, removed IDs and exact ordering. Missed replies or a fresh session trigger a full resynchronization; unchanged summaries keep their existing objects.
+- Retain unchanged labelled note controls and decoded sources across catalog refreshes. Compare label values after IPC instead of array identity, while keeping actions bound to the latest summary.
+- Add large-reply/UI-context, queued-cancellation, malformed/reordered/missed catalog update and JSON-cloned catalog regression checks. CI also exercises fifty refreshes of a 1,000-note synthetic catalog and retains memory/allocation evidence.
+- Reject the software bitmap-cache experiment after slower measured scroll callbacks. Default rendering and motion remain unchanged; active WPF/native graphics memory is still an acceptance concern.
+
 ## 0.6.0-beta.3 — memory follow-up (not released)
 
 - Share memory-aware image admission between thumbnails and expanded originals before reading payloads. Rapid expansion and cancellation cannot create unlimited simultaneous native decoders.

@@ -139,7 +139,15 @@ internal static partial class Program
         try { await OverlayTransport.ReadAsync<OverlayRequest>(truncated, OverlayTransport.RequestLimit, CancellationToken.None); } catch (EndOfStreamException) { rejected = true; }
         Check(rejected, "overlay rejects truncated message");
         byte[]? sentImage = null;
-        using var server = new OverlayServer(request => Task.FromResult(request.Command switch
+        var exchangeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseExchange = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        async Task<OverlayReply> DelayedStateAsync()
+        {
+            exchangeStarted.TrySetResult(); await releaseExchange.Task;
+            return new OverlayReply(Entries: Enumerable.Range(0, 1000).Select(i => new ClipSummary(i.ToString("x32"), ClipKind.Text,
+                DateTimeOffset.UnixEpoch, false, new string('p', 320), "text:" + i, 512, Labels: ["fixture", "اردو"])).ToArray());
+        }
+        using var server = new OverlayServer(request => request.Command == "delayed-state" ? DelayedStateAsync() : Task.FromResult(request.Command switch
         {
             "state" => new OverlayReply(Version: 42),
             "get" => new OverlayReply(Clip: new Clip { Kind = ClipKind.Image, ImagePng = sentImage = (byte[])attachment.Clone() }),
@@ -151,6 +159,28 @@ internal static partial class Program
         Check(ReferenceEquals(running, server.RunAsync()), "starting the same pipe server twice reuses its single worker");
         using var client = new OverlayClient(server.Name);
         Check((await client.CallAsync(new("state"))).Version == 42, "private current-user named pipe connects");
+        var context = new CountingContext(); var previousContext = SynchronizationContext.Current;
+        Task<OverlayReply> firstExchange, queuedExchange;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(context);
+            firstExchange = client.CallAsync(new("delayed-state"));
+            queuedExchange = client.CallAsync(new("state"));
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previousContext); }
+        await exchangeStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Check(!firstExchange.IsCompleted && !queuedExchange.IsCompleted, "slow reply leaves queued exchange behind the single admission gate");
+        using (var queuedCancel = new CancellationTokenSource())
+        {
+            var canceledExchange = client.CallAsync(new("state"), queuedCancel.Token); queuedCancel.Cancel(); rejected = false;
+            try { await canceledExchange; } catch (OperationCanceledException) { rejected = true; }
+            Check(rejected, "queued pipe exchange cancels without starting another worker or releasing another call's gate");
+        }
+        releaseExchange.SetResult();
+        var exchanges = await Task.WhenAll(firstExchange, queuedExchange).WaitAsync(TimeSpan.FromSeconds(5));
+        Check(exchanges[0].Entries is { Count: 1000 } entries && entries[999].Labels!.SequenceEqual(["fixture", "اردو"])
+            && exchanges[1].Version == 42, "large background metadata exchange and queued call preserve their content and order");
+        Check(context.Posts == 0, "pipe admission, I/O and JSON processing never resume on the caller's UI synchronization context");
         var pipeImage = await client.GetAsync(new string('a', 32));
         Check(pipeImage?.ImagePng?.SequenceEqual(attachment) == true, "binary image crosses the real current-user pipe intact");
         for (var i = 0; i < 100 && sentImage?.Any(x => x != 0) == true; i++) await Task.Delay(10);
@@ -176,7 +206,14 @@ internal static partial class Program
         rejected = false;
         try { _ = server.RunAsync(); } catch (ObjectDisposedException) { rejected = true; }
         Check(rejected, "disposed pipe server cannot silently start another worker");
+        await CheckCatalogAsync();
         await CheckImageTransferAllocationsAsync();
+    }
+    private sealed class CountingContext : SynchronizationContext
+    {
+        internal int Posts;
+        public override void Post(SendOrPostCallback callback, object? state)
+        { Interlocked.Increment(ref Posts); ThreadPool.QueueUserWorkItem(_ => callback(state)); }
     }
     private sealed class CountingWriteStream : Stream
     {
@@ -504,6 +541,37 @@ internal static partial class Program
                 var initialCards = window.CreatedNoteCount;
                 ((System.Windows.Controls.Button)window.FindName("AllButton")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 Check(window.CreatedNoteCount == initialCards, "unchanged summaries retain note visuals on list refresh");
+                var labelled = new ClipSummary("labelled", ClipKind.Text, DateTimeOffset.UnixEpoch, false, "fixture", "text:fixture", 512, Labels: ["work", "اردو"]);
+                var refreshed = System.Text.Json.JsonSerializer.Deserialize<ClipSummary>(System.Text.Json.JsonSerializer.Serialize(labelled))!;
+                Check(labelled != refreshed && RopeWindow.SameNote(labelled, refreshed), "wire-cloned label arrays do not invalidate unchanged note visuals");
+                Check(!RopeWindow.SameNote(labelled, refreshed with { Labels = ["changed"] })
+                    && !RopeWindow.SameNote(labelled, refreshed with { Preview = "changed" })
+                    && !RopeWindow.SameNote(labelled, refreshed with { Pinned = true })
+                    && !RopeWindow.SameNote(labelled, refreshed with { Title = "changed" })
+                    && !RopeWindow.SameNote(labelled, refreshed with { HasRichText = true })
+                    && !RopeWindow.SameNote(labelled, refreshed with { Fingerprint = "changed" }), "note reuse rejects changed content, labels and actions");
+                var labelledHistory = new DeferredHistory { Entries = [labelled] };
+                var labelledWindow = new RopeWindow(labelledHistory, preview: true, settings: new AppSettings { Animate = false })
+                { Width = 1600, Height = 800, Left = -20000, Top = -20000, ShowActivated = false, Topmost = false };
+                try
+                {
+                    labelledWindow.Show(); labelledWindow.UpdateLayout(); Pump(labelledWindow.RefreshAsync()); labelledWindow.UpdateLayout();
+                    var built = labelledWindow.CreatedNoteCount;
+                    for (var refresh = 0; refresh < 10; refresh++)
+                    {
+                        labelledHistory.Entries = [System.Text.Json.JsonSerializer.Deserialize<ClipSummary>(System.Text.Json.JsonSerializer.Serialize(labelled))!];
+                        Pump(labelledWindow.RefreshAsync());
+                    }
+                    Check(built > 0 && labelledWindow.CreatedNoteCount == built, "ten deserialized catalog refreshes retain labelled controls without rebuilding them");
+                    ClipSummary? actionEntry = null; labelledWindow.Selected += entry => { actionEntry = entry; return Task.CompletedTask; };
+                    var labelledNotes = (System.Windows.Controls.Canvas)labelledWindow.FindName("Notes");
+                    var labelledSelect = (System.Windows.Controls.Button)((System.Windows.Controls.Grid)labelledNotes.Children[0]).Tag;
+                    labelledSelect.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                    Check(ReferenceEquals(actionEntry, labelledHistory.Entries[0]), "reused note actions receive the latest catalog summary");
+                    labelledHistory.Entries = [labelled with { Preview = "updated fixture" }]; Pump(labelledWindow.RefreshAsync());
+                    Check(labelledWindow.CreatedNoteCount > built, "changed note content still rebuilds its visual binding");
+                }
+                finally { Pump(labelledWindow.CloseRopeAsync()); }
                 Check(window.PreviewBudgetBytes < window.SavedSettings.PreviewCacheMiB * 1024L * 1024, "preview retention follows the viewport within the user's ceiling");
                 Check(MemoryAvailability.PreviewBudget(16000000, 6, 300000, 1000000000) == 3600000
                     && MemoryAvailability.PreviewBudget(16000000, 6, 300000, 10000000) == 100000
@@ -972,11 +1040,12 @@ internal static partial class Program
     }
     private sealed class DeferredHistory : IHistoryAccess
     {
+        internal System.Collections.Generic.IReadOnlyList<ClipSummary> Entries = [];
         internal readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal readonly TaskCompletionSource<Clip?> Result = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal int Calls;
         internal int ListCalls;
-        public Task<System.Collections.Generic.IReadOnlyList<ClipSummary>> ListAsync() { Interlocked.Increment(ref ListCalls); return Task.FromResult<System.Collections.Generic.IReadOnlyList<ClipSummary>>([]); }
+        public Task<System.Collections.Generic.IReadOnlyList<ClipSummary>> ListAsync() { Interlocked.Increment(ref ListCalls); return Task.FromResult(Entries); }
         public Task<Clip?> GetAsync(string id) { Interlocked.Increment(ref Calls); Started.TrySetResult(); return Result.Task; }
         public Task SetPinnedAsync(string id, bool pinned) => Task.CompletedTask;
         public Task DeleteAsync(string id) => Task.CompletedTask;

@@ -25,8 +25,8 @@ public partial class App
         using var client = new OverlayClient(pipeName);
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var initial = await client.CallAsync(new("init"));
-        if (initial.Settings?.LowMemoryRendering == true) System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
-        if (initial.Demo) await client.CallAsync(new("diagnostic-renderer", Id: System.Windows.Media.RenderOptions.ProcessRenderMode.ToString()));
+        System.Windows.Media.RenderOptions.ProcessRenderMode = !software && initial.Settings?.EffectiveRendering == NoteRendering.Hardware
+            ? System.Windows.Interop.RenderMode.Default : System.Windows.Interop.RenderMode.SoftwareOnly;
         if (initial.Standby)
         {
             // Measure the cheaper runtime first. A listener that has processed
@@ -38,12 +38,14 @@ public partial class App
             await client.CallAsync(new("standby-prepared", Id: _rope is null ? "runtime" : "controls", Flag: _rope is null ? Windows.Count == 0 : !_rope.IsVisible && new System.Windows.Interop.WindowInteropHelper(_rope).Handle == 0));
             do { initial = await client.CallAsync(new("wait-open")); } while (initial.Standby && !initial.Close);
             if (initial.Close) { Shutdown(); return; }
-            System.Windows.Media.RenderOptions.ProcessRenderMode = initial.Settings?.LowMemoryRendering == true || software
-                ? System.Windows.Interop.RenderMode.SoftwareOnly : System.Windows.Interop.RenderMode.Default;
+            System.Windows.Media.RenderOptions.ProcessRenderMode = !software && initial.Settings?.EffectiveRendering == NoteRendering.Hardware
+                ? System.Windows.Interop.RenderMode.Default : System.Windows.Interop.RenderMode.SoftwareOnly;
         }
         if (initial.Close) { Shutdown(); return; }
         _rope ??= new RopeWindow(client, initial.Demo, initial.Settings) { StartupAvailable = initial.StartupAvailable };
         if (initial.Settings is not null && _rope.SavedSettings != initial.Settings) _rope.ApplyAppearance(initial.Settings);
+        if (!software && _rope.SavedSettings.EffectiveRendering == NoteRendering.Retained) _rope.EnableNativeNotes();
+        if (initial.Demo) await client.CallAsync(new("diagnostic-renderer", Id: System.Windows.Media.RenderOptions.ProcessRenderMode.ToString()));
         _rope.SetPaused(initial.Settings?.IsCapturePaused == true || initial.CaptureSuspended);
         _rope.SettingsSaveRequested += async settings =>
         {
@@ -126,6 +128,7 @@ public partial class App
             _rope.DiagnosticCompactSurface();
             _rope.Show(); _rope.RenderDemo(1000); _rope.UpdateLayout(); _rope.AnimateEntrance();
             await Task.Delay(1700); _rope.DiagnosticScroll(900); await Task.Delay(900);
+            await client.CallAsync(new("diagnostic-retained", Flag: _rope.NativeNotesActive && _rope.NativeSurfaceBytes > 0));
             _rope.OpenSettings(); await Task.Delay(700); await _rope.CloseRopeAsync();
         }
         else { await _rope.OpenAsync((nint)initial.Target); if (!_rope.Retired) poll.Start(); }

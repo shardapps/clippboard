@@ -8,6 +8,8 @@ The report excludes clipboard contents, note titles, labels, file paths, exclude
 
 This is a momentary resource snapshot, not proof of a memory leak or an opening-latency measurement. Combined private bytes include the listener and child. Working sets can share pages and should not be summed as a RAM estimate. A process that has exited or cannot be queried is marked unavailable, not zero. Closing Help discards late collection replies.
 
+Beta.5 also reports private working sets when the Windows EX2 counters are available. This resident-memory measure is closer to Task Manager's ordinary process-memory column than private committed bytes. Older Windows builds may leave it unavailable. Private bytes, private working sets and total working sets are different measures; none includes every DWM/GPU allocation. Rendering is labelled as the requested preference because a session may use the compatible fallback. The isolated installed test records both processes while the rope is open.
+
 Use synthetic clipboard examples and redact screenshots before reporting. Security findings belong in the repository's private security reporting route.
 
 ![Help with explicit diagnostics collection](assets/help-preview.png)

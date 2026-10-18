@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0-beta.5 — active rendering memory (not released)
+
+- Default to Balanced rendering: Windows moves retained note pixels while the original WPF controls keep input, keyboard behavior and accessibility. Keep hardware and software compatibility choices; preserve the legacy explicit software preference.
+- Share one temporary rasterization buffer, recycle visible-note surfaces, release rotation buffers at rest, and release native windows/pixels when panels open or the rope closes. Bound admission by viewport geometry and live physical/commit headroom; allocation/transform failure restores the live compatible view.
+- Keep note rotation, hover, selection, deletion feedback, theme updates and image arrival in sync. Preserve fractional transform precision instead of inferring scale from independently rounded screen coordinates. Stop frame subscriptions at rest.
+- Add native-window disposal, input/accessibility, theme, pressure/fallback and motion regressions. CI profiles Balanced and both compatibility paths, exercises an actual installed-note mouse click, and records combined active memory plus private working sets where Windows supports them.
+
+Local synthetic scroll measurements show lower overlay private working sets with comparable p95 callback gaps; see [performance](docs/performance.md). These are not combined installed RAM, physical presentation or all-hardware guarantees. Public beta publication remains held for acceptance.
+
 ## 0.6.0-beta.4 — active-rope responsiveness (not released)
 
 - Keep named-pipe exchange and JSON processing off the UI dispatcher, with one admitted exchange per client and cancellation for queued work.

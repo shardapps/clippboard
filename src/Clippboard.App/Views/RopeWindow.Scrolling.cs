@@ -37,6 +37,11 @@ public partial class RopeWindow
     }
     private nint OnNativeScroll(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
+        if (message == 0x02E0 && _nativeNotes && !Retired) // WM_DPICHANGED
+        {
+            // Let WPF apply its new device transform before replacing buffers.
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(InvalidateNativeNotes));
+        }
         if (message == Services.OverlayProcess.VisibilityMessage && !Retired && (long)wParam >= 0 && ((long)lParam is 0 or 1))
         { handled = true; VisibilityRequested?.Invoke(lParam != 0, (long)wParam); return 0; }
         if (message != HorizontalWheel.Message || Retired || _closing || !IsVisible || HorizontalWheel.ControlDown(wParam)

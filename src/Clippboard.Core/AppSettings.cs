@@ -9,6 +9,7 @@ namespace Clippboard.Core;
 // Append themes to preserve existing serialized numeric values.
 public enum AppTheme { Cloud, Paper, Midnight, Lavender, Ocean, Rose }
 public enum ShortcutChoice { CtrlShiftV, AltV, CtrlAltV }
+public enum NoteRendering { Retained, Hardware, Software }
 
 public sealed record AppSettings
 {
@@ -24,6 +25,9 @@ public sealed record AppSettings
     public bool Animate { get; init; } = true;
     public bool PlayfulMotion { get; init; } = true;
     public bool LowMemoryRendering { get; init; }
+    public NoteRendering Rendering { get; init; } = NoteRendering.Retained;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public NoteRendering EffectiveRendering => LowMemoryRendering ? NoteRendering.Software : Rendering;
     public bool FastOpen { get; init; } = true;
     public bool AutoPaste { get; init; } = true;
     public bool StarredFirst { get; init; } = true;
@@ -45,6 +49,7 @@ public sealed record AppSettings
     {
         Theme = Enum.IsDefined(Theme) ? Theme : AppTheme.Cloud,
         Shortcut = Enum.IsDefined(Shortcut) ? Shortcut : ShortcutChoice.CtrlShiftV,
+        Rendering = Enum.IsDefined(Rendering) ? Rendering : NoteRendering.Retained,
         ExcludedApps = CapturePolicy.NormalizeExclusions(ExcludedApps),
         PauseUntil = PauseUntil > DateTimeOffset.UtcNow ? (PauseUntil > DateTimeOffset.UtcNow.AddDays(1) ? DateTimeOffset.UtcNow.AddDays(1) : PauseUntil) : null,
         RetentionDays = Math.Clamp(RetentionDays, 1, 30),

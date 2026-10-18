@@ -159,19 +159,20 @@ internal static class PerformanceDiagnostics
         var path = Path.GetFullPath(output); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(path, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
     }
-    internal static async Task RunScrollAsync(HistoryStore store, string output, bool software = false)
+    internal static async Task RunScrollAsync(HistoryStore store, string output, bool software = false, bool nativeNotes = false)
     {
-        if (software) RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+        if (software || nativeNotes) RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         using var process = Process.GetCurrentProcess();
         var cycles = new List<object>();
         for (var cycle = 0; cycle < 4; cycle++)
         {
             var window = new RopeWindow(store, preview: true, settings: new AppSettings { Animate = true }) { Width = 1600, Height = 900, ShowActivated = false, Topmost = false };
+            if (nativeNotes) window.EnableNativeNotes();
             window.Show(); window.RenderDemo(1000); window.UpdateLayout(); window.DiagnosticCompactSurface();
             await Task.Delay(500);
             var samples = new List<double>(); TimeSpan? previous = null;
             EventHandler frame = (_, args) => { var time = ((RenderingEventArgs)args).RenderingTime; if (previous is TimeSpan last && time > last) samples.Add((time - last).TotalMilliseconds); previous = time; };
-            var allocated = GC.GetTotalAllocatedBytes(); var cpu = process.TotalProcessorTime; var created = window.CreatedNoteCount;
+            var allocated = GC.GetTotalAllocatedBytes(); var cpu = process.TotalProcessorTime; var created = window.CreatedNoteCount; var elapsed = Stopwatch.StartNew();
             CompositionTarget.Rendering += frame;
             try
             {
@@ -180,12 +181,19 @@ internal static class PerformanceDiagnostics
                 await Task.Delay(700);
             }
             finally { CompositionTarget.Rendering -= frame; }
+            elapsed.Stop(); var activeCpu = (process.TotalProcessorTime - cpu).TotalSeconds;
+            var activeAllocations = GC.GetTotalAllocatedBytes() - allocated;
+            var idleCpu = process.TotalProcessorTime; var idle = Stopwatch.StartNew();
+            await Task.Delay(1500);
+            var openIdleCpu = (process.TotalProcessorTime - idleCpu).TotalSeconds / idle.Elapsed.TotalSeconds * 100;
             process.Refresh(); var sorted = samples.Order().ToArray();
-            cycles.Add(new { Cycle = cycle, Frames = sorted.Length, P95FrameGapMs = sorted.Length == 0 ? 0 : sorted[(int)((sorted.Length - 1) * .95)], MaxFrameGapMs = sorted.LastOrDefault(), GapsOver33Ms = sorted.Count(x => x > 33.4), CreatedCards = window.CreatedNoteCount - created, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated, CpuSeconds = (process.TotalProcessorTime - cpu).TotalSeconds, WorkingSetBytes = process.WorkingSet64, PrivateBytes = process.PrivateMemorySize64, RetainedPreviewBytes = window.CachedImageBytes, FinalOffset = window.ScrollOffset });
+            cycles.Add(new { Cycle = cycle, ElapsedSeconds = elapsed.Elapsed.TotalSeconds, Frames = sorted.Length, P95FrameGapMs = sorted.Length == 0 ? 0 : sorted[(int)((sorted.Length - 1) * .95)], MaxFrameGapMs = sorted.LastOrDefault(), GapsOver33Ms = sorted.Count(x => x > 33.4), CreatedCards = window.CreatedNoteCount - created, NativeNotesActive = window.NativeNotesActive, NativeFailure = window.NativeFailure, NativeSurfaceBytes = window.NativeSurfaceBytes, NativeSurfaceUploads = window.NativeSurfaceUploads, AllocatedBytes = activeAllocations, CpuSeconds = activeCpu, OpenIdleCpuPercentOneCore = openIdleCpu, NativeFrameRunningAtRest = window.NativeFrameRunning, WorkingSetBytes = process.WorkingSet64, PrivateBytes = process.PrivateMemorySize64, PrivateWorkingSetBytes = Platform.ProcessMemory.PrivateWorkingSet(process), RetainedPreviewBytes = window.CachedImageBytes, FinalOffset = window.ScrollOffset });
+            var retainedPassed = !nativeNotes || window.NativeNotesActive && !window.NativeFrameRunning;
             await window.CloseRopeAsync();
+            if (!retainedPassed) throw new InvalidOperationException("Retained-note diagnostic fell back or did not stop at rest.");
         }
         var path = Path.GetFullPath(output); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new { Scenario = "Four sustained 360-update precision gestures and reversals over 1000 synthetic notes; rendering callbacks, not display FPS; no clipboard or forced GC", SoftwareRendering = software, RendererRequested = RenderOptions.ProcessRenderMode.ToString(), Cycles = cycles }, new JsonSerializerOptions { WriteIndented = true }));
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new { Scenario = "Four sustained 360-update precision gestures and reversals over 1000 synthetic notes; rendering callbacks, not display FPS; no clipboard or forced GC", SoftwareRendering = software || nativeNotes, NativeNotes = nativeNotes, RendererRequested = RenderOptions.ProcessRenderMode.ToString(), Cycles = cycles }, new JsonSerializerOptions { WriteIndented = true }));
     }
     public static async Task RunAsync(HistoryStore store, string output, bool software)
     {

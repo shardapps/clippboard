@@ -331,6 +331,11 @@ internal static partial class Program
             Check(!(await settingsStore.LoadAsync()).LowMemoryRendering, "existing settings keep smooth hardware rendering preference");
             await settingsStore.SaveAsync((await settingsStore.LoadAsync()) with { LowMemoryRendering = true });
             Check((await settingsStore.LoadAsync()).LowMemoryRendering, "low-RAM rendering preference persists for next overlay session");
+            Check(System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{\"LowMemoryRendering\":false}")!.Normalize().EffectiveRendering == NoteRendering.Retained,
+                "older default settings migrate to balanced notes without editing the saved file outside the app");
+            Check(System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{\"LowMemoryRendering\":true}")!.Normalize().EffectiveRendering == NoteRendering.Software
+                && (new AppSettings { Rendering = (NoteRendering)999 }).Normalize().Rendering == NoteRendering.Retained,
+                "explicit legacy software preference is preserved and invalid rendering values recover safely");
             await settingsStore.SaveAsync((await settingsStore.LoadAsync()) with { FastOpen = false });
             Check(!(await settingsStore.LoadAsync()).FastOpen, "faster opening can be disabled without changing rendering preference");
             Check(!MemoryAvailability.KeepStandby(-1, 10, false) && !MemoryAvailability.KeepStandby(0, 10, true), "unknown or exhausted memory never creates a standby overlay");
@@ -524,6 +529,7 @@ internal static partial class Program
                 SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
                 var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Clippboard;component/Design/Controls.xaml", UriKind.Relative) });
+                CheckRetainedNotes(root);
                 var idleHistory = new DeferredHistory();
                 var idleWindow = new RopeWindow(idleHistory, settings: new AppSettings { Animate = false });
                 try

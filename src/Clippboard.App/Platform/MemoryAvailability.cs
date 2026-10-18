@@ -39,6 +39,11 @@ internal static class MemoryAvailability
     }
     internal static int DecodeConcurrency(long available, int processors, long maxPayload)
         => (int)Math.Clamp(Math.Min(Math.Max(1, processors), available > 0 ? available / 100 / Math.Max(1, maxPayload) : 1), 1, 2);
+    internal static long RetainedSurfaceBudget(long demand, long available)
+        // Visible render targets are separate from the optional image cache.
+        // Reserve source, snapshot and worst rotation before allocating, using
+        // viewport geometry and at most four percent of current headroom.
+        => Math.Max(0, Math.Min(Math.Max(0, demand), available >= 0 ? available / 25 : Math.Max(0, demand)));
     internal static bool KeepStandby(long available, long measuredPrivateBytes, bool alreadyRunning)
         // Measured cost rather than a fixed per-machine RAM allowance. Separate
         // start/stop thresholds prevent restarting around a pressure boundary.

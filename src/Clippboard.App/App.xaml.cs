@@ -51,7 +51,7 @@ public partial class App : Application
             if (e.Args.Contains("--overlay") || e.Args.Contains("--preview") || e.Args.Contains("--diagnostics") || e.Args.Contains("--refresh-diagnostics"))
                 Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Clippboard;component/Design/Controls.xaml", UriKind.Relative) });
             var lifecycleIndex = Array.IndexOf(e.Args, "--lifecycle-diagnostics");
-            if (lifecycleIndex >= 0) { if (lifecycleIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await OverlayDiagnostics.RunAsync(e.Args[lifecycleIndex + 1], e.Args.Contains("--software"), e.Args.Contains("--runtime-only-preparation")); Shutdown(); return; }
+            if (lifecycleIndex >= 0) { if (lifecycleIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await OverlayDiagnostics.RunAsync(e.Args[lifecycleIndex + 1], e.Args.Contains("--software"), e.Args.Contains("--runtime-only-preparation"), e.Args.Contains("--hardware")); Shutdown(); return; }
             var decodeIndex = Array.IndexOf(e.Args, "--decode-diagnostics");
             if (decodeIndex >= 0) { if (decodeIndex + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic output required."); await PerformanceDiagnostics.RunDecodeAsync(e.Args[decodeIndex + 1]); Shutdown(); return; }
             var metadataIndex = Array.IndexOf(e.Args, "--metadata-diagnostics");
@@ -70,7 +70,7 @@ public partial class App : Application
             if (diagnostic >= 0)
             {
                 if (diagnostic + 1 >= e.Args.Length) throw new ArgumentException("Diagnostic report path required.");
-                if (e.Args.Contains("--scroll-only")) await PerformanceDiagnostics.RunScrollAsync(_store, e.Args[diagnostic + 1], e.Args.Contains("--software"));
+                if (e.Args.Contains("--scroll-only")) await PerformanceDiagnostics.RunScrollAsync(_store, e.Args[diagnostic + 1], e.Args.Contains("--software"), e.Args.Contains("--native-notes"));
                 else await PerformanceDiagnostics.RunAsync(_store, e.Args[diagnostic + 1], e.Args.Contains("--software"));
                 Shutdown(); return;
             }

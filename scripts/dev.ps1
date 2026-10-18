@@ -1,6 +1,6 @@
 param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','decode','metadata','refresh','format')][string]$Task = 'build',
   [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
-  [switch]$Settings, [switch]$Help, [switch]$Notices, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [switch]$Ocr, [switch]$Backup, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly, [switch]$BuildDiagnostics, [switch]$RuntimeOnlyPreparation, [switch]$NoBuild)
+  [switch]$Settings, [switch]$Help, [switch]$Notices, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [switch]$Ocr, [switch]$Backup, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly, [switch]$BuildDiagnostics, [switch]$RuntimeOnlyPreparation, [switch]$NoBuild, [switch]$NativeNotes, [switch]$Hardware)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
@@ -28,6 +28,7 @@ switch ($Task) {
   'refresh' { & $dotnetPath run --project $appProject -c Release -p:UseAppHost=false @runOptions -- --refresh-diagnostics (Join-Path $projectRoot 'artifacts/refresh-diagnostics.json') }
   'lifecycle' {
     $diagnosticArgs = @('--lifecycle-diagnostics', (Join-Path $projectRoot 'artifacts/overlay-lifecycle.json'))
+    if ($Hardware) { $diagnosticArgs += '--hardware' }
     if ($Software) { $diagnosticArgs += '--software' }
     if ($RuntimeOnlyPreparation) { $diagnosticArgs += '--runtime-only-preparation' }
     & $dotnetPath run --project $appProject -c Release -p:UseAppHost=false @runOptions -- @diagnosticArgs
@@ -35,6 +36,8 @@ switch ($Task) {
   'diagnostics' {
     $diagnosticArgs = @('--diagnostics', (Join-Path $projectRoot 'artifacts/motion-diagnostics.json'))
     if ($ScrollOnly) { $diagnosticArgs += '--scroll-only' }
+    if ($NativeNotes) { $diagnosticArgs += '--native-notes' }
+    if ($Hardware) { $diagnosticArgs += '--hardware' }
     if ($Software) { $diagnosticArgs += '--software' }
     if ($RuntimeOnlyPreparation) { $diagnosticArgs += '--runtime-only-preparation' }
     & $dotnetPath run --project $appProject -c Release -p:UseAppHost=false @runOptions -- @diagnosticArgs

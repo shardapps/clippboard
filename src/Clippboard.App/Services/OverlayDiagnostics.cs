@@ -11,14 +11,14 @@ namespace Clippboard.App.Services;
 
 internal static class OverlayDiagnostics
 {
-    internal static async Task RunAsync(string output, bool software, bool runtimeOnlyPreparation = false)
+    internal static async Task RunAsync(string output, bool software, bool runtimeOnlyPreparation = false, bool hardware = false)
     {
         using var current = Process.GetCurrentProcess();
         object Sample() { current.Refresh(); return new { WorkingSetBytes = current.WorkingSet64, PrivateBytes = current.PrivateMemorySize64, ManagedBytes = GC.GetTotalMemory(false), Handles = current.HandleCount }; }
         var before = Sample(); var cycles = new List<object>();
         for (var cycle = 0; cycle < 8; cycle++)
         {
-            string? renderer = null; double? firstFrameMs = null;
+            string? renderer = null; double? firstFrameMs = null; bool? retained = null;
             var standby = cycle % 2 == 1; var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var watch = Stopwatch.StartNew();
             var preferencePath = software && cycle % 2 == 1;
@@ -26,10 +26,11 @@ internal static class OverlayDiagnostics
             using var overlay = child = new OverlayProcess(async request =>
             {
                 if (request.Command == "diagnostic-renderer") renderer = request.Id;
+                if (request.Command == "diagnostic-retained") retained = request.Flag;
                 if (request.Command == "diagnostic-first-frame") firstFrameMs ??= watch.Elapsed.TotalMilliseconds;
                 if (request.Command == "standby-prepared") ready.TrySetResult(request.Flag);
                 if (request.Command == "wait-open") await child!.WaitForOpenAsync();
-                return new OverlayReply(Settings: new AppSettings { LowMemoryRendering = preferencePath }, StartupAvailable: false, Demo: true, Standby: standby && child?.OpenRequested != true, PrepareControls: true);
+                return new OverlayReply(Settings: new AppSettings { LowMemoryRendering = preferencePath, Rendering = hardware ? NoteRendering.Hardware : NoteRendering.Retained }, StartupAvailable: false, Demo: true, Standby: standby && child?.OpenRequested != true, PrepareControls: true);
             }, software && !preferencePath, standby, runtimeOnlyPreparation);
             double? prepareMs = null; long? preparedPrivate = null; long? preparedWorkingSet = null;
             if (standby)
@@ -49,9 +50,10 @@ internal static class OverlayDiagnostics
             }
             if (overlay.Process.ExitCode != 0) throw new IOException("Overlay diagnostic failed.");
             if (firstFrameMs is null) throw new IOException("Overlay did not report its first rendered content.");
-            if (renderer != (software ? "SoftwareOnly" : "Default")) throw new IOException("Overlay rendering preference did not apply.");
+            if (renderer != (hardware && !software ? "Default" : "SoftwareOnly")) throw new IOException("Overlay rendering preference did not apply.");
+            if (retained != (!hardware && !software)) throw new IOException("Retained note rendering was unavailable or the compatibility preference did not apply.");
             await Task.Delay(350);
-            cycles.Add(new { Cycle = cycle + 1, RenderingMode = renderer, PreferencePath = preferencePath, Prepared = standby, PreparationMs = prepareMs, PreparedPrivateBytes = preparedPrivate, PreparedWorkingSetBytes = preparedWorkingSet, FirstContentRenderedMs = firstFrameMs, ChildPeakWorkingSetBytes = peak, CombinedPeakWorkingSetBytes = combined, ChildPeakPrivateBytes = privatePeak, CombinedPeakPrivateBytes = combinedPrivate, Seconds = watch.Elapsed.TotalSeconds, Closed = Sample() });
+            cycles.Add(new { Cycle = cycle + 1, RenderingMode = renderer, RetainedNotes = retained, PreferencePath = preferencePath, Prepared = standby, PreparationMs = prepareMs, PreparedPrivateBytes = preparedPrivate, PreparedWorkingSetBytes = preparedWorkingSet, FirstContentRenderedMs = firstFrameMs, ChildPeakWorkingSetBytes = peak, CombinedPeakWorkingSetBytes = combined, ChildPeakPrivateBytes = privatePeak, CombinedPeakPrivateBytes = combinedPrivate, Seconds = watch.Elapsed.TotalSeconds, Closed = Sample() });
         }
         // Pressure release must cancel a waiting server, not leave an idle
         // long-poll worker behind. This scenario never creates a window.

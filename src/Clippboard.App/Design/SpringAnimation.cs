@@ -30,6 +30,7 @@ internal sealed class SpringAnimation : DoubleAnimationBase
 
 internal static class SmoothMotion
 {
+    internal static event Action<DependencyObject>? Changed;
     private sealed record State(SpringAnimation Animation, AnimationClock Clock);
     private static readonly ConditionalWeakTable<DependencyObject, Dictionary<DependencyProperty, State>> States = new();
     internal static void CancelTree(DependencyObject target)
@@ -58,7 +59,7 @@ internal static class SmoothMotion
         // publish the destination: DP callbacks can otherwise build offscreen cards.
         target.SetValue(property, double.IsFinite(current) ? current : destination);
         Apply(target, property, null); previous?.Clock.Controller?.Remove();
-        if (!animated || !double.IsFinite(current) || (Math.Abs(current - destination) < .001 && Math.Abs(velocity) < .01)) { target.SetValue(property, destination); return; }
+        if (!animated || !double.IsFinite(current) || (Math.Abs(current - destination) < .001 && Math.Abs(velocity) < .01)) { target.SetValue(property, destination); Changed?.Invoke(target); return; }
         var seconds = Math.Max(.06, milliseconds / 1000.0);
         // Keep the current base value until WPF starts the new clock on its next rendering tick.
         target.SetValue(property, current);
@@ -68,6 +69,7 @@ internal static class SmoothMotion
         animation.Freeze(); var clock = (AnimationClock)animation.CreateClock(true); var state = new State(animation, clock); properties[property] = state;
         clock.Completed += (_, _) => { if (properties.TryGetValue(property, out var active) && ReferenceEquals(active, state)) { properties.Remove(property); target.SetValue(property, destination); Apply(target, property, null); clock.Controller?.Remove(); } };
         Apply(target, property, clock);
+        Changed?.Invoke(target);
     }
     private static void Apply(DependencyObject target, DependencyProperty property, AnimationClock? clock)
     {

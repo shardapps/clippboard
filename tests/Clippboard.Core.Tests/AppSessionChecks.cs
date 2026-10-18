@@ -36,6 +36,7 @@ internal static class AppSessionChecks
                 var textbox = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, FontSize = 20 };
                 var fixture = new Window { Title = "Clippboard synthetic paste destination", Width = 700, Height = 500, Left = 0, Top = 0, Content = textbox };
                 var dataRoot = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!, "session-data");
+                var stage = "startup"; var activeCycle = -1;
                 try
                 {
                     if (Directory.Exists(dataRoot)) throw new IOException("Session data must be fresh.");
@@ -45,6 +46,7 @@ internal static class AppSessionChecks
                     Task? listenerReady = null;
                     var preparedChildren = new System.Collections.Concurrent.ConcurrentQueue<(int Process, string Tier)>();
                     var preparationTiers = new List<string>();
+                    var openMemory = new List<RuntimeMemory>();
                     Process StartListener()
                     {
                         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -78,6 +80,7 @@ internal static class AppSessionChecks
                     var watch = Stopwatch.StartNew(); var visibleLatencies = new List<double>(); var reopenLatencies = new List<double>();
                     for (var cycle = 0; cycle < 3; cycle++)
                     {
+                        activeCycle = cycle; stage = "clipboard capture";
                         var expected = $"Clippboard session {cycle + 1} — Unicode 🧵\nPakistan • synthetic fixture";
                         var formattedHtml = cycle == 0 ? Program.HtmlFixture("<pre>" + System.Net.WebUtility.HtmlEncode(expected) + "</pre>") : null;
                         if (formattedHtml is not null)
@@ -97,12 +100,16 @@ internal static class AppSessionChecks
                         NativeMethods.AllowSetForegroundWindow((uint)listener.Id);
                         // Exercise the actual registered Windows hotkey, rather than calling ToggleRope.
                         var invocation = Stopwatch.StartNew(); InputChord();
+                        stage = "overlay startup";
                         nint overlay = 0;
                         await Until(() => (overlay = FindWindow(0, "Clippboard", visible: true)) != 0, "real overlay startup");
                         NativeMethods.GetWindowThreadProcessId(overlay, out var activatedOwner);
                         if (activatedOwner != prepared.Process) throw new IOException("Shortcut ignored the prepared child and cold-launched another process.");
                         visibleLatencies.Add(invocation.Elapsed.TotalMilliseconds);
                         await Task.Delay(1500);
+                        stage = "initial note rendering";
+                        if (!NativeMethods.IsWindow(overlay)) throw new IOException("Installed rope retired during initial note rendering, before destination input.");
+                        openMemory.Add(SampleRuntime(executable));
                         if (cycle == 0)
                         {
                             for (var reversal = 0; reversal < 3; reversal++)
@@ -149,12 +156,18 @@ internal static class AppSessionChecks
                                 if (reopenedOwner != priorOwner) throw new IOException("A fresh shortcut replaced the child instead of reversing the live dismissal.");
                             }
                         }
+                        stage = "restore destination input";
                         await Task.Run(() =>
                         {
                             var surface = AutomationElement.FromHandle(overlay);
                             var note = surface.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "Restore Text: " + expected));
                             if (note is null) throw new IOException("Captured note is missing from the real overlay.");
-                            ((InvokePattern)note.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+                            if (cycle == 1)
+                            {
+                                var bounds = note.Current.BoundingRectangle;
+                                ClickAt(bounds.Left + Math.Min(12, bounds.Width / 2), bounds.Top + Math.Min(12, bounds.Height / 2));
+                            }
+                            else ((InvokePattern)note.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
                         }).WaitAsync(TimeSpan.FromSeconds(10));
                         await Until(() => textbox.Text.Replace("\r\n", "\n") == expected, "native restore, focus return and paste acceptance");
                         if (formattedHtml is not null && (Clipboard.GetDataObject() is not { } restoredFormats
@@ -207,11 +220,18 @@ internal static class AppSessionChecks
                     await listener.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
                     if (listener.ExitCode != 0) throw new IOException("Installed listener failed graceful window-close shutdown.");
                     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
-                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; six gap/background dismissal reopens; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, WindowsClientAreaAnimations = SystemParameters.ClientAreaAnimation, PreparationTiers = preparationTiers, RapidShortcutReversals = 3, OutsideDismissReopens = reopenLatencies.Count, OutsideDismissReopenMs = reopenLatencies, HotkeyToVisibleWindowMs = visibleLatencies, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = restartedWorking, PrivateBytes = restartedPrivate, GracefulWindowClosePassed = true, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
+                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Scenario = "Native self-contained runtime: three Unicode capture/hotkey/overlay/restore/paste cycles; six gap/background dismissal reopens; 100-copy burst and final-item persistence; two 2048x2048 images; file reference; five-minute warm idle and restart", Cycles = 3, WindowsClientAreaAnimations = SystemParameters.ClientAreaAnimation, PreparationTiers = preparationTiers, RapidShortcutReversals = 3, OutsideDismissReopens = reopenLatencies.Count, OutsideDismissReopenMs = reopenLatencies, HotkeyToVisibleWindowMs = visibleLatencies, OpenMemorySamples = openMemory, Seconds = watch.Elapsed.TotalSeconds, PersistedEntries = persisted, HistoryBytes = diskBytes, WarmWorkingSetBytes = warmWorkingSet, WarmPrivateBytes = warmPrivate, IdleSamples = samples, WorkingSetBytes = restartedWorking, PrivateBytes = restartedPrivate, GracefulWindowClosePassed = true, IdleCpuPercentOneCore = idleCpu, Limitations = "Isolated Windows runner. Visible-window timings are not physical frame presentation. Combined runtime includes matching test executable processes; working sets include shared mapped pages. Does not certify physical trackpads, Notepad, Paint, Explorer, browsers, elevated apps, other hardware/OS or Store-installed runtime" }, new JsonSerializerOptions { WriteIndented = true }));
                     Console.WriteLine("PASS: native capture/paste, bursts, large images, file reference, bounded history, five-minute idle without crash, and restart persistence.");
                     result.TrySetResult(0);
                 }
-                catch (Exception ex) { Console.Error.WriteLine(ex); result.TrySetResult(1); }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(ex);
+                    Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
+                    await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { Result = "Failed", Stage = stage, Cycle = activeCycle,
+                        ErrorType = ex.GetType().Name, Detail = ex is IOException ? ex.Message : "Automation or runtime failure; inspect the isolated job log." }, new JsonSerializerOptions { WriteIndented = true }));
+                    result.TrySetResult(1);
+                }
                 finally
                 {
                     if (listener is not null) { if (!listener.HasExited) listener.Kill(entireProcessTree: true); listener.Dispose(); }
@@ -222,10 +242,10 @@ internal static class AppSessionChecks
         });
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); return result.Task;
     }
-    private sealed record RuntimeMemory(long WorkingSetBytes, long PrivateBytes, int Processes);
+    private sealed record RuntimeMemory(long WorkingSetBytes, long PrivateBytes, int Processes, long? PrivateWorkingSetBytes);
     private static RuntimeMemory SampleRuntime(string executable)
     {
-        long working = 0, committed = 0; var count = 0;
+        long working = 0, committed = 0; long? resident = 0; var count = 0;
         // Only the exact isolated executable, never the owner's installed app.
         foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(executable)))
         using (process)
@@ -234,10 +254,11 @@ internal static class AppSessionChecks
             {
                 if (!string.Equals(process.MainModule?.FileName, Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase)) continue;
                 process.Refresh(); working += process.WorkingSet64; committed += process.PrivateMemorySize64; count++;
+                resident = resident is long total && ProcessMemory.PrivateWorkingSet(process) is long current ? total + current : null;
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
         }
-        return new(working, committed, count);
+        return new(working, committed, count, resident);
     }
     private static async Task Until(Func<bool> condition, string stage)
     {

@@ -41,6 +41,7 @@ internal sealed class OverlayProcess : IDisposable
     {
         _server = new(handler); ServerTask = _server.RunAsync();
         var launch = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
+        launch.RedirectStandardError = Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true" && Environment.GetEnvironmentVariable("CLIPPBOARD_SESSION_DIAGNOSTICS") == "1";
         if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) launch.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Clippboard.dll"));
         launch.ArgumentList.Add("--overlay"); launch.ArgumentList.Add(_server.Name);
         if (standby) launch.ArgumentList.Add("--standby");
@@ -48,6 +49,11 @@ internal sealed class OverlayProcess : IDisposable
         if (software) launch.ArgumentList.Add("--software");
         try { Process = Process.Start(launch) ?? throw new IOException("Could not start the rope."); }
         catch { _server.Dispose(); _lifetime.Dispose(); throw; }
+        if (launch.RedirectStandardError)
+        {
+            Process.ErrorDataReceived += (_, line) => { if (line.Data is not null) Console.Error.WriteLine("Overlay: " + line.Data); };
+            Process.BeginErrorReadLine();
+        }
         if (!standby) RequestOpen();
     }
     internal bool SetSurface(nint surface)

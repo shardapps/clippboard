@@ -1,6 +1,6 @@
 # Beta delivery and validation checklist
 
-The owner authorized this work on October 13, 2026. The source is being prepared as **0.6.0-beta.5**, Windows package **0.6.0.0**. The public **0.5.1 alpha** downloads and Store release remain unchanged. Code delivery and release acceptance are separate below; no zero-bug or all-hardware claim is made.
+The owner authorized this work on October 13, 2026 and accepted **0.6.0-beta.5** for public beta publication on October 19. Windows package version is **0.6.0.0**. GitHub beta distribution and the Microsoft Store's separate certification/rollout are tracked independently. The open matrix below remains required for a stable release; owner acceptance does not manufacture test evidence.
 
 ## Implemented with automated checks
 
@@ -9,7 +9,7 @@ The owner authorized this work on October 13, 2026. The source is being prepared
 - [x] Encrypted derived thumbnails, detached native image copies, adaptive cache/worker/image admission using physical and commit headroom (#27, #40, #43).
 - [x] Cached read-only metadata, unchanged-visual/search-result reuse and a bounded 1,000-summary allocation comparison (#32; performance report).
 - [x] Incremental, revision-checked catalog updates; background pipe/JSON processing; unchanged labelled-note reuse and malformed/lost-update recovery (beta.4 follow-up).
-- [x] Balanced retained-note rendering with shared raster scratch, bounded native surfaces, existing input/accessibility semantics, compatible fallback, and frame/window cleanup regressions (beta.5 follow-up; fresh candidate CI still required).
+- [x] Balanced retained-note rendering with shared raster scratch, bounded native surfaces, existing input/accessibility semantics, compatible fallback, and frame/window cleanup regressions (beta.5; all six candidate stages passed).
 - [x] Resource ownership audit, session-bound restores, late-result rejection and drained single-worker pipe shutdown (#42).
 - [x] Full-text/file-path search, date/type/star filters, keyboard selection and canceled stale queries (#28).
 - [x] Executable exclusions, timed pause, optional recoverable clear-on-lock and existing private-clipboard formats (#29).
@@ -27,13 +27,13 @@ Local follow-up checks cover 554 assertions, including retained-note input, pixe
 
 ## Candidate automation gates
 
-The completed gates below describe the last validated candidate. Beta.5 changes the default note renderer and must pass a fresh complete run before its evaluation installer is delivered. See [candidate evidence](beta-validation.md) and its PR checks for the current build.
+The completed gates below passed for beta.5 in run 39136331043, attempt 2. PR #53's tested head and merged main share tree `fb9ea97526b44b7d17c12f8ce6cef3d500d0eeb8`; original assets and SHA-256 provenance are retained in the public prerelease. See [candidate evidence](beta-validation.md).
 
 - [x] Final candidate CI: warnings-as-errors, locked restore/audit, full storage/format/WPF checks and corrupt/oversize/cancellation regressions.
 - [x] Repeated hardware/default and software lifecycle plus precision scrolling, with private memory, CPU and callback-gap reports.
 - [x] Real isolated capture/hotkey/reversal/restore/paste, image/HTML/file formats, burst, restart and sustained idle.
 - [x] Published 0.5.1 installer baseline → candidate upgrade, encrypted bytes/preferences/stars/file-reference preservation, reinstall, preview and uninstall.
-- [x] Candidate portable/setup/MSIX version/resource/identity checks, notices and SHA-256 manifests; tested binaries match the recorded source tree. Versioned ZIP/setup/checksum/provenance assembly is a required final CI step; no public beta release is made.
+- [x] Candidate portable/setup/MSIX version/resource/identity checks, notices and SHA-256 manifests; tested binaries match the recorded source tree. Versioned ZIP/setup/checksum/provenance assembly passed before owner-authorized GitHub beta publication.
 
 ## Release acceptance still requiring device/Store evidence
 
@@ -44,7 +44,7 @@ The completed gates below describe the last validated candidate. Beta.5 changes 
 - [ ] Physical trackpad, mouse wheel, scrollbar, rapid reversals and incoming clips on 60/120+ Hz displays.
 - [ ] Mixed DPI/multiple monitors, narrow screens, screen reader, high contrast, reduced motion and remote sessions.
 - [ ] Real low-memory/slow-device, disk-full/unavailable-folder, sleep/resume and longer capture/open-close sessions. Synthetic policy tests do not replace these.
-- [ ] Review all findings, update release screenshots/help/privacy and obtain fresh Store certification. Keep publication held while required validation is unresolved.
+- [ ] Review remaining findings, refresh screenshots as needed and obtain fresh Store certification. Hold the Store update until certification passes; the open device matrix remains a stable-release gate.
 
 For each manual result record build SHA, Windows version, display scale/refresh, renderer, workload, observed behavior and issue link. Use synthetic data; do not send personal clipboard contents. Test unsigned EXE trust separately from Store trust and never sideload the unsigned ingestion MSIX or disable protections.
 

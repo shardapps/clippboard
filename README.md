@@ -4,7 +4,7 @@
   <a href="https://github.com/shardapps/clippboard/actions/workflows/ci.yml"><img src="https://github.com/shardapps/clippboard/actions/workflows/ci.yml/badge.svg" alt="Windows build" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-d8e9d8?style=flat-square" alt="Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%2011-c9dfed?style=flat-square" alt="Windows 11" />
-  <img src="https://img.shields.io/badge/status-early%20alpha-e8dff0?style=flat-square" alt="Early alpha" />
+  <img src="https://img.shields.io/badge/status-public%20beta-e8dff0?style=flat-square" alt="Public beta" />
 </p>
 
 # Clippboard — Windows clipboard manager for text, images and files
@@ -13,7 +13,7 @@
 
 Built by [Shard Apps](https://github.com/shardapps). Open source, local first, and designed to stay out of your way.
 
-> **Public alpha 0.5.1:** the first release is available on GitHub. There is no stable release yet. Automated capture, storage, upgrade and installer checks pass; physical-device, broad app compatibility and accessibility coverage remain in progress. Please use test data while evaluating it.
+> **Public beta 0.6.0-beta.5:** searchable history, snippets, OCR, encrypted backups and lower-memory Balanced rendering. [Download the beta](https://github.com/shardapps/clippboard/releases/tag/v0.6.0-beta.5). There is no stable release yet; physical-device, broad app compatibility and accessibility coverage remain in progress. The Store update requires separate certification and rollout.
 
 <p align="center"><img src="docs/assets/rope-preview.png" alt="App-rendered design preview with synthetic text, file, and image notes" width="100%" /></p>
 
@@ -21,9 +21,9 @@ Built by [Shard Apps](https://github.com/shardapps). Open source, local first, a
 
 ### A line for your everyday things
 
-| Clip | What the alpha remembers | What comes back |
+| Clip | What the beta remembers | What comes back |
 | :--- | :--- | :--- |
-| Text | Plain Unicode text | The original plain text |
+| Text | Unicode and bounded HTML/RTF | Original supported formats or plain text |
 | Images | Standard clipboard bitmap, encoded as PNG | A bitmap for image-aware destinations |
 | Files & folders | Original paths, without duplicating files | A file-copy operation in destinations such as Explorer |
 
@@ -32,16 +32,19 @@ Built by [Shard Apps](https://github.com/shardapps). Open source, local first, a
 - **Star what matters:** starred notes survive capacity eviction; every clip follows the chosen 1–30-day retention period.
 - **Local storage:** Windows DPAPI protects saved contents for your Windows user. No accounts, sync, telemetry, or application network service.
 - **Bounded history:** Configurable 1–30 days for all entries, 50–1,000 clips, and 32–512 MiB of encrypted payloads (defaults: 30 days / 500 / 256 MiB). New items are rejected if pins fill the budget.
-- **Find a clip:** search saved previews with **Ctrl + F** and filter text, images or files without loading every payload.
+- **Find and organize:** search full text and file paths with **Ctrl + F**; filter by type, date or stars; add labels and reusable snippets.
+- **Work with clips:** preview text transformations, combine selected text, extract text with optional Windows OCR, and open original file locations or save images explicitly.
+- **Keep a backup:** export password-encrypted backups and inspect a merge before restoring. Clipboard contents stay local; no cloud sync is added.
+- **Balanced rendering:** cache viewport note pixels, reuse unchanged controls and adapt preview work to current memory headroom. Hardware and software compatibility modes remain available.
 - **Make it yours:** Cloud (white), Paper, Midnight, Lavender, Ocean and Rose themes; live appearance previews commit only on Save. Adjust sizes, motion, shortcuts, capture types, starred ordering, retention, and storage/cache budgets.
 - **Share feedback:** report bugs and suggest features from Help. You control what gets submitted; support information excludes clipboard contents and personal paths.
 - **Pause on demand:** use the rope or tray menu before copying something sensitive.
 
-### Try the alpha
+### Try the beta
 
 Windows 11 is the initial support target. Windows 10, ARM64, and mixed-DPI setups need further validation before being advertised as supported.
 
-**Download 0.5.1 alpha:** [per-user installer (.exe)](https://github.com/shardapps/clippboard/releases/download/v0.5.1/Clippboard-Setup-0.5.1.exe) · [portable ZIP](https://github.com/shardapps/clippboard/releases/download/v0.5.1/Clippboard-Portable-0.5.1-win-x64.zip) · [release notes, checksums and licences](https://github.com/shardapps/clippboard/releases/tag/v0.5.1). Extract the portable ZIP and run `portable/Clippboard.exe`, or run the setup executable for installation. No separate .NET installation is needed. These EXEs are **unsigned** and can show SmartScreen's unknown-publisher warning; they are evaluation builds, not a stable signed installer.
+**Download 0.6.0-beta.5:** [per-user installer (.exe)](https://github.com/shardapps/clippboard/releases/download/v0.6.0-beta.5/Clippboard-Setup-0.6.0-beta.5.exe) · [portable ZIP](https://github.com/shardapps/clippboard/releases/download/v0.6.0-beta.5/Clippboard-Portable-0.6.0-beta.5-win-x64.zip) · [release notes, checksums and licences](https://github.com/shardapps/clippboard/releases/tag/v0.6.0-beta.5). Extract the complete portable ZIP and run `Clippboard.exe`, keeping the `licenses` folder, or use the per-user installer. No separate .NET installation is needed. These EXEs are **unsigned** and can show SmartScreen's unknown-publisher warning. [Previous 0.5.1 alpha](https://github.com/shardapps/clippboard/releases/tag/v0.5.1).
 
 **Microsoft Store:** [install Clippboard from Microsoft Store](https://apps.microsoft.com/detail/9PP8015JDJ45), published on **October 13, 2026**, under **ShardCoders**. The approved package is **0.5.1.0**, Windows 11 x64; its public listing and official Download / View in Store controls are verified, including the Pakistan catalog. Use the Store distribution for the Microsoft trust path. Store-signed installed behavior remains a separate test; Store signing does not sign the GitHub EXEs. [Store distribution](docs/store.md) · [Release validation checklist](docs/release-checklist.md) · [Changelog](CHANGELOG.md)
 
@@ -54,7 +57,7 @@ Development runs store history under this repository's ignored `.data/` folder. 
 
 **Controls:** click a note to restore and request paste; **Shift + click** restores without requesting paste; **☆ / ★** pins or unpins; **×** deletes. Tab navigates buttons and Enter activates them. Use the mouse wheel, arrow keys, or custom navigation strip to browse all saved notes. **Expand** opens full content in a resizable panel. **All clips / Starred** filters the list. The logo or gear opens settings.
 
-Search checks the saved short previews, including displayed file names, rather than decrypting all full notes. Click **All types** to cycle Text → Image → Files → All types. Use the speech-bubble button for Help and feedback. Appearance changes preview live; closing without Save restores your saved appearance.
+Search includes full text and file paths using bounded background work. Use type/date/label filters, Starred and Snippets to narrow the list. Use the speech-bubble button for Help and feedback. Appearance changes preview live; closing without Save restores your saved appearance. A saved rendering-mode change applies after reopening the rope.
 
 For a self-contained executable, run `./scripts/dev.ps1 publish`. Output: `artifacts/portable/win-x64/Clippboard.exe`; recipients do not need .NET installed. Build the setup executable with `./scripts/package.ps1` after installing Inno Setup 6. CI produces portable and setup artifacts. These are unsigned testing builds. [Packaging details →](docs/development.md) · [Dependency and notice review](docs/dependency-audit.md)
 
@@ -68,7 +71,7 @@ For a self-contained executable, run `./scripts/dev.ps1 publish`. Output: `artif
 
 Capture begins when Clippboard is running. It cannot reconstruct things copied before it started or while paused. **Start at sign-in** is opt-in through settings or the tray in regular EXE builds. Store installations expose the opt-in startup task in Windows Settings → Apps → Startup after first launch.
 
-File notes reference originals: moved, deleted, disconnected, or inaccessible files cannot be restored. Files are restored as copies rather than repeating an old cut. Virtual attachments and proprietary app formats are not supported yet. HTML/RTF styling is not preserved.
+File notes reference originals: moved, deleted, disconnected, or inaccessible files cannot be restored. Files are restored as copies rather than repeating an old cut. Virtual attachments and proprietary app formats are not supported yet. Bounded HTML/RTF is preserved when supported; previews remain inert and destinations may fall back to plain text.
 
 Automatic pasting depends on the destination. Windows can block input into elevated apps; if focus restoration or input injection fails, the item remains on the clipboard for manual **Ctrl + V**. Apps can ignore a successful paste keystroke; Clippboard cannot verify acceptance.
 

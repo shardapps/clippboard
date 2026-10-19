@@ -9,7 +9,13 @@ if (!(Test-Path -LiteralPath $dotnetPath)) { $dotnetPath = (Get-Command dotnet -
 $json = & $dotnetPath package list --project Clippboard.slnx --include-transitive --vulnerable --format json --no-restore
 if ($LASTEXITCODE -ne 0) { throw 'Dependency vulnerability query failed.' }
 $report = ($json -join [Environment]::NewLine) | ConvertFrom-Json
-if (@($report.projects).Count -ne 3 -or @($report.sources).Count -eq 0 -or $report.problems) { throw 'Incomplete dependency audit report.' }
+[xml]$solution = [IO.File]::ReadAllText((Join-Path $projectRoot 'Clippboard.slnx'))
+$expectedProjects = @($solution.SelectNodes('//Project') | ForEach-Object { [IO.Path]::GetFullPath($_.GetAttribute('Path'), $projectRoot) })
+$reportedProjects = @($report.projects | ForEach-Object { [IO.Path]::GetFullPath($_.path, $projectRoot) })
+if ($expectedProjects.Count -eq 0 -or $reportedProjects.Count -ne $expectedProjects.Count -or
+    @($reportedProjects | Select-Object -Unique).Count -ne $expectedProjects.Count -or
+    @(Compare-Object $expectedProjects $reportedProjects).Count -ne 0 -or
+    @($report.sources).Count -eq 0 -or $report.problems) { throw 'Incomplete dependency audit report.' }
 $findings = @($report.projects | ForEach-Object { $_.frameworks } | ForEach-Object { @($_.topLevelPackages) + @($_.transitivePackages) } | Where-Object { $_.vulnerabilities })
 New-Item -ItemType Directory -Force -Path (Join-Path $projectRoot 'artifacts') | Out-Null
 # Store only repository-relative project names in the optional CI artifact.

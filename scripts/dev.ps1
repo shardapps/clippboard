@@ -1,4 +1,4 @@
-param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','decode','metadata','refresh','format')][string]$Task = 'build',
+param([ValidateSet('build','test','run','publish','preview','diagnostics','lifecycle','decode','metadata','refresh','format','store-assets')][string]$Task = 'build',
   [ValidateSet('Cloud','Paper','Midnight','Lavender','Ocean','Rose')][string]$Theme = 'Cloud',
   [switch]$Settings, [switch]$Help, [switch]$Notices, [switch]$Detail, [switch]$Snippet, [switch]$Combine, [switch]$Ocr, [switch]$Backup, [string]$PreviewPath = 'artifacts/preview.png', [switch]$Measure, [switch]$Software, [switch]$ScrollOnly, [switch]$BuildDiagnostics, [switch]$RuntimeOnlyPreparation, [switch]$NoBuild, [switch]$NativeNotes, [switch]$Hardware)
 $ErrorActionPreference = 'Stop'
@@ -23,6 +23,9 @@ $runOptions = @()
 # Repeat measurements against the exact compiled binary without rebuilding.
 if ($NoBuild) { $runOptions += '--no-build' }
 switch ($Task) {
+  'store-assets' {
+    & $dotnetPath run --project tools/Clippboard.StoreAssets/Clippboard.StoreAssets.csproj -c Release -p:UseAppHost=false @runOptions -- (Join-Path $projectRoot 'artifacts/store-listing') (Join-Path $projectRoot 'assets/marketing/store-backdrop-v1.png')
+  }
   'metadata' { & $dotnetPath run --project $appProject -c Release -p:UseAppHost=false @runOptions -- --metadata-diagnostics (Join-Path $projectRoot 'artifacts/metadata-diagnostics.json') }
   'decode' { & $dotnetPath run --project $appProject -c Release -p:UseAppHost=false @runOptions -- --decode-diagnostics (Join-Path $projectRoot 'artifacts/decode-diagnostics.json') }
   'refresh' { & $dotnetPath run --project $appProject -c Release -p:UseAppHost=false @runOptions -- --refresh-diagnostics (Join-Path $projectRoot 'artifacts/refresh-diagnostics.json') }

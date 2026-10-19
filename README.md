@@ -15,9 +15,9 @@ Built by [Shard Apps](https://github.com/shardapps). Open source, local first, a
 
 > **Public beta 0.6.0-beta.5:** searchable history, snippets, OCR, encrypted backups and lower-memory Balanced rendering. [Download the beta](https://github.com/shardapps/clippboard/releases/tag/v0.6.0-beta.5). There is no stable release yet; physical-device, broad app compatibility and accessibility coverage remain in progress. The Store update requires separate certification and rollout.
 
-<p align="center"><img src="docs/assets/rope-preview.png" alt="App-rendered design preview with synthetic text, file, and image notes" width="100%" /></p>
+<p align="center"><img src="docs/marketing/store-0.6/screenshots/01-clipboard-on-your-desktop.png" alt="Clippboard beta with sample text, images and file notes over a staged workspace" width="100%" /></p>
 
-*Sample notes rendered by the app; an alpha design preview, not a capture of real clipboard history.*
+*Actual beta views with sample clips and a staged workspace. The decorative wallpaper is AI-generated; the app UI is rendered from the code. [Store presentation and source assets](docs/marketing/store-0.6/README.md).*
 
 ### A line for your everyday things
 

@@ -15,6 +15,21 @@ h1 { font-size: clamp(2.2rem, 6vw, 4.2rem); line-height: 1.12; letter-spacing: -
 h2 { line-height: 1.35; font-size: 1.3rem; margin-block: 0 12px; }
 p { margin-block: 0 20px; }
 .lead { max-width: 740px; font-size: 1.2rem; color: #514e5e; }
+.home h1 { font-size: clamp(3.2rem, 8vw, 6rem); }
+.home h1 span { color: #61558d; }
+.shortcut-hint { color: #626071; margin-block: 24px 28px; }
+kbd { font: inherit; font-size: .85em; padding: 4px 8px; border: 1px solid #d9d4e2; border-bottom-width: 2px; border-radius: 7px; background: #fff; color: #393346; }
+.app-shot { margin: 36px 0 42px; }
+.app-shot img { display: block; width: 100%; height: auto; border-radius: 18px; border: 1px solid #dfdce6; box-shadow: 0 16px 48px #29293810; }
+.app-shot figcaption { font-size: .8rem; color: #696576; margin: 12px 4px 0; }
+.card-number { font-size: .75rem; letter-spacing: .08em; color: #6d6287; margin-bottom: 16px !important; }
+.app-facts { margin: 52px 0; padding: 30px; border-radius: 20px; background: #eeebf3; }
+.app-facts dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin: 24px 0 0; }
+.app-facts dt { color: #6d667d; font-size: .85rem; }
+.app-facts dd { margin: 3px 0 0; color: #34303f; font-weight: 600; }
+.faq { margin-block: 48px; max-width: 780px; }
+.faq h3 { font-size: 1.1rem; margin: 24px 0 8px; }
+@media (max-width: 640px) { .app-facts dl { grid-template-columns: repeat(2, 1fr); } .app-facts { padding: 24px; } }
 .notice { padding: 18px 22px; border: 1px solid #ded7eb; border-radius: 16px; background: #f0ecf6; margin-block: 32px; }
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-block: 32px; }
 .cards section { padding: 24px; background: #fff; border: 1px solid #e5e1e9; border-radius: 20px; }

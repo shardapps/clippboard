@@ -44,6 +44,10 @@ jobs:
         run: ./scripts/test-animation-preference.ps1 -Mode Disable
       - name: Storage, format and WPF regression checks
         run: ./scripts/dev.ps1 test
+      - name: Render actual Store views with synthetic workspace and verify opaque PNGs
+        run: ./scripts/dev.ps1 store-assets -NoBuild
+      - name: Validate Store copy, captions and screenshot sources
+        run: python scripts/check-store-listing.py
       - name: Signing and packaging failure guards
         run: ./scripts/test-packaging-guards.ps1
       - name: Publish portable executable

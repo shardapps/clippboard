@@ -1,13 +1,15 @@
 # Changelog
 
-## 0.6.0-beta.5 — active rendering memory (not released)
+## 0.6.0-beta.5 — public beta · October 19, 2026
 
 - Default to Balanced rendering: Windows moves retained note pixels while the original WPF controls keep input, keyboard behavior and accessibility. Keep hardware and software compatibility choices; preserve the legacy explicit software preference.
 - Share one temporary rasterization buffer, recycle visible-note surfaces, release rotation buffers at rest, and release native windows/pixels when panels open or the rope closes. Bound admission by viewport geometry and live physical/commit headroom; allocation/transform failure restores the live compatible view.
 - Keep note rotation, hover, selection, deletion feedback, theme updates and image arrival in sync. Preserve fractional transform precision instead of inferring scale from independently rounded screen coordinates. Stop frame subscriptions at rest.
 - Add native-window disposal, input/accessibility, theme, pressure/fallback and motion regressions. CI profiles Balanced and both compatibility paths, exercises an actual installed-note mouse click, and records combined active memory plus private working sets where Windows supports them.
 
-Local synthetic scroll measurements show lower overlay private working sets with comparable p95 callback gaps; see [performance](docs/performance.md). These are not combined installed RAM, physical presentation or all-hardware guarantees. Public beta publication remains held for acceptance.
+Includes the feature and interaction work from evaluation builds beta.1–beta.4 below. The owner accepted the beta and authorized publication on October 19. All six candidate stages passed in [run 39136331043](https://github.com/shardapps/clippboard/actions/runs/39136331043), attempt 2, and the original assets are published with checksums and source provenance. The Microsoft Store update needs separate certification and rollout; GitHub EXEs remain unsigned.
+
+Local synthetic scroll measurements show lower overlay private working sets; cold/warm callback variation is recorded in [performance](docs/performance.md). These are not combined installed RAM, physical presentation or all-hardware guarantees. Outstanding device/application/Store checks remain requirements for a stable release.
 
 ## 0.6.0-beta.4 — active-rope responsiveness (not released)
 

@@ -1,0 +1,25 @@
+{
+  "productName": "Clippboard",
+  "tagline": "Copied it? Keep it close.",
+  "shortDescription": "Keep copied text, images and files within reach. A free Windows 11 clipboard manager with searchable paper notes, snippets and encrypted local history.",
+  "description": "Copied it? Keep it close.\n\nClippboard is a free, open-source clipboard manager for Windows 11 x64. Keep copied text, images and file references on a full-width rope of paper notes. Press Ctrl + Shift + V, find the clip you need, and get back to what you were doing.\n\nFIND THE THING YOU JUST COPIED\nA useful link. A line from your notes. The image you meant to reuse. Search saved text and file paths, filter by type or date, and star the clips you want to find quickly. Add labels to keep a project together.\n\nMAKE REPEATED WORDS EASIER\nSave reusable text snippets for friendly replies, project notes and everyday writing. Preview text transformations or combine selected text clips before restoring them. Supported HTML and RTF can come back with their formatting; previews stay inert.\n\nROOM FOR MORE THAN TEXT\nBrowse copied images and original file locations alongside your notes. Open a file's location, copy its path, or explicitly save an image as PNG. Optional Windows OCR can turn text in an image into editable words when a compatible recognition language is installed.\n\nYOUR DESKTOP, YOUR WAY\nChoose Cloud, Paper, Midnight, Lavender, Ocean or Rose. Adjust note sizes, spacing and motion with a live appearance preview; changes commit when you choose Save. Balanced rendering and adaptive preview budgets help manage resource use, with Hardware and Software compatibility options. Actual performance varies by PC and workload.\n\nLOCAL BY DESIGN\nNo app account, ads, cloud sync or automatic telemetry. Clipboard history stays on your PC, protected with Windows user-account encryption. Pause capture, exclude selected apps, and choose what to collect. Set retention from 1–30 days, including starred clips, plus entry and disk limits. Password-encrypted backups let you export your history and review a merge before restoring it.\n\nQUICK ANSWERS\n• What is Clippboard? A clipboard history manager for Windows 11 x64, published by ShardCoders and open source under Apache 2.0.\n• How do I open it? Press Ctrl + Shift + V or use the tray icon. Select a note to restore it; Shift+click restores without requesting an automatic paste.\n• Does it duplicate copied files? No. File notes reference original locations. Moved, deleted or unavailable originals cannot be restored.\n• Does it send clipboard contents to a server? No cloud sync or automatic clipboard upload is added. Feedback opens GitHub only when you choose it.\n\nThis is a public beta. Broader device and accessibility testing continues; Windows 10 and ARM64 are not advertised as supported. Automatic paste depends on Windows and the destination app; manual Ctrl + V is available when needed. Rich formatting depends on the receiving app. Virtual attachments are not supported. Startup is optional through Windows Settings after first launch.",
+  "features": [
+    "Text, images and file references on a full-width rope of paper notes",
+    "Search saved text and file paths; filter by type, date, stars and labels",
+    "Reusable snippets, previewed text transformations and text combination",
+    "Optional Windows OCR for editable text from copied images",
+    "Six themes, live appearance previews and adjustable note sizes",
+    "Encrypted local history with configurable retention and storage limits",
+    "Password-encrypted backups with a reviewed merge before restore",
+    "Pause capture, exclude apps and keep startup optional"
+  ],
+  "keywords": ["clipboard history", "copy paste", "paper notes", "offline", "open source", "clipboard manager", "text snippets"],
+  "screenshots": [
+    {"file": "01-clipboard-on-your-desktop.png", "caption": "Copied text, images and file references together on the rope. Actual beta UI with sample clips and a staged workspace."},
+    {"file": "02-find-a-copied-idea.png", "caption": "Find a copied idea with full-text search. Midnight theme, actual beta controls and synthetic project notes."},
+    {"file": "03-words-you-reuse.png", "caption": "Keep a friendly follow-up ready as an editable snippet, with a title and labels. Sample text in the actual beta editor."},
+    {"file": "04-make-it-yours.png", "caption": "Choose a theme and preview note sizes before saving. Lavender theme and the actual appearance settings."},
+    {"file": "05-encrypted-backups.png", "caption": "Review a password-encrypted backup before restoring. Actual beta screen with sample inspection counts; no personal history shown."},
+    {"file": "06-text-from-images.png", "caption": "Optional Windows OCR makes image text editable. Actual beta OCR screen with illustrative language choices; installed support varies."}
+  ]
+}

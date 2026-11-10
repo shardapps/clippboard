@@ -68,6 +68,16 @@ public partial class RopeWindow : Window
     internal int VisibleNoteCount => _visible.Count;
     internal int PendingThumbnailCount => _thumbnailLoads.Count;
     internal int CreatedNoteCount { get; private set; }
+    private static readonly Brush PaperShadow = FreezeBrush(new SolidColorBrush(Color.FromArgb(20, 0, 0, 0)));
+    private static readonly Brush PegEdge = FreezeBrush(new SolidColorBrush(Color.FromRgb(139, 103, 68)));
+    private static readonly Brush PegFace = FreezeBrush(new LinearGradientBrush(
+        new GradientStopCollection
+        {
+            new(Color.FromRgb(224, 185, 142), 0),
+            new(Color.FromRgb(196, 155, 113), .48),
+            new(Color.FromRgb(171, 127, 87), 1)
+        }, 0));
+    private static Brush FreezeBrush(Brush brush) { brush.Freeze(); return brush; }
     private double Pitch => _appearance.NoteWidth + _appearance.NoteSpacing;
     private bool Animated => _appearance.Animate && SystemParameters.ClientAreaAnimation;
 
@@ -89,9 +99,15 @@ public partial class RopeWindow : Window
         ExpandRequested += async entry => await OpenDetailAsync(entry);
         Closed += (_, _) => { _editorLoads?.Cancel(); _editorLoads?.Dispose(); _editorLoads = null; };
         Closed += (_, _) => { _fileActionsLifetime.Cancel(); _fileActionsLifetime.Dispose(); };
-        _searchTimer.Tick += async (_, _) => { _searchTimer.Stop(); await RunSearchAsync(); ScrollTo(0); };
+        _searchTimer.Tick += async (_, _) =>
+        {
+            _searchTimer.Stop();
+            var requested = SearchBox.Text;
+            await RunSearchAsync();
+            if (!Retired && !_closing && !_searchTimer.IsEnabled && _searchLoads is null && SearchBox.Text == requested) ScrollTo(0);
+        };
         Closed += (_, _) => { _searchLoads?.Cancel(); _searchLoads?.Dispose(); _searchLoads = null; };
-        Closed += (_, _) => { _searchCache.Clear(); _searchMatches.Clear(); };
+        Closed += (_, _) => { _searchCache = new(); _searchMatches.Clear(); };
         Closed += (_, _) => { _combinationIds.Clear(); _combineLoad?.Cancel(); _combineLoad?.Dispose(); _combineLoad = null; };
         Closed += (_, _) => { _closeDelay?.Cancel(); Retired = true; SmoothMotion.CancelTree(this); _searchTimer.Stop(); DismissDetail(); SidebarHost.Child = null; _loads.Cancel(); _loads.Dispose(); _cache.Clear(); Notes.Children.Clear(); _cards.Clear(); _spareCards.Clear(); _bindings.Clear(); _entries = []; _visible.Clear(); _demoImages.Clear(); };
     }
@@ -412,7 +428,7 @@ public partial class RopeWindow : Window
         wrapper.MouseDown += OnInsideClick;
         wrapper.GotKeyboardFocus += (_, _) => { _selectedId = Current().Id; UpdateSelectionVisuals(); };
         // A small ambient border avoids a per-card pixel-shader blur surface on every moving frame.
-        wrapper.Children.Add(new Border { CornerRadius = new CornerRadius(23), Margin = new Thickness(0, 26, 0, -3), Background = new SolidColorBrush(Color.FromArgb(20, 0, 0, 0)), IsHitTestVisible = false });
+        wrapper.Children.Add(new Border { CornerRadius = new CornerRadius(23), Margin = new Thickness(0, 26, 0, -3), Background = PaperShadow, IsHitTestVisible = false });
         var paper = new Border { CornerRadius = new CornerRadius(22), Margin = new Thickness(0, 23, 0, 0), Padding = new Thickness(21, 25, 21, 16), BorderThickness = new Thickness(1) };
         paper.RenderTransform = hover;
         wrapper.MouseEnter += (_, _) => Interaction.Move(hover, TranslateTransform.YProperty, -5, Animated, 300);
@@ -440,9 +456,9 @@ public partial class RopeWindow : Window
         var expand = IconButton("expand", "Expand and resize note"); expand.Click += (_, _) => ExpandRequested?.Invoke(Current()); actions.Children.Add(expand);
         var delete = IconButton("close", "Delete clip"); delete.Click += async (_, _) => await ChangeNoteAsync(Current(), true); actions.Children.Add(delete);
         Grid.SetRow(footer, 2); body.Children.Add(footer); paper.Child = body; wrapper.Children.Add(paper);
-        var peg = new Border { Width = 17, Height = 47, CornerRadius = new CornerRadius(5), Background = new SolidColorBrush(Color.FromRgb(189, 151, 108)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(139, 103, 68)), BorderThickness = new Thickness(1), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false,
-            Child = new Border { Height = 2, Background = new SolidColorBrush(Color.FromRgb(139, 103, 68)), Margin = new Thickness(3, 0, 3, 0), VerticalAlignment = VerticalAlignment.Center } };
+        var peg = new Border { Width = 17, Height = 47, CornerRadius = new CornerRadius(5), Background = PegFace,
+            BorderBrush = PegEdge, BorderThickness = new Thickness(1), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false,
+            Child = new Border { Height = 2, Background = PegEdge, Margin = new Thickness(3, 0, 3, 0), VerticalAlignment = VerticalAlignment.Center } };
         wrapper.Children.Add(peg); return wrapper;
     }
     internal static Button IconButton(string symbol, string name)

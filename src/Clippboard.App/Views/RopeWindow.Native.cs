@@ -23,6 +23,7 @@ public partial class RopeWindow
     private readonly Dictionary<Grid, NativeNote> _nativeSurfaces = new();
     private readonly Dictionary<DependencyObject, Grid?> _nativeMotions = new();
     private RenderTargetBitmap? _nativeSnapshot;
+    private readonly LayeredSurface.UploadBuffer _nativeUpload = new();
     private long? _syntheticNativeHeadroom;
     private long NativeHeadroom => _syntheticNativeHeadroom ?? MemoryAvailability.AvailableBytes();
     private sealed class NativeNote(LayeredSurface surface, double dpiX, double dpiY) : IDisposable
@@ -31,11 +32,15 @@ public partial class RopeWindow
         internal readonly double DpiX = dpiX, DpiY = dpiY;
         internal readonly List<Action> Unsubscribe = new();
         internal bool Dirty = true;
+        internal Action<LayeredSurface.PixelsBuffer> Capture = null!;
+        internal uint SampledPaperPixel;
         internal long Reservation => LayeredSurface.EstimatedBytes(Surface.SourceWidth, Surface.SourceHeight);
         public void Dispose() { foreach (var remove in Unsubscribe) remove(); Unsubscribe.Clear(); Surface.Dispose(); }
     }
-    internal long NativeSurfaceBytes => _nativeSurfaces.Values.Sum(note => note.Surface.PixelBytes);
-    internal long NativeReservedBytes => _nativeSurfaces.Values.Sum(note => note.Reservation) + (_nativeSnapshot is null ? 0 : (long)_nativeSnapshot.PixelWidth * _nativeSnapshot.PixelHeight * 4);
+    internal int NativeSurfaceCount => _nativeSurfaces.Count;
+    internal long NativeSurfaceBytes => _nativeSurfaces.Values.Sum(note => note.Surface.PixelBytes) + _nativeUpload.Bytes;
+    private long SnapshotBytes => _nativeSnapshot is null ? 0 : (long)_nativeSnapshot.PixelWidth * _nativeSnapshot.PixelHeight * 4;
+    internal long NativeReservedBytes => _nativeSurfaces.Values.Sum(note => note.Reservation) + SnapshotBytes + _nativeUpload.Bytes;
     internal int NativeSurfaceUploads => _nativeSurfaces.Values.Sum(note => note.Surface.Uploads);
     internal bool NativeFrameRunning => _nativeFrame;
     internal bool NativeNotesActive => _nativeNotes;
@@ -51,13 +56,10 @@ public partial class RopeWindow
         if (!_preview) throw new InvalidOperationException("Synthetic mode required.");
         UpdateLayout(); SyncNativeNotes();
     }
-    internal uint DiagnosticNativePixel(Grid card, double x, double y)
+    internal uint DiagnosticNativePaperPixel(Grid card)
     {
         if (!_preview) throw new InvalidOperationException("Synthetic mode required.");
-        var note = _nativeSurfaces[card];
-        var px = Math.Clamp((int)Math.Round((x + NativeNotePadding) * note.DpiX), 0, note.Surface.SourceWidth - 1);
-        var py = Math.Clamp((int)Math.Round((y + NativeNotePadding) * note.DpiY), 0, note.Surface.SourceHeight - 1);
-        return unchecked((uint)System.Runtime.InteropServices.Marshal.ReadInt32(note.Surface.Pixels, py * note.Surface.Stride + px * 4));
+        return _nativeSurfaces[card].SampledPaperPixel;
     }
 
     internal void EnableNativeNotes()
@@ -97,14 +99,14 @@ public partial class RopeWindow
     {
         foreach (var note in _nativeSurfaces.Values) note.Dispose();
         _nativeSurfaces.Clear();
-        _nativeSnapshot?.Clear(); _nativeSnapshot = null;
+        _nativeSnapshot?.Clear(); _nativeSnapshot = null; _nativeUpload.Dispose();
     }
     private void StopNativeFrames()
     {
         if (_nativeFrame) CompositionTarget.Rendering -= OnNativeFrame;
         _nativeFrame = false;
         _nativeRenderTime = null;
-        foreach (var note in _nativeSurfaces.Values) note.Surface.ReleaseRotation();
+        _nativeUpload.Dispose();
     }
     private void RequestNativeFrame()
     {
@@ -178,13 +180,17 @@ public partial class RopeWindow
     private NativeNote CreateNativeNote(Grid card, int width, int height, DpiScale dpi, nint owner)
     {
         var reservation = LayeredSurface.EstimatedBytes(width, height);
-        var demand = checked(NativeReservedBytes + reservation + (_nativeSnapshot is null ? (long)width * height * 4 : 0));
+        var side = LayeredSurface.RotationScratchSide(width, height);
+        var demand = checked(NativeReservedBytes + reservation
+            + Math.Max(0, (long)side * side * 4 - _nativeUpload.Bytes)
+            + Math.Max(0, (long)width * height * 4 - SnapshotBytes));
         if (demand > MemoryAvailability.RetainedSurfaceBudget(demand, NativeHeadroom)) throw new InvalidOperationException("Note surface exceeds available headroom.");
         var surface = new LayeredSurface(width, height, owner);
         NativeNote? note = null;
         try
         {
-            note = new NativeNote(surface, dpi.DpiScaleX, dpi.DpiScaleY);
+            var capturedNote = note = new NativeNote(surface, dpi.DpiScaleX, dpi.DpiScaleY);
+            note.Capture = buffer => CaptureNativeNote(card, capturedNote, buffer);
             void Observe(DependencyObject target, DependencyProperty property)
             {
                 var descriptor = DependencyPropertyDescriptor.FromProperty(property, target.GetType());
@@ -201,7 +207,7 @@ public partial class RopeWindow
         }
         catch { if (note is null) surface.Dispose(); else note.Dispose(); throw; }
     }
-    private void CaptureNativeNote(Grid card, NativeNote note)
+    private void CaptureNativeNote(Grid card, NativeNote note, LayeredSurface.PixelsBuffer buffer)
     {
         var transform = card.RenderTransform; card.RenderTransform = Transform.Identity;
         try
@@ -217,9 +223,16 @@ public partial class RopeWindow
                 _nativeSnapshot = new RenderTargetBitmap(note.Surface.SourceWidth, note.Surface.SourceHeight, note.DpiX * 96, note.DpiY * 96, PixelFormats.Pbgra32);
             }
             _nativeSnapshot.Clear(); _nativeSnapshot.Render(visual);
-            _nativeSnapshot.CopyPixels(Int32Rect.Empty, note.Surface.Pixels, note.Surface.SourceBytes, note.Surface.Stride);
+            _nativeSnapshot.CopyPixels(Int32Rect.Empty, buffer.Pixels, buffer.Bytes, buffer.Stride);
+            if (_preview)
+            {
+                // Sample the actual staged pixels for the synthetic appearance test.
+                var px = Math.Clamp((int)Math.Round((30 + NativeNotePadding) * note.DpiX), 0, _nativeSnapshot.PixelWidth - 1);
+                var py = Math.Clamp((int)Math.Round((70 + NativeNotePadding) * note.DpiY), 0, _nativeSnapshot.PixelHeight - 1);
+                note.SampledPaperPixel = unchecked((uint)System.Runtime.InteropServices.Marshal.ReadInt32(buffer.Pixels, py * buffer.Stride + px * 4));
+            }
             _nativeSnapshot.Clear();
-            note.Surface.PixelsChanged(); note.Dirty = false;
+            note.Dirty = false;
             ++NativeSnapshotCount;
         }
         finally { card.RenderTransform = transform; }
@@ -244,7 +257,6 @@ public partial class RopeWindow
                 var height = checked((int)Math.Ceiling((card.ActualHeight + 2 * NativeNotePadding) * dpi.DpiScaleY));
                 if (_nativeSurfaces.TryGetValue(card, out var note) && (note.Surface.SourceWidth != width || note.Surface.SourceHeight != height || note.DpiX != dpi.DpiScaleX || note.DpiY != dpi.DpiScaleY)) { ReleaseNativeNote(card); note = null; }
                 if (note is null) { note = CreateNativeNote(card, width, height, dpi, owner); _nativeSurfaces.Add(card, note); }
-                if (note.Dirty) CaptureNativeNote(card, note);
                 // PointToScreen rounds through native POINT coordinates. Taking
                 // three separately rounded samples fabricates scale/shear during
                 // fractional scrolling. Keep the transform in doubles and round
@@ -259,7 +271,8 @@ public partial class RopeWindow
                 var px = ToPhysical(new Point(-NativeNotePadding + width / dpi.DpiScaleX, -NativeNotePadding));
                 var py = ToPhysical(new Point(-NativeNotePadding, -NativeNotePadding + height / dpi.DpiScaleY));
                 note.Surface.Present(origin.X, origin.Y, (px.X - origin.X) / width, (px.Y - origin.Y) / width,
-                    (py.X - origin.X) / height, (py.Y - origin.Y) / height, 255, left, top, right, bottom);
+                    (py.X - origin.X) / height, (py.Y - origin.Y) / height, 255, left, top, right, bottom,
+                    note.Dirty, _nativeUpload, note.Capture);
             }
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or ArgumentException or OverflowException or OutOfMemoryException or System.Runtime.InteropServices.ExternalException)

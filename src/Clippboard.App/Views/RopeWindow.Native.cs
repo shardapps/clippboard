@@ -24,8 +24,6 @@ public partial class RopeWindow
     private readonly Dictionary<DependencyObject, Grid?> _nativeMotions = new();
     private RenderTargetBitmap? _nativeSnapshot;
     private readonly LayeredSurface.UploadBuffer _nativeUpload = new();
-    private readonly LayeredSurface.PositionBatch _nativePositions = new();
-    internal int NativePositionBatches => _nativePositions.Completed;
     private long? _syntheticNativeHeadroom;
     private long NativeHeadroom => _syntheticNativeHeadroom ?? MemoryAvailability.AvailableBytes();
     private sealed class NativeNote(LayeredSurface surface, double dpiX, double dpiY) : IDisposable
@@ -274,12 +272,11 @@ public partial class RopeWindow
                 var py = ToPhysical(new Point(-NativeNotePadding, -NativeNotePadding + height / dpi.DpiScaleY));
                 note.Surface.Present(origin.X, origin.Y, (px.X - origin.X) / width, (px.Y - origin.Y) / width,
                     (py.X - origin.X) / height, (py.Y - origin.Y) / height, 255, left, top, right, bottom,
-                    note.Dirty, _nativeUpload, note.Capture, _nativePositions);
+                    note.Dirty, _nativeUpload, note.Capture);
             }
-            _nativePositions.Apply();
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or ArgumentException or OverflowException or OutOfMemoryException or System.Runtime.InteropServices.ExternalException)
         { if (_preview) NativeFailure = ex.GetType().Name + ": " + ex.Message; FailNativeNotes(); }
-        finally { _nativePositions.Clear(); _snapshotting = false; }
+        finally { _snapshotting = false; }
     }
 }

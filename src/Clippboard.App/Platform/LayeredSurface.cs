@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -28,6 +29,9 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
     [DllImport("gdi32.dll")] private static extern nint CreateRectRgn(int left, int top, int right, int bottom);
     [DllImport("user32.dll")] private static extern int SetWindowRgn(nint window, nint region, bool redraw);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool UpdateLayeredWindow(nint window, nint destination, ref PointI point, ref SizeI size, nint source, ref PointI origin, uint color, ref Blend blend, uint flags);
+    [DllImport("user32.dll")] private static extern nint BeginDeferWindowPos(int count);
+    [DllImport("user32.dll")] private static extern nint DeferWindowPos(nint batch, nint window, nint after, int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll")] private static extern bool EndDeferWindowPos(nint batch);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll", EntryPoint = "SendMessageW")] private static extern nint SendMessage(nint window, int message, nint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern bool ShowWindow(nint window, int command);
@@ -87,6 +91,46 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
         public void Dispose() { _buffer?.Dispose(); _buffer = null; }
     }
 
+    // Group moves of already-uploaded notes into one window-manager update.
+    // If a graphics/session configuration rejects batching, use ordinary moves.
+    internal sealed class PositionBatch
+    {
+        private const uint MoveFlags = 0x261D; // NOSIZE | NOZORDER | NOREDRAW | NOACTIVATE | NOOWNERZORDER | NOSENDCHANGING | DEFERERASE
+        private readonly List<(LayeredSurface Surface, int X, int Y)> _moves = new();
+        private bool _supportsBatch = true;
+        internal int Completed { get; private set; }
+
+        internal void Add(LayeredSurface surface, int x, int y) => _moves.Add((surface, x, y));
+        internal void Clear() => _moves.Clear();
+
+        internal void Apply()
+        {
+            if (_moves.Count == 0) return;
+            if (_supportsBatch && _moves.Count > 1)
+            {
+                var batch = BeginDeferWindowPos(_moves.Count);
+                foreach (var (surface, x, y) in _moves)
+                {
+                    if (batch == 0) break;
+                    batch = DeferWindowPos(batch, surface.Handle, 0, x, y, 0, 0, MoveFlags);
+                }
+                // A failing DeferWindowPos frees its batch. Only finish a valid handle.
+                if (batch != 0 && EndDeferWindowPos(batch))
+                {
+                    foreach (var (surface, x, y) in _moves) surface._position = (x, y);
+                    ++Completed;
+                    return;
+                }
+                _supportsBatch = false;
+            }
+            foreach (var (surface, x, y) in _moves)
+            {
+                if (!SetWindowPos(surface.Handle, 0, x, y, 0, 0, MoveFlags)) throw new Win32Exception(Marshal.GetLastWin32Error());
+                surface._position = (x, y);
+            }
+        }
+    }
+
     private readonly nint _owner;
     private PixelsBuffer? _rotationSource;
     private bool _disposed;
@@ -139,7 +183,7 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
         catch { if (Handle != 0) DestroyHandle(); throw; }
     }
     internal void Present(double screenX, double screenY, double a, double b, double c, double d, byte alpha,
-        int clipLeft, int clipTop, int clipRight, int clipBottom, bool dirty, UploadBuffer upload, Action<PixelsBuffer> capture)
+        int clipLeft, int clipTop, int clipRight, int clipBottom, bool dirty, UploadBuffer upload, Action<PixelsBuffer> capture, PositionBatch positions)
     {
         static double Stable(double value) => Math.Round(value, 5);
         var matrix = (Stable(a), Stable(b), Stable(c), Stable(d));
@@ -195,13 +239,7 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
             if (!transformed) { _rotationSource?.Dispose(); _rotationSource = null; }
             if (!_shown) { ShowWindow(Handle, 4); _shown = true; } // SW_SHOWNOACTIVATE
         }
-        else if (_position != (x, y))
-        {
-            // Keep cached pixels and ownership order; do not synchronously
-            // repaint windows underneath every translated note.
-            if (!SetWindowPos(Handle, 0, x, y, 0, 0, 0x261D)) throw new Win32Exception(Marshal.GetLastWin32Error());
-            _position = (x, y);
-        }
+        else if (_position != (x, y)) positions.Add(this, x, y);
     }
     public void Dispose()
     {

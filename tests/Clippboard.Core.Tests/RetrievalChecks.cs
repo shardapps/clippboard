@@ -86,6 +86,8 @@ internal static partial class Program
                 Check(window.VisibleNoteCount == 1, "changed label invalidates result even when body fingerprint stays unchanged");
                 history.Item = history.Item with { Labels = ["personal"] }; Pump(window.RefreshAsync());
                 Check(window.VisibleNoteCount == 0, "removed label cannot leave stale positive search match");
+                reads = history.Reads; Pump(window.SearchNowAsync("  "));
+                Check(window.VisibleNoteCount == 1 && history.Reads == reads, "clearing search restores the catalog without reading clipboard payloads");
                 window.Close();
 
                 window = new RopeWindow(history, preview: true, settings: new AppSettings { Animate = false })

@@ -128,7 +128,7 @@ public partial class App
             _rope.DiagnosticCompactSurface();
             _rope.Show(); _rope.RenderDemo(1000); _rope.UpdateLayout(); _rope.AnimateEntrance();
             await Task.Delay(1700); _rope.DiagnosticScroll(900); await Task.Delay(900);
-            await client.CallAsync(new("diagnostic-retained", Flag: _rope.NativeNotesActive && _rope.NativeSurfaceBytes > 0));
+            await client.CallAsync(new("diagnostic-retained", Flag: _rope.NativeNotesActive && _rope.NativeSurfaceCount > 0));
             _rope.OpenSettings(); await Task.Delay(700); await _rope.CloseRopeAsync();
         }
         else { await _rope.OpenAsync((nint)initial.Target); if (!_rope.Retired) poll.Start(); }

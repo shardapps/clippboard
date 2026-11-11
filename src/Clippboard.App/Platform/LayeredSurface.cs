@@ -32,13 +32,14 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
     [DllImport("user32.dll", EntryPoint = "SendMessageW")] private static extern nint SendMessage(nint window, int message, nint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern bool ShowWindow(nint window, int command);
 
-    private sealed class PixelsBuffer : IDisposable
+    internal sealed class PixelsBuffer : IDisposable
     {
         private static readonly byte[] Zeros = new byte[4096];
         internal readonly int Width, Height, Stride, Bytes;
         internal readonly nint Dc, Pixels;
         private readonly nint _bitmap, _old;
-        internal readonly Bitmap Image;
+        private Bitmap? _image;
+        internal Bitmap Image => _image ??= new Bitmap(Width, Height, Stride, PixelFormat.Format32bppPArgb, Pixels);
         private bool _disposed;
         internal PixelsBuffer(int width, int height)
         {
@@ -53,40 +54,58 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
                 throw new Win32Exception(Marshal.GetLastWin32Error());
             }
             _old = SelectObject(Dc, _bitmap);
-            try { Image = new Bitmap(width, height, Stride, PixelFormat.Format32bppPArgb, Pixels); }
-            catch { SelectObject(Dc, _old); DeleteObject(_bitmap); DeleteDC(Dc); throw; }
+            if (_old == 0 || _old == -1)
+            {
+                var error = Marshal.GetLastWin32Error();
+                DeleteObject(_bitmap); DeleteDC(Dc);
+                throw new Win32Exception(error);
+            }
         }
         public void Dispose()
         {
             if (_disposed) return;
-            _disposed = true; Image.Dispose();
+            _disposed = true; _image?.Dispose();
             for (var offset = 0; offset < Bytes; offset += Zeros.Length) Marshal.Copy(Zeros, 0, Pixels + offset, Math.Min(Zeros.Length, Bytes - offset));
             SelectObject(Dc, _old); DeleteObject(_bitmap); DeleteDC(Dc);
         }
     }
 
-    private readonly PixelsBuffer _source;
+    // UpdateLayeredWindow copies the pixels into the window. One dispatcher-owned
+    // upload buffer can therefore serve every note, without a private copy at rest.
+    internal sealed class UploadBuffer : IDisposable
+    {
+        private PixelsBuffer? _buffer;
+        internal long Bytes => _buffer?.Bytes ?? 0;
+        internal PixelsBuffer Get(int width, int height)
+        {
+            if (_buffer is { } existing && existing.Width >= width && existing.Height >= height) return existing;
+            var nextWidth = Math.Max(width, _buffer?.Width ?? 0);
+            var nextHeight = Math.Max(height, _buffer?.Height ?? 0);
+            Dispose();
+            return _buffer = new PixelsBuffer(nextWidth, nextHeight);
+        }
+        public void Dispose() { _buffer?.Dispose(); _buffer = null; }
+    }
+
     private readonly nint _owner;
-    private PixelsBuffer? _rotated;
+    private PixelsBuffer? _rotationSource;
     private bool _disposed;
     private bool _shown;
     private (int Left, int Top, int Right, int Bottom)? _clip;
     private (int X, int Y)? _position;
     private (double A, double B, double C, double D)? _matrix;
     private byte? _alpha;
-    private int _revision, _uploadedRevision = -1;
-    internal nint Pixels => _source.Pixels;
-    internal int SourceWidth => _source.Width;
-    internal int SourceHeight => _source.Height;
-    internal int Stride => _source.Stride;
-    internal int SourceBytes => _source.Bytes;
-    internal long PixelBytes => _source.Bytes + (long)(_rotated?.Bytes ?? 0);
+    internal int SourceWidth { get; }
+    internal int SourceHeight { get; }
+    internal long PixelBytes => _rotationSource?.Bytes ?? 0;
     internal int Uploads { get; private set; }
-    // Source and worst rotation count towards admission. The view separately
-    // reserves its single shared WPF snapshot, never one snapshot per note.
+    // Conservatively reserve the temporary rotation source and the largest
+    // presented window. The shared snapshot/upload buffers are accounted separately.
+    internal static int RotationScratchSide(int width, int height)
+        => checked((int)Math.Ceiling(Math.Sqrt((double)width * width + (double)height * height)) + 2);
     internal static long EstimatedBytes(int width, int height)
     {
-        var side = (long)Math.Ceiling(Math.Sqrt((double)width * width + (double)height * height)) + 2;
+        var side = (long)RotationScratchSide(width, height);
         return checked((long)width * height * 4 + side * side * 4);
     }
     protected override void WndProc(ref Forms.Message message)
@@ -105,7 +124,7 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
     internal LayeredSurface(int width, int height, nint owner)
     {
         _owner = owner;
-        _source = new PixelsBuffer(width, height);
+        SourceWidth = width; SourceHeight = height;
         try
         {
             // A bare HWND has no extra Form/control/accessibility tree, font
@@ -117,42 +136,29 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
                 ExStyle = 0x00080000 | 0x00000080 | 0x08000000 // LAYERED | TOOLWINDOW | NOACTIVATE
             });
         }
-        catch { if (Handle != 0) DestroyHandle(); _source.Dispose(); throw; }
-    }
-    internal void PixelsChanged() => ++_revision;
-    internal void ReleaseRotation()
-    {
-        if (_matrix != (1.0, 0.0, 0.0, 1.0)) return;
-        _rotated?.Dispose(); _rotated = null;
+        catch { if (Handle != 0) DestroyHandle(); throw; }
     }
     internal void Present(double screenX, double screenY, double a, double b, double c, double d, byte alpha,
-        int clipLeft, int clipTop, int clipRight, int clipBottom)
+        int clipLeft, int clipTop, int clipRight, int clipBottom, bool dirty, UploadBuffer upload, Action<PixelsBuffer> capture)
     {
         static double Stable(double value) => Math.Round(value, 5);
         var matrix = (Stable(a), Stable(b), Stable(c), Stable(d));
+        (a, b, c, d) = matrix;
         var transformed = matrix != (1.0, 0.0, 0.0, 1.0);
         var minX = transformed ? Math.Floor(Math.Min(Math.Min(0, a * SourceWidth), Math.Min(c * SourceHeight, a * SourceWidth + c * SourceHeight))) : 0;
         var minY = transformed ? Math.Floor(Math.Min(Math.Min(0, b * SourceWidth), Math.Min(d * SourceHeight, b * SourceWidth + d * SourceHeight))) : 0;
         var x = checked((int)Math.Round(screenX + minX)); var y = checked((int)Math.Round(screenY + minY));
-        var redraw = _matrix != matrix || _uploadedRevision != _revision;
-        var buffer = _source;
+        var redraw = !_shown || dirty || _matrix != matrix || _alpha != alpha;
+        var width = SourceWidth; var height = SourceHeight;
         if (transformed)
         {
-            var side = checked((int)Math.Ceiling(Math.Sqrt((double)SourceWidth * SourceWidth + (double)SourceHeight * SourceHeight)) + 2);
-            if (Math.Abs(a * a + b * b - 1) > .002 || Math.Abs(c * c + d * d - 1) > .002) throw new InvalidOperationException("Unsupported note transform.");
-            _rotated ??= new PixelsBuffer(side, side); buffer = _rotated;
-            if (redraw)
-            {
-                using var graphics = Graphics.FromImage(buffer.Image);
-                graphics.CompositingMode = CompositingMode.SourceCopy; graphics.Clear(Color.Transparent);
-                graphics.InterpolationMode = InterpolationMode.HighQualityBilinear;
-                using var transform = new Matrix((float)a, (float)b, (float)c, (float)d, (float)-minX, (float)-minY);
-                graphics.Transform = transform;
-                graphics.DrawImage(_source.Image, new Rectangle(0, 0, SourceWidth, SourceHeight), 0, 0, SourceWidth, SourceHeight, GraphicsUnit.Pixel);
-            }
+            if (Math.Abs(a * a + b * b - 1) > .002 || Math.Abs(c * c + d * d - 1) > .002)
+                throw new InvalidOperationException("Unsupported note transform.");
+            width = checked((int)(Math.Ceiling(Math.Max(Math.Max(0, a * SourceWidth), Math.Max(c * SourceHeight, a * SourceWidth + c * SourceHeight))) - minX));
+            height = checked((int)(Math.Ceiling(Math.Max(Math.Max(0, b * SourceWidth), Math.Max(d * SourceHeight, b * SourceWidth + d * SourceHeight))) - minY));
         }
-        var clip = (Math.Clamp(clipLeft - x, 0, buffer.Width), Math.Clamp(clipTop - y, 0, buffer.Height),
-            Math.Clamp(clipRight - x, 0, buffer.Width), Math.Clamp(clipBottom - y, 0, buffer.Height));
+        var clip = (Math.Clamp(clipLeft - x, 0, width), Math.Clamp(clipTop - y, 0, height),
+            Math.Clamp(clipRight - x, 0, width), Math.Clamp(clipBottom - y, 0, height));
         if (_clip != clip)
         {
             var region = CreateRectRgn(clip.Item1, clip.Item2, Math.Max(clip.Item1, clip.Item3), Math.Max(clip.Item2, clip.Item4));
@@ -160,11 +166,33 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
             { if (region != 0) DeleteObject(region); throw new Win32Exception(Marshal.GetLastWin32Error()); }
             _clip = clip;
         }
-        if (redraw || _alpha != alpha)
+        if (redraw)
         {
-            var point = new PointI(x, y); var size = new SizeI(buffer.Width, buffer.Height); var origin = new PointI(0, 0); var blend = new Blend { Alpha = alpha, Format = 1 };
+            // The rotation scratch grows once for this geometry, but only the
+            // tight bounding rectangle is uploaded to Windows for each angle.
+            var side = transformed ? RotationScratchSide(SourceWidth, SourceHeight) : 0;
+            // A clean rotation source already contains the upright note.
+            // Use it once on settling, then release it instead of redrawing text.
+            var upright = !transformed && !dirty ? _rotationSource : null;
+            var buffer = upright ?? upload.Get(Math.Max(width, side), Math.Max(height, side));
+            if (transformed)
+            {
+                var missing = _rotationSource is null;
+                var source = _rotationSource ??= new PixelsBuffer(SourceWidth, SourceHeight);
+                if (dirty || missing) capture(source);
+                using var graphics = Graphics.FromImage(buffer.Image);
+                graphics.CompositingMode = CompositingMode.SourceCopy;
+                graphics.FillRectangle(Brushes.Transparent, 0, 0, width, height);
+                graphics.InterpolationMode = InterpolationMode.HighQualityBilinear;
+                using var transform = new Matrix((float)a, (float)b, (float)c, (float)d, (float)-minX, (float)-minY);
+                graphics.Transform = transform;
+                graphics.DrawImage(source.Image, new Rectangle(0, 0, SourceWidth, SourceHeight), 0, 0, SourceWidth, SourceHeight, GraphicsUnit.Pixel);
+            }
+            else if (upright is null) capture(buffer);
+            var point = new PointI(x, y); var size = new SizeI(width, height); var origin = new PointI(0, 0); var blend = new Blend { Alpha = alpha, Format = 1 };
             if (!UpdateLayeredWindow(Handle, 0, ref point, ref size, buffer.Dc, ref origin, 0, ref blend, 2)) throw new Win32Exception(Marshal.GetLastWin32Error());
-            _matrix = matrix; _alpha = alpha; _uploadedRevision = _revision; _position = (x, y); ++Uploads;
+            _matrix = matrix; _alpha = alpha; _position = (x, y); ++Uploads;
+            if (!transformed) { _rotationSource?.Dispose(); _rotationSource = null; }
             if (!_shown) { ShowWindow(Handle, 4); _shown = true; } // SW_SHOWNOACTIVATE
         }
         else if (_position != (x, y))
@@ -179,6 +207,6 @@ internal sealed class LayeredSurface : Forms.NativeWindow, IDisposable
     {
         if (_disposed) return;
         _disposed = true; if (Handle != 0) DestroyHandle();
-        _rotated?.Dispose(); _source.Dispose(); GC.SuppressFinalize(this);
+        _rotationSource?.Dispose(); GC.SuppressFinalize(this);
     }
 }

@@ -22,7 +22,8 @@ public partial class RopeWindow
         internal bool Matches(ClipSummary entry) => Fingerprint == entry.Fingerprint && Title == entry.Title
             && Labels.SequenceEqual(entry.Labels ?? [], StringComparer.Ordinal);
     }
-    private readonly Dictionary<string, SearchStamp> _searchCache = new();
+    private readonly SemaphoreSlim _searchPlanning = new(1, 1);
+    private Dictionary<string, SearchStamp> _searchCache = new();
     private string _cacheQuery = "";
     internal string? SelectedNoteId => _selectedId;
 
@@ -31,53 +32,91 @@ public partial class RopeWindow
         SearchBox.Text = query; _searchTimer.Stop(); await RunSearchAsync();
     }
 
+    private sealed record SearchPlan(Dictionary<string, SearchStamp> Stamps,
+        HashSet<string> Matches, List<ClipSummary> Candidates);
+
+    private async Task<SearchPlan> PlanSearchAsync(IReadOnlyList<ClipSummary> entries,
+        IReadOnlyDictionary<string, SearchStamp>? prior, string query, CancellationToken cancellation)
+    {
+        // Only one metadata scan may occupy a worker. Superseded plans cancel
+        // before starting, and the worker never touches WPF or reads payloads.
+        await _searchPlanning.WaitAsync(cancellation).ConfigureAwait(false);
+        try
+        {
+            return await Task.Run(() =>
+            {
+                var plan = new SearchPlan(new(), new(), new());
+                foreach (var entry in entries)
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    if (prior is not null && prior.TryGetValue(entry.Id, out var cached) && cached.Matches(entry))
+                    {
+                        plan.Stamps.Add(entry.Id, cached);
+                        if (cached.Found) plan.Matches.Add(entry.Id);
+                    }
+                    else if (HistorySearch.Contains(entry.Preview, query) || HistorySearch.Contains(entry.Title, query)
+                        || (entry.Labels?.Any(label => HistorySearch.Contains(label, query)) ?? false))
+                    {
+                        plan.Matches.Add(entry.Id);
+                        plan.Stamps.Add(entry.Id, new(entry.Fingerprint, entry.Title, (entry.Labels ?? []).ToArray(), true));
+                    }
+                    else if (entry.Kind != ClipKind.Image) plan.Candidates.Add(entry);
+                }
+                return plan;
+            }, cancellation).ConfigureAwait(false);
+        }
+        finally { _searchPlanning.Release(); }
+    }
+
     private async Task RunSearchAsync()
     {
-        _searchLoads?.Cancel(); _searchLoads?.Dispose();
+        if (Retired || _closing) return;
+        _searchLoads?.Cancel();
         using var load = CancellationTokenSource.CreateLinkedTokenSource(_loads.Token);
         _searchLoads = load;
         var cancellation = load.Token;
-        var query = _query = SearchBox.Text.Trim();
+        var query = SearchBox.Text.Trim();
         var failed = false;
-        if (query != _cacheQuery) { _searchCache.Clear(); _cacheQuery = query; }
-        var entries = _entries.ToDictionary(x => x.Id);
-        foreach (var id in _searchCache.Keys.Where(id => !entries.ContainsKey(id)).ToArray()) _searchCache.Remove(id);
-        _searchMatches = [];
-        foreach (var entry in _entries)
-        {
-            if (_searchCache.TryGetValue(entry.Id, out var cached) && cached.Matches(entry))
-            { if (cached.Found) _searchMatches.Add(entry.Id); continue; }
-            _searchCache.Remove(entry.Id);
-            if (HistorySearch.Contains(entry.Preview, query) || HistorySearch.Contains(entry.Title, query)
-                || (entry.Labels?.Any(label => HistorySearch.Contains(label, query)) ?? false))
-            { _searchMatches.Add(entry.Id); _searchCache[entry.Id] = new(entry.Fingerprint, entry.Title, (entry.Labels ?? []).ToArray(), true); }
-        }
-        _searchRunning = query.Length > 0 && !_preview;
-        RebuildNotes();
         try
         {
+            if (query.Length == 0)
+            {
+                _query = _cacheQuery = "";
+                _searchCache = new(); _searchMatches = []; _searchRunning = false;
+                return;
+            }
+            // Catalog snapshots and earlier stamps are read-only during planning.
+            // All later cache writes require this exact, uncanceled UI generation.
+            var plan = await PlanSearchAsync(_entries, query == _cacheQuery ? _searchCache : null, query, cancellation);
+            cancellation.ThrowIfCancellationRequested();
+            if (Retired || _closing || !ReferenceEquals(_searchLoads, load)) return;
+            _query = _cacheQuery = query;
+            _searchCache = plan.Stamps;
+            _searchMatches = plan.Matches;
+            _searchRunning = !_preview && plan.Candidates.Count > 0;
             if (!_searchRunning) return;
-            var candidates = _entries.Where(x => x.Kind != ClipKind.Image && !_searchCache.ContainsKey(x.Id)).Select(x => x.Id).ToArray();
-            for (var offset = 0; offset < candidates.Length; offset += HistorySearch.BatchSize)
+            RebuildNotes();
+            for (var offset = 0; offset < plan.Candidates.Count; offset += HistorySearch.BatchSize)
             {
                 cancellation.ThrowIfCancellationRequested();
-                var batch = candidates.Skip(offset).Take(HistorySearch.BatchSize).ToArray();
+                var batch = new string[Math.Min(HistorySearch.BatchSize, plan.Candidates.Count - offset)];
+                for (var index = 0; index < batch.Length; ++index) batch[index] = plan.Candidates[offset + index].Id;
                 var matches = await Task.Run(() => _store.SearchBatchAsync(query, batch, cancellation), cancellation);
                 cancellation.ThrowIfCancellationRequested();
                 if (Retired || _closing || !ReferenceEquals(_searchLoads, load)) return;
                 var found = matches.ToHashSet();
-                foreach (var id in batch)
+                for (var index = 0; index < batch.Length; ++index)
                 {
-                    var entry = entries[id];
-                    _searchCache[id] = new(entry.Fingerprint, entry.Title, (entry.Labels ?? []).ToArray(), found.Contains(id));
+                    var entry = plan.Candidates[offset + index];
+                    _searchCache[entry.Id] = new(entry.Fingerprint, entry.Title, (entry.Labels ?? []).ToArray(), found.Contains(entry.Id));
                 }
                 if (matches.Count > 0) { _searchMatches.UnionWith(matches); RebuildNotes(); }
-                // Yield the serialized pipe to urgent state/restore/preview calls.
-                await Task.Yield();
+                // Give input and rendering a turn before queuing more payload I/O.
+                await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
             }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or TimeoutException or System.Security.Cryptography.CryptographicException)
         { failed = true; }
         finally
         {

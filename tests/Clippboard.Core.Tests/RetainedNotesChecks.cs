@@ -26,11 +26,11 @@ internal static partial class Program
         try
         {
             window.EnableNativeNotes(); window.Show(); window.RenderDemo(1000); window.DiagnosticFlushNativeNotes();
-            Check(window.NativeNotesActive && window.NativeSurfaceBytes > 0, "retained note surfaces start without fallback: " + window.NativeFailure);
+            Check(window.NativeNotesActive && window.NativeSurfaceCount > 0, "retained note surfaces start without fallback: " + window.NativeFailure);
             var notes = (Canvas)window.FindName("Notes");
             var card = (Grid)notes.Children[0]; var select = (Button)card.Tag;
             Check(notes.Opacity == 0 && select.IsVisible && select.IsEnabled, "cached pixels preserve the original live control tree");
-            Check((window.DiagnosticNativePixel(card, 30, 70) >> 24) > 240, "cached paper contains actual opaque pixels with a transparent WPF ancestor");
+            Check((window.DiagnosticNativePaperPixel(card) >> 24) > 240, "cached paper contains actual opaque pixels with a transparent WPF ancestor");
             var point = select.TranslatePoint(new Point(12, 12), window);
             var hit = window.InputHitTest(point) as DependencyObject;
             while (hit is not null && !ReferenceEquals(hit, select)) hit = VisualTreeHelper.GetParent(hit);
@@ -59,9 +59,9 @@ internal static partial class Program
             window.SelectNote(1); window.DiagnosticFlushNativeNotes();
             Check(window.NativeSnapshotCount > captures, "selection invalidates cached note pixels");
             window.ApplyAppearance(window.SavedSettings with { Theme = AppTheme.Midnight }); window.DiagnosticFlushNativeNotes();
-            var dark = window.DiagnosticNativePixel(card, 30, 70);
+            var dark = window.DiagnosticNativePaperPixel(card);
             window.ApplyAppearance(window.SavedSettings with { Theme = AppTheme.Cloud }); window.DiagnosticFlushNativeNotes();
-            Check(dark != window.DiagnosticNativePixel(card, 30, 70), "theme changes replace cached colors rather than leaving stale notes");
+            Check(dark != window.DiagnosticNativePaperPixel(card), "theme changes replace cached colors rather than leaving stale notes");
             window.OpenSettings(); window.UpdateLayout();
             Check(window.NativeSurfaceBytes == 0 && notes.Opacity == 1, "settings restores live WPF notes below its panel and releases cached surfaces");
             var host = (Border)window.FindName("SidebarHost");
@@ -70,7 +70,7 @@ internal static partial class Program
             Check(view.Draft.EffectiveRendering == NoteRendering.Hardware && window.SavedSettings.EffectiveRendering == NoteRendering.Retained, "rendering choice edits only the draft until save and reopen");
             Descendants<Button>((SettingsView)host.Child).First(button => System.Windows.Automation.AutomationProperties.GetName(button) == "Close settings").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             window.DiagnosticFlushNativeNotes();
-            Check(window.NativeNotesActive && window.NativeSurfaceBytes > 0 && notes.Opacity == 0, "closing the sidebar resumes cached notes");
+            Check(window.NativeNotesActive && window.NativeSurfaceCount > 0 && notes.Opacity == 0, "closing the sidebar resumes cached notes");
             window.ApplyAppearance(window.SavedSettings with { NoteWidth = 400 }); window.DiagnosticFlushNativeNotes();
             Check(window.NativeNotesActive && window.RenderedNoteCount < 10, "note resizing replaces bounded buffers at current display scale");
             window.ApplyAppearance(window.SavedSettings with { Animate = true });
@@ -88,7 +88,8 @@ internal static partial class Program
             Pump(Task.Delay(300));
             Check(window.NativeSnapshotCount > captures, "animated button feedback refreshes the cached note during hover");
             button.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseLeaveEvent }); Pump(Task.Delay(1000));
-            Check(!window.NativeFrameRunning, "hover completion releases the native rendering subscription");
+            Check(!window.NativeFrameRunning && window.NativeSurfaceCount > 0 && window.NativeSurfaceBytes == 0,
+                "hover completion keeps Windows note surfaces and releases all app-side pixel upload buffers");
             var handles = window.NativeSurfaceHandles;
             Pump(window.CloseRopeAsync());
             Check(window.NativeSurfaceBytes == 0 && window.NativeReservedBytes == 0 && !window.NativeFrameRunning, "retirement releases cached pixels and all frame subscriptions");
